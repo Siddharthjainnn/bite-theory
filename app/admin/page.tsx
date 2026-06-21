@@ -1,16 +1,12 @@
 'use client';
 
 /**
- * Bite Theory — Admin Console v3
+ * Bite Theory — Admin Console v4
  * Location:  app/admin/page.tsx
  *
- * All 25 database tables represented as modules in the sidebar.
- * LIVE & WIRED: Products, Categories (real backend CRUD)
- * READY TO WIRE: every other module — shows a clean "connect backend" card.
- *   We wire these one at a time, same proven pattern as Products/Categories.
- *
- * Mobile: hamburger menu opens a slide-in drawer with backdrop.
- * Desktop: fixed sidebar, multi-column dashboard.
+ * Adds LIVE Orders module (list + status timeline) on top of v3.
+ * LIVE & WIRED: Products, Categories, Orders
+ * READY TO WIRE: every other module — clean "connect backend" cards.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -28,11 +24,29 @@ interface Product {
   price: number; offerPrice: number; calories: number; protein: number;
   carbs: number; fat: number; rating: number; status: Status;
 }
+interface Order {
+  id: number; orderNumber: string; userId: number; addressId: number;
+  subtotal: number; discount: number; deliveryCharge: number; tax: number;
+  walletUsed: number; total: number; status: string; deliverySlot: string;
+  deliveryPartnerId: number; placedAt: string; updatedAt: string;
+}
+interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001';
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
-/* ============ API layer (Products & Categories LIVE) ============ */
+const ORDER_FLOW = [
+  { key: 'order_received', label: 'Order Received' },
+  { key: 'order_confirmed', label: 'Order Confirmed' },
+  { key: 'preparing_food', label: 'Preparing Food' },
+  { key: 'food_ready', label: 'Food Ready' },
+  { key: 'assigned_to_delivery_partner', label: 'Assigned to Delivery Partner' },
+  { key: 'out_for_delivery', label: 'Out for Delivery' },
+  { key: 'arriving_soon', label: 'Arriving Soon' },
+  { key: 'delivered', label: 'Delivered' },
+];
+
+/* ============ API layer ============ */
 const api = {
   async listProducts(): Promise<Product[]> {
     const r = await fetch(`${API_BASE}/products`);
@@ -89,10 +103,7 @@ const api = {
   async createCategory(d: Partial<Category>) {
     const r = await fetch(`${API_BASE}/categories`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: d.name, description: d.description, image: d.image,
-        sortOrder: d.sortOrder, isActive: d.status === 'active',
-      }),
+      body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
     });
     if (!r.ok) throw new Error('Create failed');
     return r.json();
@@ -100,10 +111,7 @@ const api = {
   async updateCategory(id: number, d: Partial<Category>) {
     const r = await fetch(`${API_BASE}/categories/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: d.name, description: d.description, image: d.image,
-        sortOrder: d.sortOrder, isActive: d.status === 'active',
-      }),
+      body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
     });
     if (!r.ok) throw new Error('Update failed');
     return r.json();
@@ -111,6 +119,32 @@ const api = {
   async deleteCategory(id: number) {
     const r = await fetch(`${API_BASE}/categories/${id}`, { method: 'DELETE' });
     if (!r.ok) throw new Error('Delete failed');
+  },
+
+  async listOrders(): Promise<Order[]> {
+    const r = await fetch(`${API_BASE}/orders`);
+    if (!r.ok) throw new Error('Failed to load orders');
+    const rows = await r.json();
+    return rows.map((o: any) => ({
+      id: Number(o.id), orderNumber: o.orderNumber, userId: Number(o.userId), addressId: Number(o.addressId),
+      subtotal: Number(o.subtotal) || 0, discount: Number(o.discount) || 0, deliveryCharge: Number(o.deliveryCharge) || 0,
+      tax: Number(o.tax) || 0, walletUsed: Number(o.walletUsed) || 0, total: Number(o.total) || 0,
+      status: o.status, deliverySlot: o.deliverySlot || '', deliveryPartnerId: o.deliveryPartnerId,
+      placedAt: o.placedAt, updatedAt: o.updatedAt,
+    }));
+  },
+  async getOrderHistory(orderId: number): Promise<OrderHistoryEntry[]> {
+    const r = await fetch(`${API_BASE}/orders/${orderId}/history`);
+    if (!r.ok) throw new Error('Failed to load history');
+    return r.json();
+  },
+  async advanceOrderStatus(orderId: number, status: string, note?: string) {
+    const r = await fetch(`${API_BASE}/orders/${orderId}/status`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, note }),
+    });
+    if (!r.ok) throw new Error('Status update failed');
+    return r.json();
   },
 };
 
@@ -121,18 +155,15 @@ const C = {
   line: '#e4ebe6', greenSoft: '#e8f5e9', orangeSoft: '#fef3e2', red: '#d64545',
 };
 
-/* ============ nav structure — all 25 tables, grouped ============ */
+/* ============ nav ============ */
 interface NavItem { key: string; label: string; icon: string; table?: string; desc?: string; }
 interface NavGroup { title: string; items: NavItem[]; }
 
 const NAV: NavGroup[] = [
-  { title: 'Overview', items: [
-    { key: 'dashboard', label: 'Dashboard', icon: '▦' },
-  ]},
+  { title: 'Overview', items: [{ key: 'dashboard', label: 'Dashboard', icon: '▦' }] },
   { title: 'Orders', items: [
-    { key: 'orders', label: 'Orders', icon: '🧾', table: 'orders', desc: 'Live order list, status timeline, assign delivery partner.' },
+    { key: 'orders', label: 'Orders', icon: '🧾' },
     { key: 'order_items', label: 'Order Items', icon: '🍽️', table: 'order_items', desc: 'Line items inside each order.' },
-    { key: 'order_status_history', label: 'Status History', icon: '⏱️', table: 'order_status_history', desc: 'Full audit trail of every status change per order.' },
   ]},
   { title: 'Catalog', items: [
     { key: 'products', label: 'Products', icon: '🍱' },
@@ -156,9 +187,7 @@ const NAV: NavGroup[] = [
     { key: 'payments', label: 'Payments', icon: '💳', table: 'payments', desc: 'Razorpay/UPI transactions per order.' },
     { key: 'wallet_transactions', label: 'Wallet Transactions', icon: '👛', table: 'wallet_transactions', desc: 'Wallet credits, debits, refunds.' },
   ]},
-  { title: 'Delivery', items: [
-    { key: 'delivery_partners', label: 'Delivery Partners', icon: '🛵', table: 'delivery_partners', desc: 'Rider accounts, active status, assigned orders.' },
-  ]},
+  { title: 'Delivery', items: [{ key: 'delivery_partners', label: 'Delivery Partners', icon: '🛵', table: 'delivery_partners', desc: 'Rider accounts, active status, assigned orders.' }] },
   { title: 'Support', items: [
     { key: 'support_tickets', label: 'Support Tickets', icon: '🎧', table: 'support_tickets', desc: 'Customer support requests and resolution status.' },
     { key: 'notifications', label: 'Notifications', icon: '🔔', table: 'notifications', desc: 'Push / Email / SMS / WhatsApp notification log.' },
@@ -167,9 +196,7 @@ const NAV: NavGroup[] = [
     { key: 'admin_users', label: 'Admin Users', icon: '🛡️', table: 'admin_users', desc: 'Super Admin, Kitchen Manager, Delivery Manager, etc.' },
     { key: 'roles', label: 'Roles & Permissions', icon: '🔑', table: 'roles', desc: 'Role definitions and what each role can access.' },
   ]},
-  { title: 'System', items: [
-    { key: 'audit_logs', label: 'Audit Logs', icon: '📋', table: 'audit_logs', desc: 'Every admin action, who did it, and when.' },
-  ]},
+  { title: 'System', items: [{ key: 'audit_logs', label: 'Audit Logs', icon: '📋', table: 'audit_logs', desc: 'Every admin action, who did it, and when.' }] },
 ];
 
 const ALL_KEYS = NAV.flatMap(g => g.items.map(i => i.key));
@@ -178,44 +205,41 @@ type PageKey = typeof ALL_KEYS[number];
 /* ============ small UI ============ */
 function Toast({ msg }: { msg: string }) {
   if (!msg) return null;
-  return (
-    <div style={{
-      position: 'fixed', bottom: 20, right: 20, left: 20, maxWidth: 360, marginLeft: 'auto',
-      background: C.darkGreen, color: '#fff', padding: '13px 18px', borderRadius: 12,
-      boxShadow: '0 12px 30px rgba(0,0,0,.25)', zIndex: 300, fontWeight: 500, fontSize: 13,
-    }}>✓ &nbsp;{msg}</div>
-  );
+  return <div style={{ position: 'fixed', bottom: 20, right: 20, left: 20, maxWidth: 360, marginLeft: 'auto', background: C.darkGreen, color: '#fff', padding: '13px 18px', borderRadius: 12, boxShadow: '0 12px 30px rgba(0,0,0,.25)', zIndex: 300, fontWeight: 500, fontSize: 13 }}>✓ &nbsp;{msg}</div>;
 }
 function Pill({ kind, children }: { kind: 'active' | 'inactive' | 'low' | 'out'; children: React.ReactNode }) {
-  const map: Record<string, [string, string]> = {
-    active: [C.greenSoft, '#2e7d32'], inactive: ['#f0f0f0', '#888'],
-    low: [C.orangeSoft, '#b76e00'], out: ['#fdecec', C.red],
-  };
+  const map: Record<string, [string, string]> = { active: [C.greenSoft, '#2e7d32'], inactive: ['#f0f0f0', '#888'], low: [C.orangeSoft, '#b76e00'], out: ['#fdecec', C.red] };
   const [bg, col] = map[kind];
   return <span style={{ background: bg, color: col, padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{children}</span>;
 }
+function orderStatusPill(status: string) {
+  const map: Record<string, [string, string, string]> = {
+    order_received: [C.orangeSoft, '#b76e00', 'Order Received'],
+    order_confirmed: [C.orangeSoft, '#b76e00', 'Confirmed'],
+    preparing_food: [C.orangeSoft, '#b76e00', 'Preparing'],
+    food_ready: [C.orangeSoft, '#b76e00', 'Food Ready'],
+    assigned_to_delivery_partner: [C.orangeSoft, '#b76e00', 'Assigned'],
+    out_for_delivery: [C.orangeSoft, '#b76e00', 'Out for Delivery'],
+    arriving_soon: [C.orangeSoft, '#b76e00', 'Arriving Soon'],
+    delivered: [C.greenSoft, '#2e7d32', 'Delivered'],
+    cancelled: ['#fdecec', C.red, 'Cancelled'],
+  };
+  const [bg, col, label] = map[status] || ['#f0f0f0', '#888', status];
+  return <span style={{ background: bg, color: col, padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{label}</span>;
+}
 
-/* ============ chart primitives (zero dependencies, inline SVG) ============ */
+/* ============ charts ============ */
 function LineChart({ data, color = C.green, height = 140 }: { data: number[]; color?: string; height?: number }) {
   const w = 320, h = height, pad = 10;
   const max = Math.max(...data, 1), min = Math.min(...data, 0);
   const range = max - min || 1;
   const stepX = (w - pad * 2) / (data.length - 1);
-  const pts = data.map((v, i) => {
-    const x = pad + i * stepX;
-    const y = h - pad - ((v - min) / range) * (h - pad * 2);
-    return [x, y];
-  });
+  const pts = data.map((v, i) => [pad + i * stepX, h - pad - ((v - min) / range) * (h - pad * 2)]);
   const path = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
   const area = `${path} L${pts[pts.length - 1][0]},${h - pad} L${pts[0][0]},${h - pad} Z`;
   return (
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height }}>
-      <defs>
-        <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.25" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient></defs>
       <path d={area} fill="url(#lg)" />
       <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="3" fill={color} />)}
@@ -228,13 +252,8 @@ function HBarList({ items }: { items: { label: string; value: number; color?: st
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {items.map(it => (
         <div key={it.label}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-            <span style={{ color: C.muted, fontWeight: 600 }}>{it.label}</span>
-            <b>{it.value}</b>
-          </div>
-          <div style={{ height: 8, background: C.bg, borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${(it.value / max) * 100}%`, background: it.color || C.green, borderRadius: 6, transition: 'width .5s' }} />
-          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span style={{ color: C.muted, fontWeight: 600 }}>{it.label}</span><b>{it.value}</b></div>
+          <div style={{ height: 8, background: C.bg, borderRadius: 6, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(it.value / max) * 100}%`, background: it.color || C.green, borderRadius: 6, transition: 'width .5s' }} /></div>
         </div>
       ))}
     </div>
@@ -242,11 +261,7 @@ function HBarList({ items }: { items: { label: string; value: number; color?: st
 }
 function Stars({ value }: { value: number }) {
   const full = Math.round(value);
-  return (
-    <span style={{ color: C.orange, fontSize: 12, letterSpacing: 1 }}>
-      {'★'.repeat(full)}{'☆'.repeat(5 - full)} <span style={{ color: C.muted }}>{value.toFixed(1)}</span>
-    </span>
-  );
+  return <span style={{ color: C.orange, fontSize: 12, letterSpacing: 1 }}>{'★'.repeat(full)}{'☆'.repeat(5 - full)} <span style={{ color: C.muted }}>{value.toFixed(1)}</span></span>;
 }
 
 /* ============ main ============ */
@@ -255,16 +270,13 @@ export default function AdminPage() {
   const [toast, setToast] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const showToast = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(''), 2400); }, []);
-
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === page);
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink,
-      fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
       <style>{`
         .bt-shell { display:flex; min-height:100vh; }
-        .bt-sidebar { width:264px; background:${C.darkGreen}; color:#cfe3d8; padding:18px 12px 30px;
-          position:fixed; top:0; left:0; height:100vh; overflow-y:auto; z-index:100; transition:transform .25s ease; }
+        .bt-sidebar { width:264px; background:${C.darkGreen}; color:#cfe3d8; padding:18px 12px 30px; position:fixed; top:0; left:0; height:100vh; overflow-y:auto; z-index:100; transition:transform .25s ease; }
         .bt-main { flex:1; min-width:0; margin-left:264px; }
         .bt-backdrop { display:none; }
         .bt-hamburger { display:none; }
@@ -283,34 +295,22 @@ export default function AdminPage() {
           .bt-grid-2 { grid-template-columns:1fr; }
           .bt-content { padding:14px; }
         }
-        @media (max-width: 480px) {
-          .bt-grid-4 { grid-template-columns:1fr 1fr; }
-        }
+        @media (max-width: 480px) { .bt-grid-4 { grid-template-columns:1fr 1fr; } }
       `}</style>
 
       <div className="bt-shell">
         <div className={`bt-backdrop ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)} />
-
         <aside className={`bt-sidebar ${drawerOpen ? 'open' : ''}`}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 16px',
-            borderBottom: '1px solid rgba(255,255,255,.08)', marginBottom: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${C.green},${C.orange})`,
-              display: 'grid', placeItems: 'center', fontWeight: 800, color: '#fff', fontSize: 17 }}>B</div>
-            <div><b style={{ color: '#fff', fontSize: 15 }}>Bite Theory</b>
-              <span style={{ display: 'block', fontSize: 10, color: '#8fb3a3', letterSpacing: 1 }}>ADMIN CONSOLE</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 16px', borderBottom: '1px solid rgba(255,255,255,.08)', marginBottom: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${C.green},${C.orange})`, display: 'grid', placeItems: 'center', fontWeight: 800, color: '#fff', fontSize: 17 }}>B</div>
+            <div><b style={{ color: '#fff', fontSize: 15 }}>Bite Theory</b><span style={{ display: 'block', fontSize: 10, color: '#8fb3a3', letterSpacing: 1 }}>ADMIN CONSOLE</span></div>
             <button onClick={() => setDrawerOpen(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#cfe3d8', fontSize: 20, cursor: 'pointer', display: drawerOpen ? 'block' : 'none' }}>×</button>
           </div>
-
           {NAV.map(group => (
             <div key={group.title} style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6f9484', margin: '14px 10px 5px', fontWeight: 700 }}>{group.title}</div>
               {group.items.map(item => (
-                <div key={item.key} onClick={() => { setPage(item.key); setDrawerOpen(false); }} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 9,
-                  cursor: 'pointer', marginBottom: 1, fontWeight: 500, fontSize: 13.5,
-                  background: page === item.key ? C.green : 'transparent',
-                  color: page === item.key ? '#fff' : '#cfe3d8',
-                }}>
+                <div key={item.key} onClick={() => { setPage(item.key); setDrawerOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 9, cursor: 'pointer', marginBottom: 1, fontWeight: 500, fontSize: 13.5, background: page === item.key ? C.green : 'transparent', color: page === item.key ? '#fff' : '#cfe3d8' }}>
                   <span style={{ width: 17, textAlign: 'center', fontSize: 14 }}>{item.icon}</span>{item.label}
                 </div>
               ))}
@@ -319,26 +319,19 @@ export default function AdminPage() {
         </aside>
 
         <div className="bt-main">
-          <header style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '0 18px',
-            height: 58, display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 40 }}>
-            <button className="bt-hamburger" onClick={() => setDrawerOpen(true)} style={{
-              width: 36, height: 36, borderRadius: 9, border: `1px solid ${C.line}`, background: '#fff',
-              placeItems: 'center', fontSize: 17, cursor: 'pointer',
-            }}>☰</button>
+          <header style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '0 18px', height: 58, display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 40 }}>
+            <button className="bt-hamburger" onClick={() => setDrawerOpen(true)} style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${C.line}`, background: '#fff', placeItems: 'center', fontSize: 17, cursor: 'pointer' }}>☰</button>
             <b style={{ fontSize: 14 }}>{currentItem?.label || 'Dashboard'}</b>
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 9 }}>
-              <div style={{ width: 33, height: 33, borderRadius: '50%', background: `linear-gradient(135deg,${C.green},${C.darkGreen})`,
-                color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13 }}>A</div>
+              <div style={{ width: 33, height: 33, borderRadius: '50%', background: `linear-gradient(135deg,${C.green},${C.darkGreen})`, color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13 }}>A</div>
             </div>
           </header>
-
           <div className="bt-content">
             {page === 'dashboard' && <Dashboard showToast={showToast} />}
             {page === 'products' && <Products showToast={showToast} />}
             {page === 'categories' && <Categories showToast={showToast} />}
-            {page !== 'dashboard' && page !== 'products' && page !== 'categories' && currentItem?.table && (
-              <ComingSoon item={currentItem} />
-            )}
+            {page === 'orders' && <Orders showToast={showToast} />}
+            {page !== 'dashboard' && page !== 'products' && page !== 'categories' && page !== 'orders' && currentItem?.table && <ComingSoon item={currentItem} />}
           </div>
         </div>
       </div>
@@ -356,16 +349,10 @@ const td: React.CSSProperties = { padding: '12px 14px', borderBottom: `1px solid
 const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', border: `1px solid ${C.line}`, borderRadius: 10, fontSize: 13, background: C.bg, color: C.ink, fontFamily: 'inherit' };
 
 function PageHead({ title, sub, action }: { title: string; sub: string; action?: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 10 }}>
-      <div><h1 style={{ fontSize: 20, margin: 0 }}>{title}</h1>
-        <p style={{ color: C.muted, marginTop: 3, fontSize: 13 }}>{sub}</p></div>
-      {action}
-    </div>
-  );
+  return <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 10 }}><div><h1 style={{ fontSize: 20, margin: 0 }}>{title}</h1><p style={{ color: C.muted, marginTop: 3, fontSize: 13 }}>{sub}</p></div>{action}</div>;
 }
 
-/* ============ COMING SOON (stub for unwired modules) ============ */
+/* ============ COMING SOON ============ */
 function ComingSoon({ item }: { item: NavItem }) {
   return (
     <>
@@ -374,8 +361,7 @@ function ComingSoon({ item }: { item: NavItem }) {
         <div style={{ fontSize: 34, marginBottom: 10 }}>{item.icon}</div>
         <div style={{ fontWeight: 700, marginBottom: 6 }}>Ready to connect</div>
         <div style={{ color: C.muted, fontSize: 13, maxWidth: 440, margin: '0 auto 14px' }}>
-          This module will manage your <code style={{ background: C.bg, padding: '1px 6px', borderRadius: 5 }}>{item.table}</code> table —
-          full list, create, edit, delete — built the same way Products and Categories already work.
+          This module will manage your <code style={{ background: C.bg, padding: '1px 6px', borderRadius: 5 }}>{item.table}</code> table — full CRUD, built the same way Products, Categories and Orders already work.
         </div>
         <Pill kind="inactive">Not wired yet</Pill>
       </div>
@@ -383,39 +369,40 @@ function ComingSoon({ item }: { item: NavItem }) {
   );
 }
 
-/* ============ DASHBOARD — multi-chart ============ */
+/* ============ DASHBOARD ============ */
 function Dashboard({ showToast }: { showToast: (m: string) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.listProducts().then(setProducts).catch(() => showToast('Could not load live product data')).finally(() => setLoading(false));
+    Promise.all([api.listProducts(), api.listOrders().catch(() => [])])
+      .then(([p, o]) => { setProducts(p); setOrders(o); })
+      .catch(() => showToast('Could not load live data'))
+      .finally(() => setLoading(false));
   }, [showToast]);
 
   const topRated = [...products].sort((a, b) => b.rating - a.rating).slice(0, 5);
-  const lowStockSample = products.filter(p => p.status === 'inactive').slice(0, 5); // placeholder until /inventory is wired
+  const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
+  const deliveredOrders = orders.filter(o => o.status === 'delivered');
+  const revenueLive = orders.reduce((s, o) => s + o.total, 0);
 
-  const revenueTrend = [32000, 41000, 38000, 52000, 47000, 61000, 58000]; // sample — wire to /orders later
-  const orderStatusSample = [
-    { label: 'Delivered', value: 86, color: C.green },
-    { label: 'Out for delivery', value: 9, color: C.orange },
-    { label: 'Preparing', value: 5, color: '#888' },
-  ];
+  const statusCounts = ORDER_FLOW.map(s => ({ label: s.label, value: orders.filter(o => o.status === s.key).length, color: C.green }))
+    .concat([{ label: 'Cancelled', value: orders.filter(o => o.status === 'cancelled').length, color: C.red }])
+    .filter(s => s.value > 0);
 
   return (
     <>
       <PageHead title="Dashboard" sub="Live snapshot across all 25 modules." />
-
       <div className="bt-grid-4" style={{ marginBottom: 16 }}>
         {[
-          ['Today\'s Orders', '142', 'sample'], ['Revenue', '₹48,260', 'sample'],
-          ['Live Products', String(products.length), 'live'], ['Pending Deliveries', '12', 'sample'],
-        ].map(([lbl, val, src]) => (
+          ['Total Orders', String(orders.length), 'live'],
+          ['Revenue', money(revenueLive), 'live'],
+          ['Active Orders', String(activeOrders.length), 'live'],
+          ['Live Products', String(products.length), 'live'],
+        ].map(([lbl, val]) => (
           <div key={lbl} style={{ ...cardStyle, padding: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ color: C.muted, fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase' }}>{lbl}</div>
-              {src === 'sample' && <span style={{ fontSize: 9, color: C.muted, background: C.bg, padding: '1px 6px', borderRadius: 5 }}>sample</span>}
-            </div>
+            <div style={{ color: C.muted, fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase' }}>{lbl}</div>
             <div style={{ fontSize: 25, fontWeight: 800, margin: '7px 0 2px' }}>{val}</div>
           </div>
         ))}
@@ -423,64 +410,161 @@ function Dashboard({ showToast }: { showToast: (m: string) => void }) {
 
       <div className="bt-grid-2" style={{ marginBottom: 16 }}>
         <div style={cardStyle}>
-          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between' }}>
-            <b style={{ fontSize: 14 }}>Revenue trend — 7 days</b>
-            <span style={{ fontSize: 9, color: C.muted, background: C.bg, padding: '1px 6px', borderRadius: 5, alignSelf: 'center' }}>sample — wire to /orders</span>
+          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Orders by status</b></div>
+          <div style={{ padding: 16 }}>
+            {statusCounts.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No orders yet — they'll appear here live.</div> : <HBarList items={statusCounts} />}
           </div>
-          <div style={{ padding: 16 }}><LineChart data={revenueTrend} color={C.green} /></div>
         </div>
         <div style={cardStyle}>
-          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between' }}>
-            <b style={{ fontSize: 14 }}>Orders by status</b>
-            <span style={{ fontSize: 9, color: C.muted, background: C.bg, padding: '1px 6px', borderRadius: 5, alignSelf: 'center' }}>sample</span>
+          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Delivered vs Active</b></div>
+          <div style={{ padding: 16 }}>
+            <HBarList items={[{ label: 'Delivered', value: deliveredOrders.length, color: C.green }, { label: 'Active', value: activeOrders.length, color: C.orange }]} />
           </div>
-          <div style={{ padding: 16 }}><HBarList items={orderStatusSample} /></div>
         </div>
       </div>
 
-      <div className="bt-grid-2">
-        <div style={cardStyle}>
-          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between' }}>
-            <b style={{ fontSize: 14 }}>Top rated products</b>
-            <span style={{ fontSize: 9, color: '#2e7d32', background: C.greenSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'center' }}>live</span>
-          </div>
-          <div style={{ padding: '6px 16px' }}>
-            {loading ? <div style={{ padding: 16, color: C.muted, fontSize: 13 }}>Loading…</div>
-              : topRated.length === 0 ? <div style={{ padding: 16, color: C.muted, fontSize: 13 }}>No products yet — add some on the Products page.</div>
-              : topRated.map(p => (
-                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 8, background: C.greenSoft, display: 'grid', placeItems: 'center', fontSize: 16, overflow: 'hidden', flexShrink: 0 }}>
-                    {p.image && p.image.startsWith('http') ? <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (p.image || '🍱')}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                    <Stars value={p.rating} />
-                  </div>
-                  <b style={{ fontSize: 13 }}>{money(p.offerPrice > 0 ? p.offerPrice : p.price)}</b>
-                </div>
-              ))}
-          </div>
+      <div style={cardStyle}>
+        <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between' }}>
+          <b style={{ fontSize: 14 }}>Top rated products</b>
+          <span style={{ fontSize: 9, color: '#2e7d32', background: C.greenSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'center' }}>live</span>
         </div>
-
-        <div style={cardStyle}>
-          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between' }}>
-            <b style={{ fontSize: 14 }}>Inactive / low-attention items</b>
-            <span style={{ fontSize: 9, color: '#2e7d32', background: C.greenSoft, padding: '1px 6px', borderRadius: 5, alignSelf: 'center' }}>live</span>
-          </div>
-          <div style={{ padding: '6px 16px' }}>
-            {loading ? <div style={{ padding: 16, color: C.muted, fontSize: 13 }}>Loading…</div>
-              : lowStockSample.length === 0 ? <div style={{ padding: 16, color: C.muted, fontSize: 13 }}>Nothing needs attention right now. 🎉</div>
-              : lowStockSample.map(p => (
-                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
-                  <div style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{p.name}</div>
-                  <Pill kind="inactive">Inactive</Pill>
+        <div style={{ padding: '6px 16px' }}>
+          {loading ? <div style={{ padding: 16, color: C.muted, fontSize: 13 }}>Loading…</div>
+            : topRated.length === 0 ? <div style={{ padding: 16, color: C.muted, fontSize: 13 }}>No products yet.</div>
+            : topRated.map(p => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: C.greenSoft, display: 'grid', placeItems: 'center', fontSize: 16, overflow: 'hidden', flexShrink: 0 }}>
+                  {p.image && p.image.startsWith('http') ? <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (p.image || '🍱')}
                 </div>
-              ))}
-            <div style={{ padding: '10px 0', fontSize: 11.5, color: C.muted }}>Real stock quantity & low-stock alerts will appear here once the Inventory module is wired to your <code>inventory</code> table.</div>
-          </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                  <Stars value={p.rating} />
+                </div>
+                <b style={{ fontSize: 13 }}>{money(p.offerPrice > 0 ? p.offerPrice : p.price)}</b>
+              </div>
+            ))}
         </div>
       </div>
     </>
+  );
+}
+
+/* ============ ORDERS (live) ============ */
+function Orders({ showToast }: { showToast: (m: string) => void }) {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'active' | 'delivered'>('all');
+  const [selected, setSelected] = useState<Order | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setOrders(await api.listOrders()); } catch (e: any) { showToast(e.message || 'Load failed'); }
+    setLoading(false);
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  let filtered = orders;
+  if (filter === 'active') filtered = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
+  if (filter === 'delivered') filtered = orders.filter(o => o.status === 'delivered');
+
+  return (
+    <>
+      <PageHead title="Orders" sub="Live order list — click Track to view & advance the status timeline." />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {(['all', 'active', 'delivered'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{ ...btnGhost, background: filter === f ? C.green : '#fff', color: filter === f ? '#fff' : C.ink, borderColor: filter === f ? C.green : C.line, textTransform: 'capitalize' }}>{f}</button>
+        ))}
+      </div>
+      <div style={{ ...cardStyle, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 600 }}>
+          <thead><tr><th style={th}>Order #</th><th style={th}>Customer</th><th style={th}>Total</th><th style={th}>Status</th><th style={th}>Placed</th><th style={th}></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td style={td} colSpan={6}>Loading…</td></tr>
+              : filtered.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No orders yet. Orders placed by customers will appear here.</td></tr>
+              : filtered.map(o => (
+                <tr key={o.id}>
+                  <td style={td}><b>{o.orderNumber}</b></td>
+                  <td style={td}>User #{o.userId}</td>
+                  <td style={td}><b>{money(o.total)}</b></td>
+                  <td style={td}>{orderStatusPill(o.status)}</td>
+                  <td style={td}><small>{o.placedAt ? new Date(o.placedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</small></td>
+                  <td style={td}><button style={{ ...btnGhost, padding: '6px 12px', fontSize: 12 }} onClick={() => setSelected(o)}>Track →</button></td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      {selected && <OrderDetail order={selected} onClose={() => setSelected(null)} onChanged={load} showToast={showToast} />}
+    </>
+  );
+}
+
+function OrderDetail({ order, onClose, onChanged, showToast }:
+  { order: Order; onClose: () => void; onChanged: () => void; showToast: (m: string) => void }) {
+  const [history, setHistory] = useState<OrderHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [current, setCurrent] = useState(order);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setHistory(await api.getOrderHistory(order.id)); } catch (e: any) { showToast(e.message || 'Could not load history'); }
+    setLoading(false);
+  }, [order.id, showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  const curIdx = ORDER_FLOW.findIndex(s => s.key === current.status);
+  const isCancelled = current.status === 'cancelled';
+  const nextStep = !isCancelled ? ORDER_FLOW[curIdx + 1] : null;
+
+  async function advance() {
+    if (!nextStep) return;
+    setBusy(true);
+    try {
+      const updated = await api.advanceOrderStatus(order.id, nextStep.key);
+      setCurrent((c) => ({ ...c, status: nextStep.key }));
+      showToast(`Advanced to "${nextStep.label}"`);
+      await load(); onChanged();
+    } catch (e: any) { showToast(e.message || 'Could not advance'); }
+    setBusy(false);
+  }
+
+  return (
+    <Modal title={`Order ${order.orderNumber}`} onClose={onClose}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <div><small style={{ color: C.muted }}>CUSTOMER</small><br /><b>User #{order.userId}</b></div>
+        <div style={{ textAlign: 'right' }}><small style={{ color: C.muted }}>TOTAL</small><br /><b style={{ fontSize: 17 }}>{money(order.total)}</b></div>
+      </div>
+      {isCancelled && <div style={{ marginBottom: 14 }}>{orderStatusPill('cancelled')}</div>}
+
+      <div style={{ fontWeight: 700, marginBottom: 10, fontSize: 13 }}>Status timeline</div>
+      <div>
+        {ORDER_FLOW.map((s, i) => {
+          const done = i < curIdx || (i === curIdx);
+          const isCurrent = i === curIdx;
+          const histEntry = history.find(h => h.status === s.key);
+          return (
+            <div key={s.key} style={{ display: 'flex', gap: 12, position: 'relative', paddingBottom: i === ORDER_FLOW.length - 1 ? 0 : 20 }}>
+              {i !== ORDER_FLOW.length - 1 && <div style={{ position: 'absolute', left: 12, top: 26, bottom: -4, width: 2, background: i < curIdx ? C.green : C.line }} />}
+              <div style={{ width: 26, height: 26, borderRadius: '50%', border: `2px solid ${done ? C.green : C.line}`, background: done ? C.green : '#fff', color: done ? '#fff' : C.muted, display: 'grid', placeItems: 'center', fontSize: 11, flexShrink: 0, zIndex: 1, boxShadow: isCurrent ? `0 0 0 4px ${C.orangeSoft}` : 'none', borderColor: isCurrent ? C.orange : (done ? C.green : C.line) }}>
+                {i < curIdx ? '✓' : isCurrent ? '●' : ''}
+              </div>
+              <div>
+                <b style={{ fontSize: 13, color: isCurrent ? C.orange : C.ink }}>{s.label}</b>
+                {histEntry && <div style={{ fontSize: 11, color: C.muted }}>{new Date(histEntry.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+        <button style={btnGhost} onClick={onClose}>Close</button>
+        {isCancelled ? <Pill kind="out">Order cancelled</Pill>
+          : nextStep ? <button style={btnPrimary} disabled={busy} onClick={advance}>{busy ? 'Updating…' : `Advance → ${nextStep.label}`}</button>
+          : <Pill kind="active">Order complete</Pill>}
+      </div>
+    </Modal>
   );
 }
 
@@ -521,54 +605,46 @@ function Products({ showToast }: { showToast: (m: string) => void }) {
         action={<button style={btnPrimary} onClick={() => setEditing({ status: 'active', categoryId: cats[0]?.id })}>＋ Add Product</button>} />
       <div style={{ ...cardStyle, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
-          <thead><tr>
-            <th style={th}>Product</th><th style={th}>Category</th><th style={th}>Nutrition</th>
-            <th style={th}>Price</th><th style={th}>Status</th><th style={th}></th>
-          </tr></thead>
+          <thead><tr><th style={th}>Product</th><th style={th}>Category</th><th style={th}>Nutrition</th><th style={th}>Price</th><th style={th}>Status</th><th style={th}></th></tr></thead>
           <tbody>
-            {loading ? (
-              <tr><td style={td} colSpan={6}>Loading…</td></tr>
-            ) : products.length === 0 ? (
-              <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No products yet. Click “Add Product”.</td></tr>
-            ) : products.map(p => {
-              const off = p.offerPrice > 0;
-              return (
-                <tr key={p.id}>
-                  <td style={td}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.greenSoft, display: 'grid', placeItems: 'center', fontSize: 17, overflow: 'hidden', flexShrink: 0 }}>
-                        {p.image && p.image.startsWith('http') ? <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (p.image || '🍱')}
+            {loading ? <tr><td style={td} colSpan={6}>Loading…</td></tr>
+              : products.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No products yet. Click "Add Product".</td></tr>
+              : products.map(p => {
+                const off = p.offerPrice > 0;
+                return (
+                  <tr key={p.id}>
+                    <td style={td}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: C.greenSoft, display: 'grid', placeItems: 'center', fontSize: 17, overflow: 'hidden', flexShrink: 0 }}>
+                          {p.image && p.image.startsWith('http') ? <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (p.image || '🍱')}
+                        </div>
+                        <div><b>{p.name}</b><div style={{ color: C.muted, fontSize: 12 }}>{p.description.slice(0, 36)}</div></div>
                       </div>
-                      <div><b>{p.name}</b><div style={{ color: C.muted, fontSize: 12 }}>{p.description.slice(0, 36)}</div></div>
-                    </div>
-                  </td>
-                  <td style={td}>{catName(p.categoryId)}</td>
-                  <td style={td}>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                      {[`${p.calories}cal`, `${p.protein}g P`, `${p.carbs}g C`, `${p.fat}g F`].map(x => (
-                        <span key={x} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: C.bg, color: C.muted, fontWeight: 600 }}>{x}</span>
-                      ))}
-                    </div>
-                  </td>
-                  <td style={td}><b>{money(off ? p.offerPrice : p.price)}</b>{off && <s style={{ color: C.muted, marginLeft: 5, fontSize: 12 }}>{money(p.price)}</s>}</td>
-                  <td style={td}><Pill kind={p.status}>{p.status === 'active' ? 'Active' : 'Inactive'}</Pill></td>
-                  <td style={td}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => setEditing(p)} style={{ ...btnGhost, padding: '6px 10px' }}>✏️</button>
-                      <button onClick={() => setConfirmDel(p)} style={{ ...btnGhost, padding: '6px 10px', color: C.red }}>🗑️</button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+                    </td>
+                    <td style={td}>{catName(p.categoryId)}</td>
+                    <td style={td}>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                        {[`${p.calories}cal`, `${p.protein}g P`, `${p.carbs}g C`, `${p.fat}g F`].map(x => <span key={x} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: C.bg, color: C.muted, fontWeight: 600 }}>{x}</span>)}
+                      </div>
+                    </td>
+                    <td style={td}><b>{money(off ? p.offerPrice : p.price)}</b>{off && <s style={{ color: C.muted, marginLeft: 5, fontSize: 12 }}>{money(p.price)}</s>}</td>
+                    <td style={td}><Pill kind={p.status}>{p.status === 'active' ? 'Active' : 'Inactive'}</Pill></td>
+                    <td style={td}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setEditing(p)} style={{ ...btnGhost, padding: '6px 10px' }}>✏️</button>
+                        <button onClick={() => setConfirmDel(p)} style={{ ...btnGhost, padding: '6px 10px', color: C.red }}>🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
-
       {editing && <ProductModal product={editing} cats={cats} onClose={() => setEditing(null)} onSave={save} />}
       {confirmDel && (
         <Modal title="Delete product" onClose={() => setConfirmDel(null)}>
-          <p>Delete <b>{confirmDel.name}</b>? This can’t be undone.</p>
+          <p>Delete <b>{confirmDel.name}</b>? This can't be undone.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
             <button style={btnGhost} onClick={() => setConfirmDel(null)}>Cancel</button>
             <button style={{ ...btnPrimary, background: C.red, borderColor: C.red }} onClick={() => del(confirmDel)}>Delete</button>
@@ -581,28 +657,15 @@ function Products({ showToast }: { showToast: (m: string) => void }) {
 
 function ProductModal({ product, cats, onClose, onSave }:
   { product: Partial<Product>; cats: Category[]; onClose: () => void; onSave: (d: Partial<Product>) => void }) {
-  const [f, setF] = useState<Partial<Product>>({
-    name: '', description: '', image: '', videoUrl: '', price: 0, offerPrice: 0,
-    calories: 0, protein: 0, carbs: 0, fat: 0, status: 'active',
-    categoryId: cats[0]?.id, ...product,
-  });
+  const [f, setF] = useState<Partial<Product>>({ name: '', description: '', image: '', videoUrl: '', price: 0, offerPrice: 0, calories: 0, protein: 0, carbs: 0, fat: 0, status: 'active', categoryId: cats[0]?.id, ...product });
   const set = (k: keyof Product, v: any) => setF(s => ({ ...s, [k]: v }));
   const num = (k: keyof Product, v: string) => set(k, v === '' ? 0 : Number(v));
-
   return (
     <Modal title={product.id ? 'Edit Product' : 'Add Product'} onClose={onClose}>
       <Field label="Product name *"><input style={inputStyle} value={f.name || ''} onChange={e => set('name', e.target.value)} placeholder="e.g. Grilled Chicken Bowl" /></Field>
       <Row>
-        <Field label="Category *">
-          <select style={inputStyle} value={f.categoryId} onChange={e => set('categoryId', Number(e.target.value))}>
-            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Status">
-          <select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}>
-            <option value="active">Active</option><option value="inactive">Inactive</option>
-          </select>
-        </Field>
+        <Field label="Category *"><select style={inputStyle} value={f.categoryId} onChange={e => set('categoryId', Number(e.target.value))}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Status"><select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>
       </Row>
       <Field label="Description"><textarea style={{ ...inputStyle, minHeight: 70 }} value={f.description || ''} onChange={e => set('description', e.target.value)} /></Field>
       <Row>
@@ -621,8 +684,7 @@ function ProductModal({ product, cats, onClose, onSave }:
       <Field label="Video URL"><input style={inputStyle} value={f.videoUrl || ''} onChange={e => set('videoUrl', e.target.value)} placeholder="https://…/preview.mp4" /></Field>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
         <button style={btnGhost} onClick={onClose}>Cancel</button>
-        <button style={btnPrimary} onClick={() => { if (!f.name || !f.price) return alert('Name and price are required'); onSave(f); }}>
-          {product.id ? 'Save changes' : 'Create product'}</button>
+        <button style={btnPrimary} onClick={() => { if (!f.name || !f.price) return alert('Name and price are required'); onSave(f); }}>{product.id ? 'Save changes' : 'Create product'}</button>
       </div>
     </Modal>
   );
@@ -657,8 +719,7 @@ function Categories({ showToast }: { showToast: (m: string) => void }) {
 
   return (
     <>
-      <PageHead title="Categories" sub="Organize your menu into sections."
-        action={<button style={btnPrimary} onClick={() => setEditing({ status: 'active' })}>＋ Add Category</button>} />
+      <PageHead title="Categories" sub="Organize your menu into sections." action={<button style={btnPrimary} onClick={() => setEditing({ status: 'active' })}>＋ Add Category</button>} />
       <div className="bt-grid-3">
         {loading ? <div style={{ ...cardStyle, padding: 18 }}>Loading…</div>
           : cats.length === 0 ? <div style={{ ...cardStyle, padding: 40, color: C.muted }}>No categories yet.</div>
@@ -682,7 +743,6 @@ function Categories({ showToast }: { showToast: (m: string) => void }) {
             </div>
           ))}
       </div>
-
       {editing && <CategoryModal cat={editing} nextSort={nextSort} onClose={() => setEditing(null)} onSave={save} />}
       {confirmDel && (
         <Modal title="Delete category" onClose={() => setConfirmDel(null)}>
@@ -708,11 +768,7 @@ function CategoryModal({ cat, nextSort, onClose, onSave }:
       <Field label="Image URL"><input style={inputStyle} value={f.image || ''} onChange={e => set('image', e.target.value)} placeholder="https://…/category-image.jpg" /></Field>
       <Row>
         <Field label="Sort number"><input style={inputStyle} type="number" value={f.sortOrder ?? ''} onChange={e => set('sortOrder', e.target.value === '' ? 0 : Number(e.target.value))} /></Field>
-        <Field label="Status">
-          <select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}>
-            <option value="active">Active</option><option value="inactive">Inactive</option>
-          </select>
-        </Field>
+        <Field label="Status"><select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>
       </Row>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
         <button style={btnGhost} onClick={onClose}>Cancel</button>
@@ -725,10 +781,7 @@ function CategoryModal({ cat, nextSort, onClose, onSave }:
 /* ============ modal + form helpers ============ */
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{
-      position: 'fixed', inset: 0, background: 'rgba(13,59,46,.45)', backdropFilter: 'blur(3px)',
-      zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '30px 14px', overflowY: 'auto',
-    }}>
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, background: 'rgba(13,59,46,.45)', backdropFilter: 'blur(3px)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '30px 14px', overflowY: 'auto' }}>
       <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 580, boxShadow: '0 24px 60px rgba(13,59,46,.3)' }}>
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ fontSize: 16, margin: 0 }}>{title}</h3>
@@ -742,9 +795,5 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontWeight: 600, fontSize: 12, marginBottom: 6 }}>{label}</label>{children}</div>;
 }
-function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>;
-}
-function Row3({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>{children}</div>;
-}
+function Row({ children }: { children: React.ReactNode }) { return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>; }
+function Row3({ children }: { children: React.ReactNode }) { return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>{children}</div>; }
