@@ -32,7 +32,7 @@ interface Order {
 }
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001';
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const ORDER_FLOW = [
@@ -40,7 +40,7 @@ const ORDER_FLOW = [
   { key: 'order_confirmed', label: 'Order Confirmed' },
   { key: 'preparing_food', label: 'Preparing Food' },
   { key: 'food_ready', label: 'Food Ready' },
-  { key: 'assigned_to_delivery', label: 'Assigned to Delivery Partner' },
+  { key: 'assigned_to_delivery_partner', label: 'Assigned to Delivery Partner' },
   { key: 'out_for_delivery', label: 'Out for Delivery' },
   { key: 'arriving_soon', label: 'Arriving Soon' },
   { key: 'delivered', label: 'Delivered' },
@@ -264,6 +264,60 @@ function Stars({ value }: { value: number }) {
   return <span style={{ color: C.orange, fontSize: 12, letterSpacing: 1 }}>{'★'.repeat(full)}{'☆'.repeat(5 - full)} <span style={{ color: C.muted }}>{value.toFixed(1)}</span></span>;
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  order_received: '#F59E0B', order_confirmed: '#fbbf24', preparing_food: '#fb923c', food_ready: '#f97316',
+  assigned_to_delivery: '#34d399', out_for_delivery: '#10b981', arriving_soon: '#059669',
+  delivered: '#4CAF50', cancelled: '#d64545',
+};
+
+function DonutChart({ data, size = 168 }: { data: { label: string; value: number; color: string }[]; size?: number }) {
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+  const r = size / 2 - 14, cx = size / 2, cy = size / 2, circ = 2 * Math.PI * r;
+  let acc = 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.bg} strokeWidth={20} />
+        {data.map((d, i) => {
+          const frac = d.value / total;
+          const dash = `${frac * circ} ${circ}`;
+          const offset = -acc * circ;
+          acc += frac;
+          return <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.color} strokeWidth={20}
+            strokeDasharray={dash} strokeDashoffset={offset} transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="butt" />;
+        })}
+        <text x={cx} y={cy - 3} textAnchor="middle" fontSize="20" fontWeight="800" fill={C.ink}>{total}</text>
+        <text x={cx} y={cy + 15} textAnchor="middle" fontSize="10" fill={C.muted}>orders</text>
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, flex: 1, minWidth: 140 }}>
+        {data.map(d => (
+          <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: d.color, flexShrink: 0 }} />
+            <span style={{ color: C.muted, flex: 1 }}>{d.label}</span>
+            <b>{d.value}</b>
+            <span style={{ color: C.muted, fontSize: 11, width: 34, textAlign: 'right' }}>{Math.round((d.value / total) * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BarChart({ data, color = C.green, height = 140 }: { data: { label: string; value: number }[]; color?: string; height?: number }) {
+  const max = Math.max(...data.map(d => d.value), 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height, padding: '0 2px' }}>
+      {data.map(d => (
+        <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, height: '100%', justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: 10, color: C.muted, fontWeight: 700 }}>{d.value > 0 ? d.value : ''}</span>
+          <div style={{ width: '100%', maxWidth: 28, height: `${Math.max((d.value / max) * (height - 30), 3)}px`, background: color, borderRadius: '6px 6px 2px 2px', transition: 'height .4s' }} />
+          <span style={{ fontSize: 10, color: C.muted }}>{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ============ main ============ */
 export default function AdminPage() {
   const [page, setPage] = useState<PageKey>('dashboard');
@@ -374,6 +428,7 @@ function Dashboard({ showToast }: { showToast: (m: string) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
 
   useEffect(() => {
     Promise.all([api.listProducts(), api.listOrders().catch(() => [])])
@@ -382,24 +437,65 @@ function Dashboard({ showToast }: { showToast: (m: string) => void }) {
       .finally(() => setLoading(false));
   }, [showToast]);
 
-  const topRated = [...products].sort((a, b) => b.rating - a.rating).slice(0, 5);
-  const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
-  const deliveredOrders = orders.filter(o => o.status === 'delivered');
-  const revenueLive = orders.reduce((s, o) => s + o.total, 0);
+  const now = new Date();
+  const cutoff = (() => {
+    if (range === 'today') { const d = new Date(now); d.setHours(0, 0, 0, 0); return d; }
+    if (range === 'week') { const d = new Date(now); d.setDate(d.getDate() - 7); return d; }
+    if (range === 'month') { const d = new Date(now); d.setDate(d.getDate() - 30); return d; }
+    return null;
+  })();
+  const filtered = cutoff ? orders.filter(o => o.placedAt && new Date(o.placedAt) >= cutoff) : orders;
 
-  const statusCounts = ORDER_FLOW.map(s => ({ label: s.label, value: orders.filter(o => o.status === s.key).length, color: C.green }))
-    .concat([{ label: 'Cancelled', value: orders.filter(o => o.status === 'cancelled').length, color: C.red }])
+  const topRated = [...products].sort((a, b) => b.rating - a.rating).slice(0, 5);
+  const activeOrders = filtered.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
+  const revenueLive = filtered.reduce((s, o) => s + o.total, 0);
+  const avgOrderValue = filtered.length ? revenueLive / filtered.length : 0;
+
+  const statusDonut = ORDER_FLOW.map(s => ({ label: s.label, value: filtered.filter(o => o.status === s.key).length, color: STATUS_COLORS[s.key] }))
+    .concat([{ label: 'Cancelled', value: filtered.filter(o => o.status === 'cancelled').length, color: STATUS_COLORS.cancelled }])
     .filter(s => s.value > 0);
+
+  // group by day for revenue + order-count trend
+  const dayKey = (d: Date) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  const dayMap = new Map<string, { revenue: number; count: number }>();
+  filtered.forEach(o => {
+    if (!o.placedAt) return;
+    const k = dayKey(new Date(o.placedAt));
+    const cur = dayMap.get(k) || { revenue: 0, count: 0 };
+    cur.revenue += o.total; cur.count += 1;
+    dayMap.set(k, cur);
+  });
+  const dayEntries = Array.from(dayMap.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const revenueByDay = dayEntries.map(([label, v]) => ({ label, value: Math.round(v.revenue) }));
+  const ordersByDay = dayEntries.map(([label, v]) => ({ label, value: v.count }));
+
+  // peak hours
+  const hourMap = new Map<number, number>();
+  filtered.forEach(o => { if (!o.placedAt) return; const h = new Date(o.placedAt).getHours(); hourMap.set(h, (hourMap.get(h) || 0) + 1); });
+  const peakHours = Array.from(hourMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([h, count]) => ({ label: `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`, value: count, color: C.orange }));
+
+  const RANGE_LABEL: Record<string, string> = { today: 'Today', week: 'Last 7 days', month: 'Last 30 days', all: 'All time' };
 
   return (
     <>
-      <PageHead title="Dashboard" sub="Live snapshot across all 25 modules." />
+      <PageHead title="Dashboard" sub={`Live snapshot — ${RANGE_LABEL[range]}.`}
+        action={
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {(['today', 'week', 'month', 'all'] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)} style={{ ...btnGhost, padding: '7px 13px', fontSize: 12, background: range === r ? C.green : '#fff', color: range === r ? '#fff' : C.ink, borderColor: range === r ? C.green : C.line }}>
+                {RANGE_LABEL[r]}
+              </button>
+            ))}
+          </div>
+        } />
+
       <div className="bt-grid-4" style={{ marginBottom: 16 }}>
         {[
-          ['Total Orders', String(orders.length), 'live'],
-          ['Revenue', money(revenueLive), 'live'],
-          ['Active Orders', String(activeOrders.length), 'live'],
-          ['Live Products', String(products.length), 'live'],
+          ['Orders', String(filtered.length)],
+          ['Revenue', money(revenueLive)],
+          ['Avg Order Value', money(Math.round(avgOrderValue))],
+          ['Active Orders', String(activeOrders.length)],
         ].map(([lbl, val]) => (
           <div key={lbl} style={{ ...cardStyle, padding: 16 }}>
             <div style={{ color: C.muted, fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase' }}>{lbl}</div>
@@ -410,15 +506,30 @@ function Dashboard({ showToast }: { showToast: (m: string) => void }) {
 
       <div className="bt-grid-2" style={{ marginBottom: 16 }}>
         <div style={cardStyle}>
-          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Orders by status</b></div>
+          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Revenue by day</b></div>
           <div style={{ padding: 16 }}>
-            {statusCounts.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No orders yet — they'll appear here live.</div> : <HBarList items={statusCounts} />}
+            {revenueByDay.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No orders in this range yet.</div> : <BarChart data={revenueByDay} color={C.green} />}
           </div>
         </div>
         <div style={cardStyle}>
-          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Delivered vs Active</b></div>
+          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Order status breakdown</b></div>
           <div style={{ padding: 16 }}>
-            <HBarList items={[{ label: 'Delivered', value: deliveredOrders.length, color: C.green }, { label: 'Active', value: activeOrders.length, color: C.orange }]} />
+            {statusDonut.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No orders in this range yet.</div> : <DonutChart data={statusDonut} />}
+          </div>
+        </div>
+      </div>
+
+      <div className="bt-grid-2" style={{ marginBottom: 16 }}>
+        <div style={cardStyle}>
+          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Orders placed by day</b></div>
+          <div style={{ padding: 16 }}>
+            {ordersByDay.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No orders in this range yet.</div> : <BarChart data={ordersByDay} color={C.orange} />}
+          </div>
+        </div>
+        <div style={cardStyle}>
+          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}><b style={{ fontSize: 14 }}>Peak ordering hours</b></div>
+          <div style={{ padding: 16 }}>
+            {peakHours.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No orders in this range yet.</div> : <HBarList items={peakHours} />}
           </div>
         </div>
       </div>
