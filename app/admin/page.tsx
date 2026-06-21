@@ -27,7 +27,8 @@ interface Product {
 
 type Page = 'dashboard' | 'orders' | 'products' | 'categories' | 'inventory' | 'customers';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001';
+// const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com';
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 /* ============ API layer ============ */
