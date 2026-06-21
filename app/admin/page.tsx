@@ -40,7 +40,7 @@ const ORDER_FLOW = [
   { key: 'order_confirmed', label: 'Order Confirmed' },
   { key: 'preparing_food', label: 'Preparing Food' },
   { key: 'food_ready', label: 'Food Ready' },
-  { key: 'assigned_to_delivery_partner', label: 'Assigned to Delivery Partner' },
+  { key: 'assigned_to_delivery', label: 'Assigned to Delivery Partner' },
   { key: 'out_for_delivery', label: 'Out for Delivery' },
   { key: 'arriving_soon', label: 'Arriving Soon' },
   { key: 'delivered', label: 'Delivered' },
