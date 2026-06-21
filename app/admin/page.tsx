@@ -31,6 +31,7 @@ interface Order {
   deliveryPartnerId: number; placedAt: string; updatedAt: string;
 }
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
+interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com';
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
@@ -145,6 +146,37 @@ const api = {
     });
     if (!r.ok) throw new Error('Status update failed');
     return r.json();
+  },
+
+  async listOrderItems(orderId?: number): Promise<OrderItem[]> {
+    const url = orderId ? `${API_BASE}/order-items?orderId=${orderId}` : `${API_BASE}/order-items`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Failed to load order items');
+    const rows = await r.json();
+    return rows.map((i: any) => ({
+      id: Number(i.id), orderId: Number(i.orderId), productId: Number(i.productId),
+      productName: i.productName, unitPrice: Number(i.unitPrice), quantity: Number(i.quantity), lineTotal: Number(i.lineTotal),
+    }));
+  },
+  async createOrderItem(d: Partial<OrderItem>) {
+    const r = await fetch(`${API_BASE}/order-items`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: d.orderId, productId: d.productId, productName: d.productName, unitPrice: d.unitPrice, quantity: d.quantity, lineTotal: d.lineTotal }),
+    });
+    if (!r.ok) throw new Error('Create failed');
+    return r.json();
+  },
+  async updateOrderItem(id: number, d: Partial<OrderItem>) {
+    const r = await fetch(`${API_BASE}/order-items/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: d.orderId, productId: d.productId, productName: d.productName, unitPrice: d.unitPrice, quantity: d.quantity, lineTotal: d.lineTotal }),
+    });
+    if (!r.ok) throw new Error('Update failed');
+    return r.json();
+  },
+  async deleteOrderItem(id: number) {
+    const r = await fetch(`${API_BASE}/order-items/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Delete failed');
   },
 };
 
@@ -385,7 +417,8 @@ export default function AdminPage() {
             {page === 'products' && <Products showToast={showToast} />}
             {page === 'categories' && <Categories showToast={showToast} />}
             {page === 'orders' && <Orders showToast={showToast} />}
-            {page !== 'dashboard' && page !== 'products' && page !== 'categories' && page !== 'orders' && currentItem?.table && <ComingSoon item={currentItem} />}
+            {page === 'order_items' && <OrderItemsPage showToast={showToast} />}
+            {page !== 'dashboard' && page !== 'products' && page !== 'categories' && page !== 'orders' && page !== 'order_items' && currentItem?.table && <ComingSoon item={currentItem} />}
           </div>
         </div>
       </div>
@@ -680,6 +713,133 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
 }
 
 /* ============ PRODUCTS (live) ============ */
+/* ============ ORDER ITEMS (live) ============ */
+function OrderItemsPage({ showToast }: { showToast: (m: string) => void }) {
+  const [items, setItems] = useState<OrderItem[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [orderFilter, setOrderFilter] = useState<number | 'all'>('all');
+  const [editing, setEditing] = useState<Partial<OrderItem> | null>(null);
+  const [confirmDel, setConfirmDel] = useState<OrderItem | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [i, o, p] = await Promise.all([api.listOrderItems(), api.listOrders().catch(() => []), api.listProducts().catch(() => [])]);
+      setItems(i); setOrders(o); setProducts(p);
+    } catch (e: any) { showToast(e.message || 'Load failed'); }
+    setLoading(false);
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  const orderNumber = (id: number) => orders.find(o => o.id === id)?.orderNumber || `#${id}`;
+  const filtered = orderFilter === 'all' ? items : items.filter(i => i.orderId === orderFilter);
+
+  async function save(d: Partial<OrderItem>) {
+    try {
+      if (d.id) await api.updateOrderItem(d.id, d); else await api.createOrderItem(d);
+      setEditing(null); showToast(d.id ? 'Item updated' : 'Item added'); load();
+    } catch (e: any) { showToast(e.message || 'Save failed'); }
+  }
+  async function del(i: OrderItem) {
+    try { await api.deleteOrderItem(i.id); setConfirmDel(null); showToast('Item deleted'); load(); }
+    catch (e: any) { showToast(e.message || 'Delete failed'); }
+  }
+
+  return (
+    <>
+      <PageHead title="Order Items" sub="Line items inside each order."
+        action={<button style={btnPrimary} onClick={() => setEditing({ orderId: orders[0]?.id, quantity: 1, unitPrice: 0, lineTotal: 0 })}>＋ Add Item</button>} />
+      <div style={{ marginBottom: 14 }}>
+        <select style={{ ...inputStyle, maxWidth: 260, width: 'auto' }} value={orderFilter} onChange={e => setOrderFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+          <option value="all">All orders</option>
+          {orders.map(o => <option key={o.id} value={o.id}>{o.orderNumber}</option>)}
+        </select>
+      </div>
+      <div style={{ ...cardStyle, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 600 }}>
+          <thead><tr><th style={th}>Order</th><th style={th}>Product</th><th style={th}>Unit Price</th><th style={th}>Qty</th><th style={th}>Line Total</th><th style={th}></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td style={td} colSpan={6}>Loading…</td></tr>
+              : filtered.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No order items yet.</td></tr>
+              : filtered.map(i => (
+                <tr key={i.id}>
+                  <td style={td}><b>{orderNumber(i.orderId)}</b></td>
+                  <td style={td}>{i.productName}</td>
+                  <td style={td}>{money(i.unitPrice)}</td>
+                  <td style={td}>{i.quantity}</td>
+                  <td style={td}><b>{money(i.lineTotal)}</b></td>
+                  <td style={td}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setEditing(i)} style={{ ...btnGhost, padding: '6px 10px' }}>✏️</button>
+                      <button onClick={() => setConfirmDel(i)} style={{ ...btnGhost, padding: '6px 10px', color: C.red }}>🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      {editing && <OrderItemModal item={editing} orders={orders} products={products} onClose={() => setEditing(null)} onSave={save} />}
+      {confirmDel && (
+        <Modal title="Delete order item" onClose={() => setConfirmDel(null)}>
+          <p>Delete <b>{confirmDel.productName}</b> from {orderNumber(confirmDel.orderId)}?</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+            <button style={btnGhost} onClick={() => setConfirmDel(null)}>Cancel</button>
+            <button style={{ ...btnPrimary, background: C.red, borderColor: C.red }} onClick={() => del(confirmDel)}>Delete</button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function OrderItemModal({ item, orders, products, onClose, onSave }:
+  { item: Partial<OrderItem>; orders: Order[]; products: Product[]; onClose: () => void; onSave: (d: Partial<OrderItem>) => void }) {
+  const [f, setF] = useState<Partial<OrderItem>>({ orderId: orders[0]?.id, productId: products[0]?.id, productName: '', unitPrice: 0, quantity: 1, lineTotal: 0, ...item });
+  const set = (k: keyof OrderItem, v: any) => setF(s => ({ ...s, [k]: v }));
+
+  function pickProduct(pid: number) {
+    const p = products.find(x => x.id === pid);
+    if (!p) return;
+    const price = p.offerPrice > 0 ? p.offerPrice : p.price;
+    setF(s => ({ ...s, productId: pid, productName: p.name, unitPrice: price, lineTotal: price * (s.quantity || 1) }));
+  }
+  function setQty(q: number) {
+    setF(s => ({ ...s, quantity: q, lineTotal: (s.unitPrice || 0) * q }));
+  }
+  function setUnitPrice(p: number) {
+    setF(s => ({ ...s, unitPrice: p, lineTotal: p * (s.quantity || 1) }));
+  }
+
+  return (
+    <Modal title={item.id ? 'Edit Order Item' : 'Add Order Item'} onClose={onClose}>
+      <Field label="Order *">
+        <select style={inputStyle} value={f.orderId} onChange={e => set('orderId', Number(e.target.value))}>
+          {orders.map(o => <option key={o.id} value={o.id}>{o.orderNumber}</option>)}
+        </select>
+      </Field>
+      <Field label="Pick a product (auto-fills name & price)">
+        <select style={inputStyle} value={f.productId} onChange={e => pickProduct(Number(e.target.value))}>
+          <option value="">— choose —</option>
+          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Product name *"><input style={inputStyle} value={f.productName || ''} onChange={e => set('productName', e.target.value)} placeholder="e.g. Grilled Chicken Bowl" /></Field>
+      <Row3>
+        <Field label="Unit price (₹) *"><input style={inputStyle} type="number" value={f.unitPrice || ''} onChange={e => setUnitPrice(Number(e.target.value) || 0)} /></Field>
+        <Field label="Quantity *"><input style={inputStyle} type="number" min={1} value={f.quantity || ''} onChange={e => setQty(Number(e.target.value) || 1)} /></Field>
+        <Field label="Line total (₹)"><input style={inputStyle} type="number" value={f.lineTotal || ''} onChange={e => set('lineTotal', Number(e.target.value) || 0)} /></Field>
+      </Row3>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+        <button style={btnGhost} onClick={onClose}>Cancel</button>
+        <button style={btnPrimary} onClick={() => { if (!f.orderId || !f.productName) return alert('Order and product name are required'); onSave(f); }}>{item.id ? 'Save changes' : 'Add item'}</button>
+      </div>
+    </Modal>
+  );
+}
+
 function Products({ showToast }: { showToast: (m: string) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
