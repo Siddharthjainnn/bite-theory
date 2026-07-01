@@ -5,4 +5,5 @@ const nextConfig: NextConfig = {
   // normally at runtime. Without this you get "Cannot find module 'pg-types'".
   serverExternalPackages: ["pg"],
 };
+
 export default nextConfig;

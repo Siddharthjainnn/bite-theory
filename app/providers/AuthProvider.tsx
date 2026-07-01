@@ -1,8 +1,8 @@
 'use client';
- 
+
 import { SessionProvider } from 'next-auth/react';
 import { ReactNode } from 'react';
- 
+
 /**
  * basePath must match where the NextAuth route lives.
  * Our route is app/auth/[...nextauth] -> served at /auth
@@ -13,4 +13,3 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     <SessionProvider basePath="/auth">{children}</SessionProvider>
   );
 }
- 
