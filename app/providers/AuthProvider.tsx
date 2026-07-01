@@ -10,6 +10,6 @@ import { ReactNode } from 'react';
  */
 export default function AuthProvider({ children }: { children: ReactNode }) {
   return (
-    <SessionProvider basePath="/api/auth">{children}</SessionProvider>
+    <SessionProvider basePath="/auth">{children}</SessionProvider>
   );
 }
