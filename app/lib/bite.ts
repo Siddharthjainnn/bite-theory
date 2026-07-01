@@ -5,7 +5,8 @@
 
 /* ───────────── config ───────────── */
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001/api';
+  // process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001/api';
+    process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com/api';
 export const AVATAR_FULL = `${API_BASE}/uploads/theory-bhaiya-avatar.png`;
 export const AVATAR_FACE = `${API_BASE}/uploads/theory-bhaiya-face.png`;
 
