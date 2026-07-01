@@ -35,7 +35,7 @@ interface Order {
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bitestheory.com/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001/api';
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const ORDER_FLOW = [
