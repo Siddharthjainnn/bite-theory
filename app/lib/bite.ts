@@ -147,3 +147,100 @@ export function hasOffer(p: Product): boolean {
 export function offerPct(p: Product): number {
   return hasOffer(p) ? Math.round((1 - p.offerPrice / p.price) * 100) : 0;
 }
+
+
+/* ───────────── API orders (backend-driven, Swiggy-style) ───────────── */
+export type ApiOrderStatus =
+  | 'order_received' | 'order_confirmed' | 'preparing_food' | 'food_ready'
+  | 'assigned_to_delivery' | 'out_for_delivery' | 'arriving_soon'
+  | 'delivered' | 'cancelled';
+
+export const STATUS_META: Record<ApiOrderStatus, { label: string; emoji: string; step: number }> = {
+  order_received:       { label: 'Order received',   emoji: '🧾', step: 0 },
+  order_confirmed:      { label: 'Confirmed',        emoji: '✅', step: 1 },
+  preparing_food:       { label: 'Preparing food',   emoji: '👨\u200d🍳', step: 2 },
+  food_ready:           { label: 'Food ready',       emoji: '🍱', step: 3 },
+  assigned_to_delivery: { label: 'Rider assigned',   emoji: '🛵', step: 4 },
+  out_for_delivery:     { label: 'Out for delivery', emoji: '🛣️', step: 5 },
+  arriving_soon:        { label: 'Arriving soon',    emoji: '📍', step: 6 },
+  delivered:            { label: 'Delivered',        emoji: '🎉', step: 7 },
+  cancelled:            { label: 'Cancelled',        emoji: '❌', step: -1 },
+};
+export const TRACK_STEPS: ApiOrderStatus[] = [
+  'order_received', 'order_confirmed', 'preparing_food', 'food_ready',
+  'assigned_to_delivery', 'out_for_delivery', 'arriving_soon', 'delivered',
+];
+
+export interface ApiOrderItem {
+  id: number; productId: number; productName: string;
+  unitPrice: number; quantity: number; lineTotal: number;
+}
+export interface ApiOrder {
+  id: number; orderNumber: string; userId: number;
+  subtotal: number; discount: number; deliveryCharge: number;
+  walletUsed: number; total: number;
+  status: ApiOrderStatus;
+  placedAt: string;
+  deliveryAddress?: string | null;
+  deliveryLat?: number | null; deliveryLng?: number | null;
+  etaMinutes?: number | null;
+  items?: ApiOrderItem[];
+  history?: { status: string; note?: string; createdAt: string }[];
+  partner?: {
+    id: number; name: string; mobile: string; vehicleNo?: string;
+    photo?: string; lat?: number | null; lng?: number | null;
+  } | null;
+}
+
+export interface SavedAddress {
+  id: number; userId: number; label?: string; fullAddress: string;
+  landmark?: string; pincode?: string; city?: string; state?: string;
+  isDefault?: boolean; latitude?: number | null; longitude?: number | null;
+}
+
+async function jsonOrThrow(res: Response) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.message?.toString?.() || data?.message || 'Request failed');
+  return data;
+}
+
+export async function fetchMyOrders(userId: number): Promise<ApiOrder[]> {
+  const res = await fetch(`${API_BASE}/orders?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function fetchOrderTrack(orderId: number | string): Promise<ApiOrder> {
+  const res = await fetch(`${API_BASE}/orders/${orderId}/track`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function fetchAddresses(userId: number): Promise<SavedAddress[]> {
+  const res = await fetch(`${API_BASE}/addresses?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function createAddress(a: Partial<SavedAddress>): Promise<SavedAddress> {
+  const res = await fetch(`${API_BASE}/addresses`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a),
+  });
+  return jsonOrThrow(res);
+}
+export async function validateCoupon(code: string, subtotal: number):
+  Promise<{ valid: boolean; discount: number; message: string; couponId: number | null }> {
+  const res = await fetch(`${API_BASE}/coupons/validate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, subtotal }),
+  });
+  return res.json();
+}
+export interface CheckoutPayload {
+  userId: number;
+  items: { productId: number; quantity: number }[];
+  addressId?: number;
+  deliveryAddress?: string; deliveryLat?: number; deliveryLng?: number;
+  couponCode?: string; useWallet?: boolean;
+  paymentMethod?: 'cod' | 'online';
+}
+export async function checkoutOrder(payload: CheckoutPayload): Promise<ApiOrder & { pointsEarned?: number }> {
+  const res = await fetch(`${API_BASE}/orders/checkout`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  return jsonOrThrow(res);
+}

@@ -19,7 +19,7 @@ const FREE_DELIVERY_ABOVE = 199;
 
 export default function CartPage() {
   const { products, loading } = useCatalog();
-  const { cart, add, sub, remove, placeOrder } = useCart();
+  const { cart, add, sub, remove } = useCart();
   const { data: session, status } = useSession();
   const router = useRouter();
   const [placing, setPlacing] = useState(false);
@@ -45,7 +45,7 @@ export default function CartPage() {
   function checkout() {
     // must be logged in to place an order
     if (status !== 'authenticated') {
-      router.push('/login?callbackUrl=/cart');
+      router.push('/login?callbackUrl=/checkout');
       return;
     }
     // must have a phone number for delivery
@@ -54,11 +54,7 @@ export default function CartPage() {
       return;
     }
     setPlacing(true);
-    const order = placeOrder(products);
-    setTimeout(() => {
-      if (order) router.push('/orders?placed=' + order.id);
-      else setPlacing(false);
-    }, 600);
+    router.push('/checkout');
   }
 
   const empty = !loading && lines.length === 0;

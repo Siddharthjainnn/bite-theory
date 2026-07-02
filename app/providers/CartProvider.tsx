@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * CartProvider — single source of truth for cart, orders, and recently-viewed.
+ * CartProvider — single source of truth for cart and recently-viewed (orders live in the backend).
  * Persisted to localStorage so it survives refresh and is shared across pages.
  */
 
@@ -13,7 +13,7 @@ import {
   useState,
   ReactNode,
 } from 'react';
-import { Product, Order, effectivePrice } from '../lib/bite';
+import { Product, effectivePrice } from '../lib/bite';
 
 type CartMap = Record<number, number>; // productId -> qty
 
@@ -28,9 +28,6 @@ interface CartCtx {
   count: number;
   /* derive totals against a product list */
   totalFor: (products: Product[]) => number;
-  /* orders */
-  orders: Order[];
-  placeOrder: (products: Product[]) => Order | null;
   /* recently viewed */
   recent: number[];
   markViewed: (id: number) => void;
@@ -39,7 +36,6 @@ interface CartCtx {
 const Ctx = createContext<CartCtx | null>(null);
 
 const LS_CART = 'bt_cart_v1';
-const LS_ORDERS = 'bt_orders_v1';
 const LS_RECENT = 'bt_recent_v1';
 
 function load<T>(key: string, fallback: T): T {
@@ -60,14 +56,12 @@ function save(key: string, value: unknown) {
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartMap>({});
-  const [orders, setOrders] = useState<Order[]>([]);
   const [recent, setRecent] = useState<number[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   // hydrate once on mount (client only)
   useEffect(() => {
     setCart(load<CartMap>(LS_CART, {}));
-    setOrders(load<Order[]>(LS_ORDERS, []));
     setRecent(load<number[]>(LS_RECENT, []));
     setHydrated(true);
   }, []);
@@ -76,9 +70,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (hydrated) save(LS_CART, cart);
   }, [cart, hydrated]);
-  useEffect(() => {
-    if (hydrated) save(LS_ORDERS, orders);
-  }, [orders, hydrated]);
   useEffect(() => {
     if (hydrated) save(LS_RECENT, recent);
   }, [recent, hydrated]);
@@ -122,36 +113,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return sum + (p ? effectivePrice(p) * qty : 0);
     }, 0);
 
-  const placeOrder = (products: Product[]): Order | null => {
-    const entries = Object.entries(cart);
-    if (!entries.length) return null;
-    const items = entries
-      .map(([id, qty]) => {
-        const p = products.find((x) => x.id === Number(id));
-        if (!p) return null;
-        return {
-          id: p.id,
-          name: p.name,
-          image: p.image,
-          price: effectivePrice(p),
-          qty,
-        };
-      })
-      .filter(Boolean) as Order['items'];
-    if (!items.length) return null;
-    const total = items.reduce((s, it) => s + it.price * it.qty, 0);
-    const order: Order = {
-      id: 'BT' + Date.now().toString().slice(-8),
-      createdAt: Date.now(),
-      items,
-      total,
-      status: 'placed',
-    };
-    setOrders((o) => [order, ...o]);
-    setCart({});
-    return order;
-  };
-
   const markViewed = (id: number) =>
     setRecent((r) => [id, ...r.filter((x) => x !== id)].slice(0, 12));
 
@@ -164,8 +125,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     clear,
     count,
     totalFor,
-    orders,
-    placeOrder,
     recent,
     markViewed,
   };

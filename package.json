@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/google.maps": "^3.65.2",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",

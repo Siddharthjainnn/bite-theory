@@ -1,23 +1,22 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+/**
+ * /orders — order history, fetched from the backend by session user id.
+ * Tap any order → live tracking page. Reorder puts items back in cart.
+ */
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import AppShell from '../components/AppShell';
 import AppHeader from '../components/AppHeader';
-import FoodImage from '../components/FoodImage';
 import { useCart } from '../providers/CartProvider';
-import { Order, money, catEmoji, C } from '../lib/bite';
+import {
+  C, money, ApiOrder, ApiOrderStatus, STATUS_META, fetchMyOrders, fetchOrderTrack,
+} from '../lib/bite';
 
-const STATUS_LABEL: Record<Order['status'], string> = {
-  placed: 'Placed',
-  preparing: 'Preparing',
-  on_the_way: 'On the way',
-  delivered: 'Delivered',
-};
-
-function timeAgo(ts: number): string {
-  const s = Math.floor((Date.now() - ts) / 1000);
+function timeAgo(iso: string): string {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60);
   if (m < 60) return `${m} min ago`;
@@ -28,106 +27,109 @@ function timeAgo(ts: number): string {
   return `${d} days ago`;
 }
 
-function OrdersInner() {
-  const { orders, add } = useCart();
-  const params = useSearchParams();
-  const justPlaced = params.get('placed');
+export default function OrdersPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const { add } = useCart();
+  const [orders, setOrders] = useState<ApiOrder[] | null>(null);
+  const [error, setError] = useState('');
 
-  function reorder(o: Order) {
-    o.items.forEach((it) => {
-      for (let i = 0; i < it.qty; i++) add(it.id);
-    });
+  const userId = (session?.user as any)?.id;
+
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/login?callbackUrl=/orders');
+  }, [status, router]);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchMyOrders(Number(userId))
+      .then(setOrders)
+      .catch((e) => setError(e.message || 'Could not load orders'));
+  }, [userId]);
+
+  async function reorder(o: ApiOrder) {
+    try {
+      const full = o.items?.length ? o : await fetchOrderTrack(o.id);
+      (full.items || []).forEach((it) => {
+        for (let i = 0; i < it.quantity; i++) add(Number(it.productId));
+      });
+      router.push('/cart');
+    } catch {
+      /* item may be delisted; cart just stays as-is */
+    }
   }
+
+  const live = (s: ApiOrderStatus) => s !== 'delivered' && s !== 'cancelled';
 
   return (
     <AppShell header={<AppHeader variant="page" title="Your Orders" />}>
       <div className="bt-page-pad">
-        {justPlaced && (
-          <div
-            style={{
-              background: C.greenSoft,
-              border: `1px solid ${C.green}`,
-              borderRadius: 14,
-              padding: '14px 16px',
-              marginBottom: 14,
-              display: 'flex',
-              gap: 12,
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontSize: 26 }}>🎉</span>
-            <div>
-              <div style={{ fontWeight: 800, color: C.greenDeep }}>
-                Order placed!
-              </div>
-              <div style={{ fontSize: 12, color: '#3a5a4d', marginTop: 2 }}>
-                #{justPlaced} · Theory Bhaiya is on it 🧪
-              </div>
-            </div>
+        {error && <div style={{ padding: 30, textAlign: 'center', color: '#c0392b' }}>{error}</div>}
+        {!orders && !error && (
+          <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Loading…</div>
+        )}
+        {orders && orders.length === 0 && (
+          <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>🍽️</div>
+            No orders yet.{' '}
+            <Link href="/menu" style={{ color: C.greenDeep, fontWeight: 700 }}>
+              Order something tasty →
+            </Link>
           </div>
         )}
-
-        {orders.length === 0 ? (
-          <div className="bt-empty" style={{ marginTop: 24 }}>
-            <div style={{ fontSize: 40, marginBottom: 8 }}>📋</div>
-            Abhi tak koi order nahi.
-            <div style={{ marginTop: 14 }}>
-              <Link
-                href="/menu"
-                style={{
-                  background: C.green,
-                  color: '#fff',
-                  padding: '10px 22px',
-                  borderRadius: 10,
-                  fontWeight: 700,
-                  fontSize: 13,
-                  display: 'inline-block',
-                }}
-              >
-                Order something →
-              </Link>
-            </div>
-          </div>
-        ) : (
-          orders.map((o) => (
-            <div key={o.id} className="order-card">
-              <div className="order-top">
-                <div>
-                  <div className="order-id">#{o.id}</div>
-                  <div className="order-date">{timeAgo(o.createdAt)}</div>
-                </div>
-                <span className={`order-status ${o.status}`}>
-                  {STATUS_LABEL[o.status]}
-                </span>
-              </div>
-              <div className="order-items">
-                {o.items.map((it) => (
-                  <div key={it.id} className="order-line">
-                    <span>
-                      {it.qty}× {it.name}
-                    </span>
-                    <span>{money(it.price * it.qty)}</span>
+        {orders?.map((o) => {
+          const meta = STATUS_META[o.status as ApiOrderStatus] || STATUS_META.order_received;
+          const isLive = live(o.status as ApiOrderStatus);
+          return (
+            <div
+              key={o.id}
+              style={{
+                background: '#fff', border: `1px solid ${isLive ? C.green : C.line}`,
+                borderRadius: 16, padding: 14, marginBottom: 12,
+              }}
+            >
+              <Link href={`/orders/${o.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: C.ink }}>
+                      {meta.emoji} {o.orderNumber}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+                      {timeAgo(o.placedAt)} · {money(Number(o.total))}
+                    </div>
                   </div>
-                ))}
-              </div>
-              <div className="order-foot">
-                <span className="order-total">{money(o.total)}</span>
-                <button className="order-reorder" onClick={() => reorder(o)}>
-                  Reorder
+                  <span
+                    style={{
+                      fontSize: 11.5, fontWeight: 800, padding: '5px 10px', borderRadius: 999,
+                      background: o.status === 'cancelled' ? '#fdecea' : isLive ? C.orangeSoft : C.greenSoft,
+                      color: o.status === 'cancelled' ? '#c0392b' : isLive ? C.orangeDeep : C.greenDeep,
+                    }}
+                  >
+                    {meta.label}
+                  </span>
+                </div>
+                {isLive && (
+                  <div style={{ fontSize: 12.5, color: C.greenDeep, fontWeight: 700, marginTop: 8 }}>
+                    Track live on map →
+                  </div>
+                )}
+              </Link>
+              {!isLive && o.status !== 'cancelled' && (
+                <button
+                  onClick={() => reorder(o)}
+                  style={{
+                    marginTop: 10, background: 'none', border: `1px solid ${C.green}`,
+                    color: C.greenDeep, borderRadius: 10, padding: '8px 14px',
+                    fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
+                  }}
+                >
+                  ↻ Reorder
                 </button>
-              </div>
+              )}
             </div>
-          ))
-        )}
+          );
+        })}
       </div>
     </AppShell>
-  );
-}
-
-export default function OrdersPage() {
-  return (
-    <Suspense fallback={null}>
-      <OrdersInner />
-    </Suspense>
   );
 }
