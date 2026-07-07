@@ -389,3 +389,42 @@ export async function deleteAddress(id: number): Promise<{ deleted: boolean; id:
   const res = await fetch(`${API_BASE}/addresses/${id}`, { method: 'DELETE' });
   return jsonOrThrow(res);
 }
+
+/* ───────────── notifications ───────────── */
+export interface AppNotification {
+  id: number; userId: number | null; orderId: number | null;
+  title: string | null; body: string | null; createdAt: string | null;
+}
+export async function fetchNotifications(userId: number): Promise<AppNotification[]> {
+  const res = await fetch(`${API_BASE}/notifications?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+
+/* ───────────── referrals ───────────── */
+export interface ReferralRow {
+  id: number; referrerId: number; referredUserId: number;
+  referralCode: string | null; rewardAmount: number | null;
+  isConverted: boolean | null; rewarded: boolean | null; createdAt: string | null;
+}
+export async function fetchMyReferrals(userId: number): Promise<ReferralRow[]> {
+  const res = await fetch(`${API_BASE}/referrals?referrerId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function claimReferral(userId: number, code: string):
+  Promise<{ ok: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/referrals/claim`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, code }),
+  });
+  return jsonOrThrow(res);
+}
+
+/* ───────────── admin auth ───────────── */
+export async function adminLogin(email: string, password: string):
+  Promise<{ ok: boolean; adminKey: string; admin: { id: number; name: string; email: string } }> {
+  const res = await fetch(`${API_BASE}/admin-users/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  return jsonOrThrow(res);
+}

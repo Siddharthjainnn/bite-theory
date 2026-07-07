@@ -37,11 +37,23 @@ interface OrderHistoryEntry { id: number; orderId: number; status: string; note:
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com/api';
-// Admin key is sent on every write so the backend guard accepts it.
-// NOTE: this ships in the browser bundle; the proper long-term fix is a
-// server-side admin login. Set NEXT_PUBLIC_ADMIN_KEY to match ADMIN_API_KEY.
-const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
-const WRITE_HEADERS = { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY };
+// The admin key is NO LONGER bundled into the browser JS. It is handed out
+// by POST /admin-users/login after a correct email + password, kept in
+// sessionStorage, and attached to every write. Logout / tab close clears it.
+const ADMIN_SESSION_KEY = 'bt_admin_session';
+function getAdminKey(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
+    return raw ? (JSON.parse(raw).adminKey || '') : '';
+  } catch { return ''; }
+}
+// Getter-based so every spread/read picks up the live key after login.
+const WRITE_HEADERS: Record<string, string> = {
+  'Content-Type': 'application/json',
+  get 'x-admin-key'() { return getAdminKey(); },
+} as any;
+const ADMIN_KEY_HEADER = () => ({ 'x-admin-key': getAdminKey() });
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const ORDER_FLOW = [
@@ -105,7 +117,7 @@ const api = {
     return r.json();
   },
   async deleteProduct(id: number) {
-    const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+    const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Delete failed');
   },
   async listCategories(): Promise<Category[]> {
@@ -136,7 +148,7 @@ const api = {
     return r.json();
   },
   async deleteCategory(id: number) {
-    const r = await fetch(`${API_BASE}/categories/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+    const r = await fetch(`${API_BASE}/categories/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Delete failed');
   },
 
@@ -193,7 +205,7 @@ const api = {
     return r.json();
   },
   async deleteOrderItem(id: number) {
-    const r = await fetch(`${API_BASE}/order-items/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+    const r = await fetch(`${API_BASE}/order-items/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Delete failed');
   },
 
@@ -218,7 +230,7 @@ const api = {
     return r.json();
   },
   async genericDelete(route: string, id: number) {
-    const r = await fetch(`${API_BASE}/${route}/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+    const r = await fetch(`${API_BASE}/${route}/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Delete failed');
   },
 };
@@ -720,7 +732,7 @@ function BarChart({ data, color = C.green, height = 140 }: { data: { label: stri
 }
 
 /* ============ main ============ */
-export default function AdminPage() {
+function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<PageKey>('dashboard');
   const [toast, setToast] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -773,6 +785,11 @@ export default function AdminPage() {
               ))}
             </div>
           ))}
+          <button
+            onClick={onLogout}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 11px', borderRadius: 9, cursor: 'pointer', marginTop: 18, fontWeight: 600, fontSize: 13.5, background: 'rgba(214,69,69,.15)', color: '#ffb4b4', border: '1px solid rgba(214,69,69,.35)' }}>
+            <span style={{ width: 17, textAlign: 'center' }}>🚪</span>Logout
+          </button>
         </aside>
 
         <div className="bt-main">
@@ -962,7 +979,7 @@ function ImageUpload({ folder, value, onChange, accept = 'image' }:
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const r = await fetch(`${API_BASE}/upload/${folder}`, { method: 'POST', body: fd, headers: { 'x-admin-key': ADMIN_KEY } });
+      const r = await fetch(`${API_BASE}/upload/${folder}`, { method: 'POST', body: fd, headers: ADMIN_KEY_HEADER() });
       if (!r.ok) { const m = await r.json().catch(() => ({})); throw new Error(m.message || 'Upload failed'); }
       const data = await r.json();
       onChange(data.url);
@@ -1763,3 +1780,95 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 function Row({ children }: { children: React.ReactNode }) { return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>; }
 function Row3({ children }: { children: React.ReactNode }) { return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>{children}</div>; }
+
+/* ============ login gate ============ */
+export default function AdminPage() {
+  const [session, setSession] = useState<{ adminKey: string; name?: string } | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s?.adminKey) setSession(s);
+      }
+    } catch {}
+    setChecked(true);
+  }, []);
+
+  async function doLogin() {
+    if (!email.trim() || !password) { setErr('Enter email and password'); return; }
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch(`${API_BASE}/admin-users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data?.adminKey) {
+        setErr(data?.message || 'Invalid email or password');
+        return;
+      }
+      const s = { adminKey: data.adminKey, name: data.admin?.name, email: data.admin?.email };
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(s));
+      setSession(s);
+    } catch {
+      setErr('Could not reach the server. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function logout() {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    setSession(null); setEmail(''); setPassword('');
+  }
+
+  if (!checked) return null;
+  if (session) return <AdminDashboard onLogout={logout} />;
+
+  const inp: React.CSSProperties = {
+    width: '100%', padding: '11px 13px', borderRadius: 10, fontSize: 14,
+    border: `1px solid ${C.line}`, outline: 'none', background: '#fff', color: C.ink,
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: `linear-gradient(160deg, ${C.darkGreen} 0%, #145341 60%, ${C.green} 130%)`, padding: 16, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: 380, background: '#fff', borderRadius: 18, padding: '30px 26px', boxShadow: '0 24px 60px rgba(0,0,0,.35)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${C.green},${C.orange})`, display: 'grid', placeItems: 'center', fontWeight: 800, color: '#fff', fontSize: 20 }}>B</div>
+          <div>
+            <b style={{ fontSize: 17, color: C.ink }}>Bite Theory</b>
+            <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1.2, fontWeight: 700 }}>ADMIN CONSOLE</div>
+          </div>
+        </div>
+
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Email</label>
+        <input style={{ ...inp, marginBottom: 14 }} type="email" value={email}
+          onChange={(e) => setEmail(e.target.value)} placeholder="admin@bitetheory.com" autoComplete="username" />
+
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Password</label>
+        <input style={{ ...inp, marginBottom: 6 }} type="password" value={password}
+          onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"
+          onKeyDown={(e) => { if (e.key === 'Enter') doLogin(); }} />
+
+        {err && <div style={{ color: C.red, fontSize: 12.5, fontWeight: 600, margin: '8px 0 2px' }}>⚠️ {err}</div>}
+
+        <button onClick={doLogin} disabled={busy}
+          style={{ width: '100%', marginTop: 16, padding: '12px 14px', borderRadius: 11, border: 'none', cursor: busy ? 'wait' : 'pointer', background: busy ? '#8fbf92' : C.green, color: '#fff', fontWeight: 800, fontSize: 14.5, letterSpacing: 0.3 }}>
+          {busy ? 'Signing in…' : 'Sign in →'}
+        </button>
+
+        <div style={{ marginTop: 14, fontSize: 11, color: C.muted, textAlign: 'center' }}>
+          Access is restricted to Bite Theory staff.
+        </div>
+      </div>
+    </div>
+  );
+}

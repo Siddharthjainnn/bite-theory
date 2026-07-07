@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut, signIn } from 'next-auth/react';
-import { C, money } from '../lib/bite';
+import { C, money, fetchMyReferrals, claimReferral, type ReferralRow } from '../lib/bite';
 
 /**
  * Left/side profile drawer. Every row now DOES something:
@@ -53,6 +53,33 @@ export default function ProfileDrawer({
   const [copied, setCopied] = useState(false);
 
   const referralCode = user?.referralCode || user?.referral_code || '';
+  const userId = Number(user?.dbId || 0);
+
+  /* real referral earnings */
+  const [refs, setRefs] = useState<ReferralRow[]>([]);
+  const [friendCode, setFriendCode] = useState('');
+  const [claimMsg, setClaimMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [claiming, setClaiming] = useState(false);
+
+  useEffect(() => {
+    if (!showRefer || !userId) return;
+    fetchMyReferrals(userId).then(setRefs).catch(() => {});
+  }, [showRefer, userId]);
+
+  const earned = refs.filter((r) => r.rewarded).reduce((s, r) => s + Number(r.rewardAmount || 0), 0);
+  const pendingRefs = refs.filter((r) => !r.isConverted).length;
+
+  async function submitFriendCode() {
+    if (!friendCode.trim() || !userId) return;
+    setClaiming(true); setClaimMsg(null);
+    try {
+      const r = await claimReferral(userId, friendCode.trim());
+      setClaimMsg({ ok: true, text: r.message || 'Code applied! 🎉' });
+      setFriendCode('');
+    } catch (e: any) {
+      setClaimMsg({ ok: false, text: e?.message || 'Could not apply that code' });
+    } finally { setClaiming(false); }
+  }
 
   function go(href: string) {
     onClose();
@@ -134,6 +161,39 @@ export default function ProfileDrawer({
                         <span>{referralCode}</span>
                         <span className="refer-copy">{copied ? '✓ COPIED' : 'COPY'}</span>
                       </button>
+
+                      <div className="refer-earn-row">
+                        <div className="refer-earn">
+                          <b style={{ color: C.green }}>{money(earned)}</b>
+                          <span>Earned</span>
+                        </div>
+                        <div className="refer-earn">
+                          <b style={{ color: C.orange }}>{refs.filter((r) => r.isConverted).length}</b>
+                          <span>Friends joined</span>
+                        </div>
+                        <div className="refer-earn">
+                          <b>{pendingRefs}</b>
+                          <span>Pending</span>
+                        </div>
+                      </div>
+
+                      <div className="refer-claim">
+                        <input
+                          className="refer-claim-input"
+                          value={friendCode}
+                          onChange={(e) => setFriendCode(e.target.value.toUpperCase())}
+                          placeholder="Have a friend's code?"
+                          maxLength={12}
+                        />
+                        <button className="refer-claim-btn" disabled={claiming || !friendCode.trim()} onClick={submitFriendCode}>
+                          {claiming ? '…' : 'Apply'}
+                        </button>
+                      </div>
+                      {claimMsg && (
+                        <div className="refer-claim-msg" style={{ color: claimMsg.ok ? C.greenDeep : '#c62828' }}>
+                          {claimMsg.text}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="refer-hint">Login to get your referral code.</div>
@@ -158,6 +218,17 @@ export default function ProfileDrawer({
       </aside>
 
       <style>{`
+.refer-earn-row{display:flex;gap:8px;margin-top:10px}
+.refer-earn{flex:1;background:#fff;border:1px solid ${C.line};border-radius:10px;padding:8px 6px;text-align:center}
+.refer-earn b{display:block;font-size:14px}
+.refer-earn span{font-size:10px;color:${C.muted}}
+.refer-claim{display:flex;gap:6px;margin-top:10px}
+.refer-claim-input{flex:1;border:1px solid ${C.line};border-radius:9px;padding:8px 10px;font-size:12.5px;
+  text-transform:uppercase;letter-spacing:1px;outline:none;background:#fff}
+.refer-claim-btn{border:none;border-radius:9px;padding:8px 14px;font-weight:800;font-size:12px;
+  background:${C.green};color:#fff;cursor:pointer}
+.refer-claim-btn:disabled{opacity:.5;cursor:default}
+.refer-claim-msg{font-size:11.5px;font-weight:600;margin-top:6px}
 .drawer-scrim{position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);
   width:100%;max-width:480px;background:rgba(13,59,46,.45);
   opacity:0;pointer-events:none;transition:opacity .3s;z-index:40}

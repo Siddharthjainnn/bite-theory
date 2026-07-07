@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import NotificationBell from './NotificationBell';
 
 /**
  * Shared header used across pages.
@@ -58,6 +59,7 @@ export default function AppHeader({
 
           {/* RIGHT: Ask Bhaiya + avatar */}
           <div className="bt-head-actions">
+            <NotificationBell />
             {onAskBhaiya && (
               <button
                 className="bt-bhaiya-btn"
