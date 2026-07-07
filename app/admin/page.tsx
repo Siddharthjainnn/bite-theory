@@ -37,6 +37,11 @@ interface OrderHistoryEntry { id: number; orderId: number; status: string; note:
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com/api';
+// Admin key is sent on every write so the backend guard accepts it.
+// NOTE: this ships in the browser bundle; the proper long-term fix is a
+// server-side admin login. Set NEXT_PUBLIC_ADMIN_KEY to match ADMIN_API_KEY.
+const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || '';
+const WRITE_HEADERS = { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY };
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const ORDER_FLOW = [
@@ -71,7 +76,7 @@ const api = {
   },
   async createProduct(d: Partial<Product>) {
     const r = await fetch(`${API_BASE}/products`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: WRITE_HEADERS,
       body: JSON.stringify({
         name: d.name, categoryId: d.categoryId, description: d.description, image: d.image,
         videoUrl: d.videoUrl, price: d.price, offerPrice: d.offerPrice, calories: d.calories,
@@ -86,7 +91,7 @@ const api = {
   },
   async updateProduct(id: number, d: Partial<Product>) {
     const r = await fetch(`${API_BASE}/products/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: WRITE_HEADERS,
       body: JSON.stringify({
         name: d.name, categoryId: d.categoryId, description: d.description, image: d.image,
         videoUrl: d.videoUrl, price: d.price, offerPrice: d.offerPrice, calories: d.calories,
@@ -100,7 +105,7 @@ const api = {
     return r.json();
   },
   async deleteProduct(id: number) {
-    const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE' });
+    const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
     if (!r.ok) throw new Error('Delete failed');
   },
   async listCategories(): Promise<Category[]> {
@@ -116,7 +121,7 @@ const api = {
   },
   async createCategory(d: Partial<Category>) {
     const r = await fetch(`${API_BASE}/categories`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: WRITE_HEADERS,
       body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
     });
     if (!r.ok) throw new Error('Create failed');
@@ -124,14 +129,14 @@ const api = {
   },
   async updateCategory(id: number, d: Partial<Category>) {
     const r = await fetch(`${API_BASE}/categories/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: WRITE_HEADERS,
       body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
     });
     if (!r.ok) throw new Error('Update failed');
     return r.json();
   },
   async deleteCategory(id: number) {
-    const r = await fetch(`${API_BASE}/categories/${id}`, { method: 'DELETE' });
+    const r = await fetch(`${API_BASE}/categories/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
     if (!r.ok) throw new Error('Delete failed');
   },
 
@@ -154,7 +159,7 @@ const api = {
   },
   async advanceOrderStatus(orderId: number, status: string, note?: string) {
     const r = await fetch(`${API_BASE}/orders/${orderId}/status`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: WRITE_HEADERS,
       body: JSON.stringify({ status, note }),
     });
     if (!r.ok) throw new Error('Status update failed');
@@ -173,7 +178,7 @@ const api = {
   },
   async createOrderItem(d: Partial<OrderItem>) {
     const r = await fetch(`${API_BASE}/order-items`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: WRITE_HEADERS,
       body: JSON.stringify({ orderId: d.orderId, productId: d.productId, productName: d.productName, unitPrice: d.unitPrice, quantity: d.quantity, lineTotal: d.lineTotal }),
     });
     if (!r.ok) throw new Error('Create failed');
@@ -181,14 +186,14 @@ const api = {
   },
   async updateOrderItem(id: number, d: Partial<OrderItem>) {
     const r = await fetch(`${API_BASE}/order-items/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: WRITE_HEADERS,
       body: JSON.stringify({ orderId: d.orderId, productId: d.productId, productName: d.productName, unitPrice: d.unitPrice, quantity: d.quantity, lineTotal: d.lineTotal }),
     });
     if (!r.ok) throw new Error('Update failed');
     return r.json();
   },
   async deleteOrderItem(id: number) {
-    const r = await fetch(`${API_BASE}/order-items/${id}`, { method: 'DELETE' });
+    const r = await fetch(`${API_BASE}/order-items/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
     if (!r.ok) throw new Error('Delete failed');
   },
 
@@ -200,20 +205,20 @@ const api = {
   },
   async genericCreate(route: string, body: any) {
     const r = await fetch(`${API_BASE}/${route}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error('Create failed');
     return r.json();
   },
   async genericUpdate(route: string, id: number, body: any) {
     const r = await fetch(`${API_BASE}/${route}/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error('Update failed');
     return r.json();
   },
   async genericDelete(route: string, id: number) {
-    const r = await fetch(`${API_BASE}/${route}/${id}`, { method: 'DELETE' });
+    const r = await fetch(`${API_BASE}/${route}/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
     if (!r.ok) throw new Error('Delete failed');
   },
 };
@@ -957,7 +962,7 @@ function ImageUpload({ folder, value, onChange, accept = 'image' }:
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const r = await fetch(`${API_BASE}/upload/${folder}`, { method: 'POST', body: fd });
+      const r = await fetch(`${API_BASE}/upload/${folder}`, { method: 'POST', body: fd, headers: { 'x-admin-key': ADMIN_KEY } });
       if (!r.ok) { const m = await r.json().catch(() => ({})); throw new Error(m.message || 'Upload failed'); }
       const data = await r.json();
       onChange(data.url);

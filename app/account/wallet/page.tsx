@@ -13,7 +13,12 @@ import AppHeader from '../../components/AppHeader';
 import {
   C, money, WalletTxn, WalletSummary,
   fetchWalletTransactions, fetchWalletSummary,
+  LoyaltySummary, PointsEntry, fetchLoyaltySummary, fetchPointsHistory,
 } from '../../lib/bite';
+
+const TIER_EMOJI: Record<string, string> = {
+  bronze: '🥉', silver: '🥈', gold: '🥇', platinum: '💎',
+};
 
 function fmtDate(s?: string | null) {
   if (!s) return '';
@@ -29,6 +34,9 @@ export default function WalletPage() {
 
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [txns, setTxns] = useState<WalletTxn[]>([]);
+  const [loyalty, setLoyalty] = useState<LoyaltySummary | null>(null);
+  const [points, setPoints] = useState<PointsEntry[]>([]);
+  const [tab, setTab] = useState<'wallet' | 'points'>('wallet');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -38,8 +46,13 @@ export default function WalletPage() {
 
   useEffect(() => {
     if (!userId) return;
-    Promise.all([fetchWalletSummary(userId), fetchWalletTransactions(userId)])
-      .then(([s, t]) => { setSummary(s); setTxns(t); })
+    Promise.all([
+      fetchWalletSummary(userId),
+      fetchWalletTransactions(userId),
+      fetchLoyaltySummary(userId).catch(() => null),
+      fetchPointsHistory(userId).catch(() => []),
+    ])
+      .then(([s, t, l, p]) => { setSummary(s); setTxns(t); setLoyalty(l); setPoints(p as PointsEntry[]); })
       .catch(() => setError('Could not load wallet'))
       .finally(() => setLoading(false));
   }, [userId]);
@@ -75,12 +88,97 @@ export default function WalletPage() {
           </div>
         </div>
 
+        {/* loyalty / tier card */}
+        <div style={{
+          background: '#fff', border: `1.5px solid ${C.line}`, borderRadius: 16,
+          padding: '15px 16px', marginBottom: 16,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, color: C.muted, fontWeight: 700 }}>LOYALTY POINTS</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: C.orangeDeep }}>
+                {loading ? '…' : (loyalty?.points ?? 0)}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 22 }}>{TIER_EMOJI[(loyalty?.tier || 'bronze')] || '🥉'}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.ink }}>
+                {(loyalty?.tier || 'bronze').toUpperCase()}
+              </div>
+            </div>
+          </div>
+          {loyalty?.nextTier ? (
+            <>
+              <div style={{ height: 8, background: C.bg, borderRadius: 999, overflow: 'hidden', marginTop: 12 }}>
+                <div style={{
+                  width: `${Math.min(100, Math.round(((loyalty.points) / (loyalty.points + loyalty.pointsToNext || 1)) * 100))}%`,
+                  height: '100%', background: `linear-gradient(90deg,${C.green},${C.orange})`, borderRadius: 999,
+                }} />
+              </div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 7 }}>
+                {loyalty.pointsToNext} more points to reach {loyalty.nextTier.toUpperCase()} {TIER_EMOJI[loyalty.nextTier]}
+              </div>
+            </>
+          ) : !loading && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.greenDeep, marginTop: 10 }}>
+              💎 Top tier — you're a legend!
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+            Earn +50 on signup and +1 point per ₹100 spent.
+          </div>
+        </div>
+
         {error && (
           <div style={{ ...card, borderColor: '#f3c1c1', background: '#fdf0f0', color: '#c0392b', fontSize: 13, marginBottom: 12 }}>
             {error}
           </div>
         )}
 
+        {/* tabs */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          {(['wallet', 'points'] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{
+                flex: 1, background: tab === t ? C.dark : '#fff', color: tab === t ? '#fff' : C.muted,
+                border: `1.5px solid ${tab === t ? C.dark : C.line}`, borderRadius: 999,
+                padding: '9px 0', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+              }}>
+              {t === 'wallet' ? '💳 Wallet' : '⭐ Points'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'points' ? (
+          loading ? (
+            <div style={{ ...card, color: C.muted, fontSize: 13 }}>Loading points…</div>
+          ) : points.length === 0 ? (
+            <div style={{ ...card, textAlign: 'center', padding: 30 }}>
+              <div style={{ fontSize: 34 }}>⭐</div>
+              <div style={{ fontWeight: 800, color: C.ink, marginTop: 6 }}>No points yet</div>
+              <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>Order something tasty to start earning.</div>
+            </div>
+          ) : (
+            <div style={{ ...card, padding: '4px 14px' }}>
+              {points.map((p) => {
+                const earn = (p.type || 'earn').toLowerCase() === 'earn';
+                return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 0', borderBottom: `1px solid ${C.line}` }}>
+                    <span style={{ fontSize: 18 }}>{earn ? '⭐' : '🎁'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>{p.reason || (earn ? 'Points earned' : 'Points redeemed')}</div>
+                      <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{fmtDate(p.createdAt)}</div>
+                    </div>
+                    <b style={{ fontSize: 14.5, color: earn ? C.orangeDeep : '#c0392b', whiteSpace: 'nowrap' }}>
+                      {earn ? '+' : '−'}{Math.abs(Number(p.points) || 0)} pts
+                    </b>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : (
+        <>
         <div style={{ fontWeight: 800, fontSize: 14, color: C.ink, margin: '4px 2px 10px' }}>Transaction History</div>
 
         {loading ? (
@@ -122,6 +220,8 @@ export default function WalletPage() {
               );
             })}
           </div>
+        )}
+        </>
         )}
       </div>
     </AppShell>

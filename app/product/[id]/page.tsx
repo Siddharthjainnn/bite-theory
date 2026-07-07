@@ -20,6 +20,9 @@ import {
   C,
   fetchFavoriteIds,
   toggleFavorite,
+  fetchProductReviews,
+  postReview,
+  ProductReview,
 } from '../../lib/bite';
 
 export default function ProductDetailPage({
@@ -60,6 +63,44 @@ export default function ProductDetailPage({
       setFav((f) => !f); // roll back
     } finally {
       setFavBusy(false);
+    }
+  }
+
+  /* ── reviews ── */
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [revLoading, setRevLoading] = useState(true);
+  const [myRating, setMyRating] = useState(0);
+  const [myComment, setMyComment] = useState('');
+  const [revBusy, setRevBusy] = useState(false);
+  const [revError, setRevError] = useState('');
+  const [revDone, setRevDone] = useState(false);
+
+  function loadReviews() {
+    fetchProductReviews(pid)
+      .then(setReviews)
+      .catch(() => {})
+      .finally(() => setRevLoading(false));
+  }
+  useEffect(() => { loadReviews(); /* eslint-disable-next-line */ }, [pid]);
+
+  const avgRating = useMemo(() => {
+    if (!reviews.length) return 0;
+    return reviews.reduce((s, r) => s + Number(r.rating || 0), 0) / reviews.length;
+  }, [reviews]);
+
+  async function submitReview() {
+    if (!userId) { router.push(`/login?callbackUrl=/product/${pid}`); return; }
+    if (!myRating) { setRevError('Please pick a star rating'); return; }
+    setRevBusy(true); setRevError('');
+    try {
+      await postReview({ userId, productId: pid, rating: myRating, comment: myComment.trim() || undefined });
+      setMyRating(0); setMyComment(''); setRevDone(true);
+      loadReviews();
+      setTimeout(() => setRevDone(false), 2500);
+    } catch (e: any) {
+      setRevError(e.message || 'Could not post review');
+    } finally {
+      setRevBusy(false);
     }
   }
 
@@ -221,6 +262,67 @@ export default function ProductDetailPage({
             </button>
           )}
         </div>
+      </div>
+
+      {/* reviews */}
+      <h2 className="bt-section-h">
+        Ratings & Reviews {reviews.length > 0 && <span style={{ color: C.muted, fontWeight: 600, fontSize: 14 }}>({reviews.length})</span>}
+      </h2>
+      <div style={{ padding: '0 14px 4px' }}>
+        {avgRating > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 30, fontWeight: 800, color: C.ink }}>{avgRating.toFixed(1)}</span>
+            <div>
+              <div style={{ color: '#f5a623', fontSize: 16 }}>
+                {'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}
+              </div>
+              <div style={{ fontSize: 12, color: C.muted }}>{reviews.length} review{reviews.length === 1 ? '' : 's'}</div>
+            </div>
+          </div>
+        )}
+
+        {/* write a review */}
+        <div style={{ background: '#fff', border: `1.5px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginBottom: 8 }}>Rate this dish</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} onClick={() => setMyRating(n)} aria-label={`${n} star`}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 28, lineHeight: 1, color: n <= myRating ? '#f5a623' : '#d9e2dd', padding: 0 }}>
+                ★
+              </button>
+            ))}
+          </div>
+          <textarea rows={2} value={myComment} onChange={(e) => setMyComment(e.target.value)}
+            placeholder="Share a few words (optional)…"
+            style={{ width: '100%', border: `1.5px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5, color: C.ink, outline: 'none', resize: 'vertical', background: '#fff' }} />
+          {revError && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 6 }}>{revError}</div>}
+          {revDone && <div style={{ color: C.greenDeep, fontSize: 12, marginTop: 6, fontWeight: 700 }}>Thanks for your review! 🙌</div>}
+          <button onClick={submitReview} disabled={revBusy}
+            style={{ marginTop: 10, width: '100%', background: `linear-gradient(135deg,${C.green},${C.greenDeep})`, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, padding: 11, borderRadius: 11, cursor: 'pointer' }}>
+            {revBusy ? 'Posting…' : 'Submit review'}
+          </button>
+        </div>
+
+        {/* review list */}
+        {revLoading ? (
+          <div style={{ color: C.muted, fontSize: 13, paddingBottom: 8 }}>Loading reviews…</div>
+        ) : reviews.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13, paddingBottom: 8 }}>No reviews yet — be the first! ⭐</div>
+        ) : (
+          reviews.map((r) => (
+            <div key={r.id} style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 13px', marginBottom: 9 }}>
+              <div style={{ color: '#f5a623', fontSize: 14 }}>
+                {'★'.repeat(Number(r.rating) || 0)}{'☆'.repeat(5 - (Number(r.rating) || 0))}
+              </div>
+              {r.comment && <div style={{ fontSize: 13.5, color: C.ink, marginTop: 4, lineHeight: 1.5 }}>{r.comment}</div>}
+              {r.createdAt && (
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                  {new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* recommended */}

@@ -30,6 +30,7 @@ async function api(path: string, init?: RequestInit) {
 export default function RiderPage() {
   const [rider, setRider] = useState<Rider | null>(null);
   const [mobile, setMobile] = useState('');
+  const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [available, setAvailable] = useState<ApiOrder[]>([]);
@@ -105,7 +106,7 @@ export default function RiderPage() {
     setErr(''); setBusy(true);
     try {
       const r = await api('/delivery-partners/login', {
-        method: 'POST', body: JSON.stringify({ mobile }),
+        method: 'POST', body: JSON.stringify({ mobile, code }),
       });
       setRider(r);
       localStorage.setItem(LS_RIDER, JSON.stringify(r));
@@ -162,6 +163,13 @@ export default function RiderPage() {
             inputMode="tel"
             value={mobile}
             onChange={(e) => setMobile(e.target.value)}
+          />
+          <input
+            style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 10, padding: '11px 12px', fontSize: 14, marginBottom: 10 }}
+            placeholder="Access code"
+            type="password"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
           />
           <button style={btn(C.green)} onClick={login} disabled={busy || mobile.trim().length < 10}>
             {busy ? 'Checking…' : 'Login'}

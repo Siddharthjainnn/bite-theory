@@ -73,11 +73,12 @@ async function upsertUser(profile: {
     return updated[0];
   }
 
-  // 3) create new user
+  // 3) create new user — with a 50-point welcome bonus
+  const WELCOME_POINTS = 50;
   const created = await query<DbUser>(
     `INSERT INTO users
-       (google_id, email, first_name, last_name, profile_image, referral_code, status)
-     VALUES ($1, $2, $3, $4, $5, $6, 'active')
+       (google_id, email, first_name, last_name, profile_image, referral_code, status, loyalty_points, loyalty_level)
+     VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, 'bronze')
      RETURNING *`,
     [
       profile.googleId,
@@ -86,8 +87,19 @@ async function upsertUser(profile: {
       profile.lastName,
       profile.photo,
       makeReferralCode(profile.firstName || profile.email),
+      WELCOME_POINTS,
     ],
   );
+  // log the bonus so it appears in the user's points history
+  try {
+    await query(
+      `INSERT INTO loyalty_points (user_id, points, type, reason)
+       VALUES ($1, $2, 'earn', 'Welcome bonus 🎉')`,
+      [created[0].id, WELCOME_POINTS],
+    );
+  } catch (e) {
+    console.error('welcome bonus log failed', e);
+  }
   return created[0];
 }
 

@@ -324,6 +324,42 @@ export async function fetchMyReviews(userId: number): Promise<MyReview[]> {
   const res = await fetch(`${API_BASE}/reviews?userId=${userId}`, { cache: 'no-store' });
   return jsonOrThrow(res);
 }
+
+/** Reviews for a single product, to show on the product page. */
+export interface ProductReview {
+  id: number; userId: number; productId: number;
+  rating: number; comment?: string | null; createdAt?: string;
+}
+export async function fetchProductReviews(productId: number): Promise<ProductReview[]> {
+  const res = await fetch(`${API_BASE}/reviews?productId=${productId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function postReview(r: {
+  userId: number; productId: number; rating: number; comment?: string; orderId?: number;
+}): Promise<ProductReview> {
+  const res = await fetch(`${API_BASE}/reviews`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(r),
+  });
+  return jsonOrThrow(res);
+}
+
+/** Loyalty balance + tier progress for the logged-in user. */
+export interface LoyaltySummary {
+  points: number; tier: string; nextTier: string | null; pointsToNext: number;
+}
+export interface PointsEntry {
+  id: number; points: number; type: 'earn' | 'redeem' | string;
+  reason?: string | null; orderId?: number | null; createdAt?: string;
+}
+export async function fetchLoyaltySummary(userId: number): Promise<LoyaltySummary> {
+  const res = await fetch(`${API_BASE}/loyalty-points/summary?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function fetchPointsHistory(userId: number): Promise<PointsEntry[]> {
+  const res = await fetch(`${API_BASE}/loyalty-points?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
 export async function updateAddress(id: number, patch: Partial<SavedAddress>): Promise<SavedAddress> {
   const res = await fetch(`${API_BASE}/addresses/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
