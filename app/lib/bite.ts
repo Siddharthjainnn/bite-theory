@@ -274,3 +274,63 @@ export async function fetchBanners(): Promise<Banner[]> {
       .sort((a, b) => a.sortOrder - b.sortOrder);
   } catch { return []; }
 }
+
+/* ───────────── account: wallet / favorites / reviews / addresses ───────────── */
+export interface WalletTxn {
+  id: number; userId: number; type: 'credit' | 'debit' | string;
+  amount: number; reason?: string | null; orderId?: number | null;
+  createdAt?: string | null;
+}
+export interface WalletSummary {
+  balance: number; totalCredited: number; totalDebited: number;
+}
+export interface FavoriteRow {
+  id: number; productId: number; createdAt?: string;
+  name: string; image: string; price: number; offerPrice: number;
+  rating: number; isVeg?: boolean; status?: string; slug?: string;
+}
+export interface MyReview {
+  id: number; productId: number; orderId?: number | null;
+  rating: number; comment?: string | null; createdAt?: string;
+  image1?: string | null; image2?: string | null; image3?: string | null;
+  productName?: string; productImage?: string;
+}
+
+export async function fetchWalletTransactions(userId: number): Promise<WalletTxn[]> {
+  const res = await fetch(`${API_BASE}/wallet-transactions?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function fetchWalletSummary(userId: number): Promise<WalletSummary> {
+  const res = await fetch(`${API_BASE}/wallet-transactions/summary?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function fetchFavorites(userId: number): Promise<FavoriteRow[]> {
+  const res = await fetch(`${API_BASE}/favorites?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function fetchFavoriteIds(userId: number): Promise<number[]> {
+  const res = await fetch(`${API_BASE}/favorites/ids?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function toggleFavorite(userId: number, productId: number):
+  Promise<{ favorited: boolean; productId: number }> {
+  const res = await fetch(`${API_BASE}/favorites/toggle`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, productId }),
+  });
+  return jsonOrThrow(res);
+}
+export async function fetchMyReviews(userId: number): Promise<MyReview[]> {
+  const res = await fetch(`${API_BASE}/reviews?userId=${userId}`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+export async function updateAddress(id: number, patch: Partial<SavedAddress>): Promise<SavedAddress> {
+  const res = await fetch(`${API_BASE}/addresses/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+  });
+  return jsonOrThrow(res);
+}
+export async function deleteAddress(id: number): Promise<{ deleted: boolean; id: number }> {
+  const res = await fetch(`${API_BASE}/addresses/${id}`, { method: 'DELETE' });
+  return jsonOrThrow(res);
+}

@@ -23,10 +23,10 @@ const ITEMS: Item[] = [
   { ic: 'ℹ️', label: 'About Bite Theory', href: '/info?tab=about' },
   { ic: '🛟', label: 'Help & Support', href: '/info?tab=help' },
   { ic: '📄', label: 'Terms & Privacy', href: '/info?tab=terms' },
-  { ic: '📍', label: 'Saved Addresses', soon: true },
-  { ic: '💳', label: 'Wallet & Transactions', soon: true },
-  { ic: '❤️', label: 'Favorites', soon: true },
-  { ic: '⭐', label: 'My Reviews', soon: true },
+  { ic: '📍', label: 'Saved Addresses', href: '/account/addresses' },
+  { ic: '💳', label: 'Wallet & Transactions', href: '/account/wallet' },
+  { ic: '❤️', label: 'Favorites', href: '/account/favorites' },
+  { ic: '⭐', label: 'My Reviews', href: '/account/reviews' },
 ];
 
 function initials(name?: string | null) {

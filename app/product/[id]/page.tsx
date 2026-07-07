@@ -1,7 +1,8 @@
 'use client';
 
-import { use, useEffect, useMemo } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import AppShell from '../../components/AppShell';
 import AppHeader from '../../components/AppHeader';
 import FoodImage from '../../components/FoodImage';
@@ -17,6 +18,8 @@ import {
   hasOffer,
   offerPct,
   C,
+  fetchFavoriteIds,
+  toggleFavorite,
 } from '../../lib/bite';
 
 export default function ProductDetailPage({
@@ -31,6 +34,34 @@ export default function ProductDetailPage({
   const router = useRouter();
 
   const product = products.find((p) => p.id === pid);
+
+  /* ── favorite (❤️) state ── */
+  const { data: session } = useSession();
+  const userId = (session?.user as any)?.id ? Number((session?.user as any).id) : undefined;
+  const [fav, setFav] = useState(false);
+  const [favBusy, setFavBusy] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchFavoriteIds(userId)
+      .then((ids) => setFav(ids.includes(pid)))
+      .catch(() => {});
+  }, [userId, pid]);
+
+  async function onHeart() {
+    if (!userId) { router.push(`/login?callbackUrl=/product/${pid}`); return; }
+    if (favBusy) return;
+    setFavBusy(true);
+    setFav((f) => !f); // optimistic
+    try {
+      const r = await toggleFavorite(userId, pid);
+      setFav(r.favorited);
+    } catch {
+      setFav((f) => !f); // roll back
+    } finally {
+      setFavBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (product) markViewed(product.id);
@@ -92,6 +123,20 @@ export default function ProductDetailPage({
         <span className="pd-veg" aria-label="Pure veg">
           <i />
         </span>
+        <button
+          onClick={onHeart}
+          aria-label={fav ? 'Remove from favorites' : 'Add to favorites'}
+          style={{
+            position: 'absolute', bottom: 12, right: 12, zIndex: 3,
+            width: 42, height: 42, borderRadius: '50%', border: 'none',
+            background: '#fff', boxShadow: '0 3px 12px rgba(13,59,46,.18)',
+            fontSize: 20, cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            opacity: favBusy ? 0.7 : 1,
+          }}
+        >
+          {fav ? '❤️' : '🤍'}
+        </button>
       </div>
 
       <div className="pd-body">
