@@ -18,8 +18,9 @@ import { useCart } from '../providers/CartProvider';
 import { useCatalog } from '../lib/useCatalog';
 import {
   C, money, effectivePrice,
-  SavedAddress, fetchAddresses, createAddress, validateCoupon, checkoutOrder,
+  SavedAddress, fetchAddresses, createAddress, validateCoupon, checkoutOrder, createPaymentOrder,
 } from '../lib/bite';
+import { openRazorpay } from '../lib/razorpay';
 
 const DELIVERY_CHARGE = 30;
 const FREE_DELIVERY_ABOVE = 500;
@@ -147,25 +148,71 @@ export default function CheckoutPage() {
       setError('Please select or add a delivery address'); return;
     }
     setPlacing(true); setError('');
+
+    const items = lines.map((l) => ({ productId: l.p.id, quantity: l.qty }));
+    const destination = selectedAddr
+      ? { addressId: selectedAddr }
+      : {
+          deliveryAddress: newAddr.fullAddress.trim(),
+          deliveryLat: picked?.lat,
+          deliveryLng: picked?.lng,
+        };
+
     try {
+      // ── ONLINE: open Razorpay, verify, then create the order ──
+      if (payMethod === 'online') {
+        const pay = await createPaymentOrder({
+          userId,
+          items,
+          ...(selectedAddr ? { addressId: selectedAddr } : {}),
+          couponCode: coupon?.code,
+          useWallet,
+        });
+
+        const result = await openRazorpay({
+          keyId: pay.keyId,
+          amount: pay.amount,
+          currency: pay.currency,
+          orderId: pay.razorpayOrderId,
+          name: 'Bite Theory',
+          description: 'Order payment',
+          prefill: {
+            name: user?.name || undefined,
+            email: user?.email || undefined,
+            contact: user?.mobile || undefined,
+          },
+        });
+
+        const order = await checkoutOrder({
+          userId,
+          items,
+          ...destination,
+          couponCode: coupon?.code,
+          useWallet,
+          paymentMethod: 'online',
+          razorpayOrderId: result.razorpay_order_id,
+          razorpayPaymentId: result.razorpay_payment_id,
+          razorpaySignature: result.razorpay_signature,
+        });
+        clear();
+        router.push(`/orders/${order.id}?placed=1`);
+        return;
+      }
+
+      // ── COD: place the order directly ──
       const order = await checkoutOrder({
         userId,
-        items: lines.map((l) => ({ productId: l.p.id, quantity: l.qty })),
-        ...(selectedAddr
-          ? { addressId: selectedAddr }
-          : {
-              deliveryAddress: newAddr.fullAddress.trim(),
-              deliveryLat: picked?.lat,
-              deliveryLng: picked?.lng,
-            }),
+        items,
+        ...destination,
         couponCode: coupon?.code,
         useWallet,
-        paymentMethod: payMethod,
+        paymentMethod: 'cod',
       });
       clear();
       router.push(`/orders/${order.id}?placed=1`);
     } catch (e: any) {
-      setError(e.message || 'Could not place order');
+      // "Payment cancelled" isn't a real error — just let them retry
+      setError(e.message === 'Payment cancelled' ? '' : (e.message || 'Could not place order'));
       setPlacing(false);
     }
   }

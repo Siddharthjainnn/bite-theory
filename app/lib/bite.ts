@@ -243,9 +243,28 @@ export interface CheckoutPayload {
   deliveryAddress?: string; deliveryLat?: number; deliveryLng?: number;
   couponCode?: string; useWallet?: boolean;
   paymentMethod?: 'cod' | 'online';
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpaySignature?: string;
 }
 export async function checkoutOrder(payload: CheckoutPayload): Promise<ApiOrder & { pointsEarned?: number }> {
   const res = await fetch(`${API_BASE}/orders/checkout`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  return jsonOrThrow(res);
+}
+
+/** Online pay step 1: ask the backend to open a Razorpay order. */
+export interface PaymentOrder {
+  razorpayOrderId: string; amount: number; currency: string;
+  keyId: string; payable: number; subtotal: number; discount: number;
+  deliveryCharge: number; walletUsed: number;
+}
+export async function createPaymentOrder(payload: {
+  userId: number; items: { productId: number; quantity: number }[];
+  addressId?: number; couponCode?: string; useWallet?: boolean;
+}): Promise<PaymentOrder> {
+  const res = await fetch(`${API_BASE}/orders/create-payment`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   });
   return jsonOrThrow(res);
