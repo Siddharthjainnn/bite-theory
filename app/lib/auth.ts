@@ -135,7 +135,7 @@ export const authOptions: NextAuthOptions = {
         token.dbId = dbId;
         const rows = await query<DbUser>(
           `SELECT id, email, first_name, last_name, mobile, profile_image,
-                  wallet_balance, loyalty_points, loyalty_level
+                  wallet_balance, loyalty_points, loyalty_level, referral_code
              FROM users WHERE id = $1 LIMIT 1`,
           [dbId],
         );
@@ -148,6 +148,7 @@ export const authOptions: NextAuthOptions = {
           token.walletBalance = Number(u.wallet_balance || 0);
           token.loyaltyPoints = Number(u.loyalty_points || 0);
           token.loyaltyLevel = u.loyalty_level || 'bronze';
+          token.referralCode = u.referral_code || null;
           token.profileComplete = !!u.mobile; // phone present = complete
         }
       }
@@ -162,6 +163,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).walletBalance = token.walletBalance || 0;
         (session.user as any).loyaltyPoints = token.loyaltyPoints || 0;
         (session.user as any).loyaltyLevel = token.loyaltyLevel || 'bronze';
+        (session.user as any).referralCode = token.referralCode || null;
         (session.user as any).profileComplete = !!token.profileComplete;
       }
       return session;

@@ -1,40 +1,97 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { Suspense, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import AppShell from '../components/AppShell';
 import AppHeader from '../components/AppHeader';
 import ProductCard from '../components/ProductCard';
 import CartBar from '../components/CartBar';
+import ProfileDrawer from '../components/ProfileDrawer';
 import { useCatalog } from '../lib/useCatalog';
 import { Category, Product } from '../lib/bite';
 
-export default function MenuPage() {
+function MenuInner() {
   const { products, categories, loading, error } = useCatalog();
+  const params = useSearchParams();
+  const initialQ = params.get('q') || '';
+
   const [active, setActive] = useState<number | null>(null);
+  const [q, setQ] = useState(initialQ);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [vegOnly] = useState(true); // pure-veg app: veg stays on
+
+  // search filter (name + description), veg-only
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return products.filter((p) => {
+      if (vegOnly && !p.isVeg) return false;
+      if (!term) return true;
+      return (
+        p.name.toLowerCase().includes(term) ||
+        (p.description || '').toLowerCase().includes(term)
+      );
+    });
+  }, [products, q, vegOnly]);
 
   const byCat = useMemo(() => {
     const map = new Map<number, Product[]>();
     for (const c of categories) map.set(c.id, []);
-    for (const p of products) {
+    for (const p of filtered) {
       if (!map.has(p.categoryId)) map.set(p.categoryId, []);
       map.get(p.categoryId)!.push(p);
     }
     return map;
-  }, [products, categories]);
+  }, [filtered, categories]);
 
   function jump(c: Category) {
     setActive(c.id);
-    const el = document.getElementById('cat-' + c.id);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('cat-' + c.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  const totalShown = filtered.length;
 
   return (
     <AppShell
-      header={<AppHeader variant="page" title="Full Menu" />}
+      header={
+        <AppHeader
+          variant="home"
+          showSearch
+          initialQuery={initialQ}
+          onMenu={() => setDrawerOpen(true)}
+        />
+      }
       footerExtra={<CartBar />}
+      overlay={<ProfileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
     >
-      {/* sticky jump-to-category chips */}
-      {!loading && categories.length > 0 && (
+      {/* live in-page search too, so results update as you type */}
+      <div style={{ padding: '10px 12px 2px' }}>
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, background: '#fff',
+            border: '1.5px solid #e4ebe6', borderRadius: 12, padding: '0 10px',
+          }}
+        >
+          <span style={{ fontSize: 15 }}>🔍</span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search the full menu…"
+            style={{ flex: 1, border: 'none', outline: 'none', padding: '11px 2px', fontSize: 14, color: '#0D3B2E', background: 'none' }}
+          />
+          {q && (
+            <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', color: '#9fb0a8', cursor: 'pointer' }}>✕</button>
+          )}
+        </div>
+        {q && (
+          <div style={{ fontSize: 12, color: '#6b7d74', margin: '8px 2px 0' }}>
+            {totalShown} result{totalShown === 1 ? '' : 's'} for “{q}”
+          </div>
+        )}
+      </div>
+
+      {!loading && categories.length > 0 && !q && (
         <div className="menu-jump">
           {categories.map((c) => (
             <button
@@ -62,6 +119,10 @@ export default function MenuPage() {
               </div>
             </div>
           ))
+        ) : totalShown === 0 ? (
+          <div className="bt-empty">
+            {q ? `Kuch nahi mila for “${q}”. Doosra try karo!` : 'Menu abhi khaali hai.'}
+          </div>
         ) : (
           categories.map((c) => {
             const items = byCat.get(c.id) || [];
@@ -69,8 +130,7 @@ export default function MenuPage() {
             return (
               <section key={c.id}>
                 <h2 id={'cat-' + c.id} className="menu-cat-h">
-                  <span>{c.emoji}</span> {c.name}{' '}
-                  <span className="cnt">({items.length})</span>
+                  <span>{c.emoji}</span> {c.name} <span className="cnt">({items.length})</span>
                 </h2>
                 {items.map((p) => (
                   <ProductCard key={p.id} p={p} />
@@ -81,5 +141,13 @@ export default function MenuPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense fallback={null}>
+      <MenuInner />
+    </Suspense>
   );
 }

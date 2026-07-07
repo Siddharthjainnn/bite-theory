@@ -1,19 +1,32 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSession, signOut, signIn } from 'next-auth/react';
 import { C, money } from '../lib/bite';
 
-const ITEMS = [
-  { ic: '🧾', label: 'Order History' },
-  { ic: '📍', label: 'Saved Addresses' },
-  { ic: '💳', label: 'Wallet & Transactions' },
-  { ic: '🎟️', label: 'My Coupons' },
-  { ic: '🎁', label: 'Refer & Earn' },
-  { ic: '❤️', label: 'Favorites' },
-  { ic: '⭐', label: 'My Reviews' },
-  { ic: '🛟', label: 'Help & Support' },
-  { ic: 'ℹ️', label: 'About Bite Theory' },
-  { ic: '📄', label: 'Terms & Privacy' },
+/**
+ * Left/side profile drawer. Every row now DOES something:
+ *  - `href`  → navigates to a real page and closes the drawer.
+ *  - `refer` → expands to show the user's referral code (copyable).
+ *  - `soon`  → shows a small "coming soon" note instead of a dead click.
+ */
+type Item =
+  | { ic: string; label: string; href: string }
+  | { ic: string; label: string; refer: true }
+  | { ic: string; label: string; soon: true };
+
+const ITEMS: Item[] = [
+  { ic: '🧾', label: 'Order History', href: '/orders' },
+  { ic: '🎟️', label: 'My Coupons', href: '/coupons' },
+  { ic: '🎁', label: 'Refer & Earn', refer: true },
+  { ic: 'ℹ️', label: 'About Bite Theory', href: '/info?tab=about' },
+  { ic: '🛟', label: 'Help & Support', href: '/info?tab=help' },
+  { ic: '📄', label: 'Terms & Privacy', href: '/info?tab=terms' },
+  { ic: '📍', label: 'Saved Addresses', soon: true },
+  { ic: '💳', label: 'Wallet & Transactions', soon: true },
+  { ic: '❤️', label: 'Favorites', soon: true },
+  { ic: '⭐', label: 'My Reviews', soon: true },
 ];
 
 function initials(name?: string | null) {
@@ -30,33 +43,48 @@ export default function ProfileDrawer({
   onClose: () => void;
 }) {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const user = session?.user as any;
   const loggedIn = status === 'authenticated';
-
   const tier = (user?.loyaltyLevel || 'bronze').toString().toUpperCase();
+
+  const [showRefer, setShowRefer] = useState(false);
+  const [soonMsg, setSoonMsg] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const referralCode = user?.referralCode || user?.referral_code || '';
+
+  function go(href: string) {
+    onClose();
+    router.push(href);
+  }
+
+  async function copyReferral() {
+    if (!referralCode) return;
+    try { await navigator.clipboard.writeText(referralCode); } catch {}
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  function handle(it: Item) {
+    if ('href' in it) return go(it.href);
+    if ('refer' in it) { setShowRefer((s) => !s); return; }
+    // soon
+    setSoonMsg(it.label);
+    setTimeout(() => setSoonMsg((m) => (m === it.label ? null : m)), 1800);
+  }
 
   return (
     <>
-      <div
-        className={`drawer-scrim ${open ? 'on' : ''}`}
-        onClick={onClose}
-        aria-hidden
-      />
+      <div className={`drawer-scrim ${open ? 'on' : ''}`} onClick={onClose} aria-hidden />
       <aside className={`drawer ${open ? 'on' : ''}`} aria-hidden={!open}>
         <div className="drawer-head">
-          <button className="drawer-x" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
+          <button className="drawer-x" onClick={onClose} aria-label="Close">✕</button>
           <div className="drawer-head-title">My Profile</div>
           {loggedIn ? (
             <div className="drawer-user">
               {user?.image ? (
-                <img
-                  className="drawer-ava"
-                  src={user.image}
-                  alt={user.name || 'You'}
-                  referrerPolicy="no-referrer"
-                />
+                <img className="drawer-ava" src={user.image} alt={user.name || 'You'} referrerPolicy="no-referrer" />
               ) : (
                 <span className="drawer-ava">{initials(user?.name)}</span>
               )}
@@ -72,10 +100,7 @@ export default function ProfileDrawer({
               <div>
                 <div className="drawer-name">Guest</div>
                 <div className="drawer-mail">Login to order & earn rewards</div>
-                <button
-                  onClick={() => signIn('google')}
-                  className="drawer-login-btn"
-                >
+                <button onClick={() => signIn('google')} className="drawer-login-btn">
                   Login / Sign up →
                 </button>
               </div>
@@ -85,36 +110,45 @@ export default function ProfileDrawer({
 
         {loggedIn && (
           <div className="drawer-stats">
-            <div className="dstat">
-              <b>{user?.ordersCount ?? '—'}</b>
-              <span>Orders</span>
-            </div>
-            <div className="dstat">
-              <b style={{ color: C.green }}>
-                {money(user?.walletBalance || 0)}
-              </b>
-              <span>Wallet</span>
-            </div>
-            <div className="dstat">
-              <b style={{ color: C.orange }}>{user?.loyaltyPoints || 0}</b>
-              <span>Points</span>
-            </div>
+            <div className="dstat"><b>{user?.ordersCount ?? '—'}</b><span>Orders</span></div>
+            <div className="dstat"><b style={{ color: C.green }}>{money(user?.walletBalance || 0)}</b><span>Wallet</span></div>
+            <div className="dstat"><b style={{ color: C.orange }}>{user?.loyaltyPoints || 0}</b><span>Points</span></div>
           </div>
         )}
 
         <div className="drawer-menu">
           {ITEMS.map((it) => (
-            <button key={it.label} className="drawer-item">
-              <span className="di-ic">{it.ic}</span>
-              <span className="di-label">{it.label}</span>
-              <span className="di-arrow">›</span>
-            </button>
+            <div key={it.label}>
+              <button className="drawer-item" onClick={() => handle(it)}>
+                <span className="di-ic">{it.ic}</span>
+                <span className="di-label">{it.label}</span>
+                <span className="di-arrow">›</span>
+              </button>
+
+              {'refer' in it && showRefer && (
+                <div className="refer-box">
+                  {loggedIn && referralCode ? (
+                    <>
+                      <div className="refer-hint">Share this code — you both earn rewards on their first order.</div>
+                      <button className="refer-code" onClick={copyReferral}>
+                        <span>{referralCode}</span>
+                        <span className="refer-copy">{copied ? '✓ COPIED' : 'COPY'}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="refer-hint">Login to get your referral code.</div>
+                  )}
+                </div>
+              )}
+
+              {'soon' in it && soonMsg === it.label && (
+                <div className="soon-box">Coming soon 🚧</div>
+              )}
+            </div>
           ))}
+
           {loggedIn && (
-            <button
-              className="drawer-item logout"
-              onClick={() => signOut({ callbackUrl: '/login' })}
-            >
+            <button className="drawer-item logout" onClick={() => signOut({ callbackUrl: '/login' })}>
               <span className="di-ic">↩️</span>
               <span className="di-label">Logout</span>
               <span className="di-arrow">›</span>
@@ -159,16 +193,19 @@ export default function ProfileDrawer({
 .drawer-item{display:flex;align-items:center;gap:13px;background:#fff;border:none;
   border-bottom:1px solid ${C.line};padding:15px 14px;cursor:pointer;text-align:left;width:100%}
 .drawer-item:first-child{border-radius:14px 14px 0 0}
-.drawer-item:last-child{border-radius:0 0 14px 14px;border-bottom:none}
 .di-ic{font-size:18px;width:24px;text-align:center}
 .di-label{flex:1;font-size:14px;font-weight:600;color:${C.ink}}
-.drawer-item.logout{margin-top:14px;border-radius:14px}
+.drawer-item.logout{margin-top:14px;border-radius:14px;border-bottom:none}
 .drawer-item.logout .di-label{color:#d64545}
 .di-arrow{color:#c2cfc8;font-size:18px;font-weight:700}
+.refer-box{background:#fff;border-bottom:1px solid ${C.line};padding:2px 14px 14px}
+.refer-hint{font-size:12px;color:${C.muted};margin-bottom:8px}
+.refer-code{display:flex;width:100%;justify-content:space-between;align-items:center;
+  background:${C.greenSoft};border:1px dashed ${C.green};border-radius:10px;padding:10px 12px;cursor:pointer}
+.refer-code span:first-child{font-family:monospace;font-weight:800;letter-spacing:1px;color:${C.ink}}
+.refer-copy{font-size:11px;font-weight:800;color:${C.greenDeep}}
+.soon-box{background:#fff;border-bottom:1px solid ${C.line};padding:0 14px 14px;font-size:12px;color:${C.orangeDeep}}
       `}</style>
     </>
   );
 }
-
-
-console.log("dnjddb");

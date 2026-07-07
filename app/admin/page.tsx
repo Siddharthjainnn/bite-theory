@@ -63,6 +63,10 @@ const api = {
       calories: Number(p.calories) || 0, protein: Number(p.protein) || 0,
       carbs: Number(p.carbs) || 0, fat: Number(p.fat) || 0,
       rating: Number(p.rating) || 0, status: p.status as Status,
+      // FIX: carry the special/veg flags through so the edit form shows current state
+      isTodaysSpecial: Boolean(p.isTodaysSpecial ?? p.is_todays_special),
+      isVeg: p.isVeg === undefined && p.is_veg === undefined ? true : Boolean(p.isVeg ?? p.is_veg),
+      specialTag: p.specialTag ?? p.special_tag ?? '',
     }));
   },
   async createProduct(d: Partial<Product>) {
@@ -72,6 +76,9 @@ const api = {
         name: d.name, categoryId: d.categoryId, description: d.description, image: d.image,
         videoUrl: d.videoUrl, price: d.price, offerPrice: d.offerPrice, calories: d.calories,
         protein: d.protein, carbs: d.carbs, fat: d.fat, status: d.status,
+        // FIX: these were being dropped, so Today's Special never saved
+        isTodaysSpecial: !!d.isTodaysSpecial, isVeg: d.isVeg !== false,
+        specialTag: d.specialTag || undefined,
       }),
     });
     if (!r.ok) throw new Error('Create failed');
@@ -84,6 +91,9 @@ const api = {
         name: d.name, categoryId: d.categoryId, description: d.description, image: d.image,
         videoUrl: d.videoUrl, price: d.price, offerPrice: d.offerPrice, calories: d.calories,
         protein: d.protein, carbs: d.carbs, fat: d.fat, status: d.status,
+        // FIX: these were being dropped, so toggling Today's Special did nothing
+        isTodaysSpecial: !!d.isTodaysSpecial, isVeg: d.isVeg !== false,
+        specialTag: d.specialTag || undefined,
       }),
     });
     if (!r.ok) throw new Error('Update failed');

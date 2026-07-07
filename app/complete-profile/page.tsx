@@ -5,24 +5,27 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { C } from '../lib/bite';
 import GlobalStyle from '../components/GlobalStyle';
 
-export default function CompleteProfilePage() {
+function CompleteProfileInner() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
+  const params = useSearchParams();
+  const next = params.get('callbackUrl') || '/';
   const [mobile, setMobile] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const user = session?.user as any;
 
-  // not logged in → go to login; already complete → go home
+  // not logged in → go to login; already complete → continue on
   useEffect(() => {
     if (status === 'unauthenticated') router.replace('/login');
-    if (status === 'authenticated' && user?.profileComplete) router.replace('/');
-  }, [status, user, router]);
+    if (status === 'authenticated' && user?.profileComplete) router.replace(next);
+  }, [status, user, router, next]);
 
   async function save() {
     setError('');
@@ -43,7 +46,7 @@ export default function CompleteProfilePage() {
         throw new Error(j.error || 'Could not save');
       }
       await update(); // refresh session so profileComplete becomes true
-      router.replace('/');
+      router.replace(next);
     } catch (e: any) {
       setError(e.message || 'Something went wrong');
       setSaving(false);
@@ -154,24 +157,21 @@ export default function CompleteProfilePage() {
                 {saving ? 'Saving…' : 'Continue →'}
               </button>
 
-              <button
-                onClick={() => router.replace('/')}
-                style={{
-                  width: '100%',
-                  marginTop: 10,
-                  background: 'none',
-                  border: 'none',
-                  color: C.muted,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                Skip for now
-              </button>
+              <p style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: C.muted }}>
+                We need your number to confirm and deliver your orders.
+              </p>
             </div>
           </div>
         </main>
       </div>
     </>
+  );
+}
+
+export default function CompleteProfilePage() {
+  return (
+    <Suspense fallback={null}>
+      <CompleteProfileInner />
+    </Suspense>
   );
 }

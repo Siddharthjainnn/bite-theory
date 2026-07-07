@@ -137,6 +137,9 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
 
   async function placeOrder() {
+    // Don't bounce to Google while the session is still hydrating — this was
+    // sending already-logged-in users back to the login screen.
+    if (status === 'loading') return;
     if (!userId) { router.push('/login?callbackUrl=/checkout'); return; }
     if (!user?.mobile) { router.push('/complete-profile?callbackUrl=/checkout'); return; }
     if (!lines.length) return;

@@ -26,7 +26,7 @@ export default function HomePage() {
 
   const [activeCat, setActiveCat] = useState<number | 'all'>('all');
   const [sort, setSort] = useState<Sort>('pop');
-  const [vegOnly, setVegOnly] = useState(false);
+  const [vegOnly, setVegOnly] = useState(true); // pure-veg app: veg stays ON by default
   const [banners, setBanners] = useState<Banner[]>([]);
   const [bannerIdx, setBannerIdx] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
