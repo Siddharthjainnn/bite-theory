@@ -25,6 +25,7 @@ interface Product {
   description: string; image: string; videoUrl: string;
   price: number; offerPrice: number; calories: number; protein: number;
   carbs: number; fat: number; rating: number; status: Status;
+  isTodaysSpecial?: boolean; isVeg?: boolean; specialTag?: string;
 }
 interface Order {
   id: number; orderNumber: string; userId: number; addressId: number;
@@ -35,7 +36,7 @@ interface Order {
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://bite-theory-backend.onrender.com/api';
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const ORDER_FLOW = [
@@ -1585,7 +1586,7 @@ function Products({ showToast }: { showToast: (m: string) => void }) {
 
 function ProductModal({ product, cats, onClose, onSave }:
   { product: Partial<Product>; cats: Category[]; onClose: () => void; onSave: (d: Partial<Product>) => void }) {
-  const [f, setF] = useState<Partial<Product>>({ name: '', description: '', image: '', videoUrl: '', price: 0, offerPrice: 0, calories: 0, protein: 0, carbs: 0, fat: 0, status: 'active', categoryId: cats[0]?.id, ...product });
+  const [f, setF] = useState<Partial<Product>>({ name: '', description: '', image: '', videoUrl: '', price: 0, offerPrice: 0, calories: 0, protein: 0, carbs: 0, fat: 0, status: 'active', categoryId: cats[0]?.id, isTodaysSpecial: false, isVeg: true, specialTag: '', ...product });
   const set = (k: keyof Product, v: any) => setF(s => ({ ...s, [k]: v }));
   const num = (k: keyof Product, v: string) => set(k, v === '' ? 0 : Number(v));
   return (
@@ -1593,7 +1594,7 @@ function ProductModal({ product, cats, onClose, onSave }:
       <Field label="Product name *"><input style={inputStyle} value={f.name || ''} onChange={e => set('name', e.target.value)} placeholder="e.g. Grilled Chicken Bowl" /></Field>
       <Row>
         <Field label="Category *"><select style={inputStyle} value={f.categoryId} onChange={e => set('categoryId', Number(e.target.value))}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-        <Field label="Status"><select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>
+        <Field label="Status"><select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}><option value="active">Active</option><option value="inactive">Inactive</option><option value="out_of_stock">Out of stock</option></select></Field>
       </Row>
       <Field label="Description"><textarea style={{ ...inputStyle, minHeight: 70 }} value={f.description || ''} onChange={e => set('description', e.target.value)} /></Field>
       <Row>
@@ -1606,6 +1607,27 @@ function ProductModal({ product, cats, onClose, onSave }:
         <Field label="Carbs (g)"><input style={inputStyle} type="number" value={f.carbs || ''} onChange={e => num('carbs', e.target.value)} /></Field>
       </Row3>
       <Field label="Fat (g)"><input style={inputStyle} type="number" value={f.fat || ''} onChange={e => num('fat', e.target.value)} /></Field>
+
+      <div style={{ fontWeight: 700, fontSize: 13, margin: '8px 0 10px', color: C.ink }}>Visibility & highlights</div>
+      <Row>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: f.isTodaysSpecial ? '#fff7ed' : '#fff' }}>
+          <input type="checkbox" checked={!!f.isTodaysSpecial} onChange={e => set('isTodaysSpecial', e.target.checked)} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>⚡ Today&apos;s Special</div>
+            <div style={{ fontSize: 11, color: C.muted }}>Shows in the highlighted strip on the home page</div>
+          </div>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: f.isVeg === false ? '#fdecea' : '#fff' }}>
+          <input type="checkbox" checked={f.isVeg !== false} onChange={e => set('isVeg', e.target.checked)} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>🟢 Vegetarian</div>
+            <div style={{ fontSize: 11, color: C.muted }}>Untick for non-veg (VEG filter hides it)</div>
+          </div>
+        </label>
+      </Row>
+      {f.isTodaysSpecial && (
+        <Field label="Special tag (badge text)"><input style={inputStyle} value={f.specialTag || ''} onChange={e => set('specialTag', e.target.value)} placeholder="e.g. TODAY ONLY · CHEF'S PICK · ₹99 DEAL" maxLength={40} /></Field>
+      )}
 
       <div style={{ fontWeight: 700, fontSize: 13, margin: '8px 0 10px', color: C.ink }}>Photo & video</div>
       <Field label="Product image"><ImageUpload folder="products" value={f.image} onChange={url => set('image', url)} /></Field>
@@ -1697,7 +1719,7 @@ function CategoryModal({ cat, nextSort, onClose, onSave }:
       <Field label="Category image"><ImageUpload folder="categories" value={f.image} onChange={url => set('image', url)} /></Field>
       <Row>
         <Field label="Sort number"><input style={inputStyle} type="number" value={f.sortOrder ?? ''} onChange={e => set('sortOrder', e.target.value === '' ? 0 : Number(e.target.value))} /></Field>
-        <Field label="Status"><select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>
+        <Field label="Status"><select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}><option value="active">Active</option><option value="inactive">Inactive</option><option value="out_of_stock">Out of stock</option></select></Field>
       </Row>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
         <button style={btnGhost} onClick={onClose}>Cancel</button>

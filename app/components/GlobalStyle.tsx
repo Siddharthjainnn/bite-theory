@@ -36,6 +36,85 @@ a{text-decoration:none;color:inherit}
   .bt-app .bt-head{border-radius:30px 30px 0 0}
 }
 
+/* ── DESKTOP / LAPTOP: full-width web app, Swiggy-web style ── */
+@media(min-width:1024px){
+  .bt-stage{padding:0;align-items:stretch}
+  .bt-app{max-width:100%;height:100vh;max-height:100vh;border-radius:0;box-shadow:none}
+  .bt-app .bt-head{border-radius:0;padding-left:max(24px,calc((100vw - 1180px)/2));
+    padding-right:max(24px,calc((100vw - 1180px)/2))}
+  .bt-scroll>*{max-width:1180px;margin-left:auto;margin-right:auto}
+  .bt-footer .bt-nav{display:none}
+  .bt-hero{border-radius:22px;margin:18px 24px 0;padding:34px 38px}
+  .bt-hero-title{font-size:38px}
+  .bt-products{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:12px 24px 0}
+  .bt-products .bt-sec-title,.bt-products .bt-empty{grid-column:1/-1}
+  .bt-card{margin-bottom:0}
+  .bt-offers{padding:14px 24px 0}
+  .bt-cats,.bt-filters{padding-left:24px;padding-right:24px}
+  .bt-special-row{padding:0 24px}
+  .bt-banners{padding:14px 24px 0}
+}
+@media(min-width:768px) and (max-width:1023px){
+  .bt-products{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .bt-products .bt-sec-title,.bt-products .bt-empty{grid-column:1/-1}
+  .bt-card{margin-bottom:0}
+}
+
+/* ── banners carousel ── */
+.bt-banners{padding:12px 12px 0}
+.bt-banner-track{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;
+  scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.bt-banner-track::-webkit-scrollbar{display:none}
+.bt-banner{flex:0 0 88%;max-width:520px;scroll-snap-align:start;border-radius:18px;
+  overflow:hidden;position:relative;aspect-ratio:5/2;background:${C.dark};cursor:pointer}
+@media(min-width:1024px){.bt-banner{flex:0 0 32%}}
+.bt-banner img{width:100%;height:100%;object-fit:cover;display:block}
+.bt-banner-title{position:absolute;left:14px;bottom:12px;color:#fff;font-weight:800;
+  font-size:15px;text-shadow:0 2px 8px rgba(0,0,0,.55)}
+.bt-banner-dots{display:flex;gap:5px;justify-content:center;padding-top:8px}
+.bt-banner-dots i{width:6px;height:6px;border-radius:50%;background:${C.line};transition:.2s}
+.bt-banner-dots i.on{background:${C.green};width:16px;border-radius:4px}
+
+/* ── today's special ── */
+.bt-special-head{display:flex;align-items:center;gap:8px;padding:16px 12px 8px;
+  font-weight:900;font-size:16px;color:${C.ink};letter-spacing:.2px}
+.bt-special-head .zap{font-size:18px;animation:pulseZap 1.6s infinite}
+@keyframes pulseZap{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+.bt-special-row{display:flex;gap:12px;overflow-x:auto;padding:2px 12px 4px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.bt-special-row::-webkit-scrollbar{display:none}
+.bt-sp-card{flex:0 0 168px;background:#fff;border-radius:16px;overflow:hidden;
+  border:1.5px solid transparent;position:relative;cursor:pointer;
+  background-image:linear-gradient(#fff,#fff),linear-gradient(135deg,${C.orange},${C.green});
+  background-origin:border-box;background-clip:padding-box,border-box;
+  box-shadow:0 6px 18px rgba(22,96,71,.10)}
+@media(min-width:1024px){.bt-sp-card{flex:0 0 200px}}
+.bt-sp-img{height:110px;position:relative;background:${C.greenSoft}}
+.bt-sp-img img{width:100%;height:100%;object-fit:cover;display:block}
+.bt-sp-tag{position:absolute;top:8px;left:8px;background:linear-gradient(135deg,${C.orange},#f7a73a);
+  color:#fff;font-size:9.5px;font-weight:900;padding:4px 8px;border-radius:999px;
+  letter-spacing:.4px;box-shadow:0 3px 8px rgba(245,158,11,.4)}
+.bt-sp-body{padding:9px 10px 11px}
+.bt-sp-name{font-weight:800;font-size:12.5px;color:${C.ink};white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.bt-sp-price{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:13px}
+.bt-sp-price b{color:${C.greenDeep}}
+.bt-sp-price s{color:${C.muted};font-size:11px}
+.bt-sp-add{margin-top:8px;width:100%;border:1.5px solid ${C.green};background:${C.greenSoft};
+  color:${C.greenDeep};font-weight:900;font-size:12px;border-radius:9px;padding:7px 0;cursor:pointer}
+.bt-sp-add:active{transform:scale(.97)}
+
+/* ── veg toggle (Swiggy style) ── */
+.bt-vegtoggle{display:flex;align-items:center;gap:7px;border:1px solid ${C.line};
+  background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer;flex-shrink:0}
+.bt-vegtoggle .lbl{font-size:11px;font-weight:800;color:${C.greenDeep};letter-spacing:.3px}
+.bt-vegtoggle .sw{width:30px;height:16px;border-radius:999px;background:${C.line};
+  position:relative;transition:.2s}
+.bt-vegtoggle .sw i{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;
+  background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.bt-vegtoggle.on .sw{background:${C.green}}
+.bt-vegtoggle.on .sw i{left:16px}
+
 .brandmark{width:34px;height:34px;border-radius:9px;
   background:linear-gradient(135deg,${C.green},${C.orange});display:flex;
   align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;flex-shrink:0}

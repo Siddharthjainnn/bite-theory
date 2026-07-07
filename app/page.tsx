@@ -3,6 +3,7 @@
 // session is per-user, so never statically pre-render this page
 export const dynamic = 'force-dynamic';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from './components/AppShell';
 import AppHeader from './components/AppHeader';
@@ -15,7 +16,7 @@ import TheoryBhaiyaAgent, {
 } from './components/TheoryBhaiyaAgent';
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
-import { Product, C } from './lib/bite';
+import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
 
@@ -25,6 +26,9 @@ export default function HomePage() {
 
   const [activeCat, setActiveCat] = useState<number | 'all'>('all');
   const [sort, setSort] = useState<Sort>('pop');
+  const [vegOnly, setVegOnly] = useState(false);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [bannerIdx, setBannerIdx] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // intro
@@ -52,6 +56,23 @@ export default function HomePage() {
     } catch {}
   }, []);
 
+  // banners: load once, auto-advance
+  useEffect(() => { fetchBanners().then(setBanners); }, []);
+  useEffect(() => {
+    if (banners.length < 2) return;
+    const t = setInterval(() => {
+      setBannerIdx((i) => {
+        const next = (i + 1) % banners.length;
+        document.getElementById('btbanners')?.scrollTo({
+          left: next * (document.getElementById('btbanners')?.clientWidth || 0) * 0.9,
+          behavior: 'smooth',
+        });
+        return next;
+      });
+    }, 4500);
+    return () => clearInterval(t);
+  }, [banners.length]);
+
   // apply goal -> category
   useEffect(() => {
     if (!goal || goal.key === 'surprise' || !categories.length) return;
@@ -63,10 +84,11 @@ export default function HomePage() {
   useEffect(() => {
     if (loading || !products.length || agentClosed) return;
     const t = setTimeout(() => {
+      const flagged = products.filter((p) => p.isTodaysSpecial);
       const withOffer = products
         .filter((p) => p.offerPrice > 0 && p.offerPrice < p.price)
         .sort((a, b) => b.price - b.offerPrice - (a.price - a.offerPrice));
-      setAgentProduct(withOffer[0] || products[0]);
+      setAgentProduct(flagged[0] || withOffer[0] || products[0]);
     }, 2800);
     return () => clearTimeout(t);
   }, [loading, products, agentClosed]);
@@ -94,10 +116,11 @@ export default function HomePage() {
   }
 
   const visible = useMemo(() => {
-    const list =
+    let list =
       activeCat === 'all'
         ? products
         : products.filter((p) => p.categoryId === activeCat);
+    if (vegOnly) list = list.filter((p) => p.isVeg);
     const arr = [...list];
     if (sort === 'protein') arr.sort((a, b) => b.protein - a.protein);
     else if (sort === 'lowcal') arr.sort((a, b) => a.calories - b.calories);
@@ -108,7 +131,12 @@ export default function HomePage() {
       );
     else arr.sort((a, b) => b.rating - a.rating);
     return arr;
-  }, [products, activeCat, sort]);
+  }, [products, activeCat, sort, vegOnly]);
+
+  const specials = useMemo(
+    () => products.filter((p) => p.isTodaysSpecial && (!vegOnly || p.isVeg)),
+    [products, vegOnly],
+  );
 
   return (
     <AppShell
@@ -154,6 +182,66 @@ export default function HomePage() {
         </h1>
         <p className="bt-hero-sub">Good food. Right price. Under ₹99 combos.</p>
       </section>
+
+      {/* banners (admin-managed) */}
+      {banners.length > 0 && (
+        <section className="bt-banners">
+          <div className="bt-banner-track" id="btbanners">
+            {banners.map((b) => (
+              <a
+                key={b.id}
+                className="bt-banner"
+                href={b.linkUrl || '#'}
+                onClick={(e) => { if (!b.linkUrl) e.preventDefault(); }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {b.imageUrl && <img src={b.imageUrl} alt={b.title} />}
+                {b.title && <span className="bt-banner-title">{b.title}</span>}
+              </a>
+            ))}
+          </div>
+          {banners.length > 1 && (
+            <div className="bt-banner-dots">
+              {banners.map((_, i) => <i key={i} className={i === bannerIdx ? 'on' : ''} />)}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* TODAY'S SPECIAL — admin toggles products on/off dynamically */}
+      {specials.length > 0 && (
+        <>
+          <div className="bt-special-head">
+            <span className="zap">⚡</span> Today&apos;s Special
+            <span style={{ fontSize: 10.5, fontWeight: 800, color: C.orangeDeep, background: C.orangeSoft, padding: '3px 8px', borderRadius: 999, marginLeft: 2 }}>
+              LIMITED TIME
+            </span>
+          </div>
+          <div className="bt-special-row">
+            {specials.map((p) => (
+              <div key={p.id} className="bt-sp-card">
+                <Link href={`/product/${p.id}`} className="bt-sp-img" style={{ display: 'block' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {p.image
+                    ? <img src={p.image} alt={p.name} />
+                    : <div className="food-emoji">🍛</div>}
+                  <span className="bt-sp-tag">{p.specialTag || "TODAY'S SPECIAL"}</span>
+                </Link>
+                <div className="bt-sp-body">
+                  <div className="bt-sp-name">{p.name}</div>
+                  <div className="bt-sp-price">
+                    <b>{money(effectivePrice(p))}</b>
+                    {hasOffer(p) && <s>{money(p.price)}</s>}
+                  </div>
+                  <button className="bt-sp-add" onClick={() => add(p.id)}>
+                    {(cart[p.id] || 0) > 0 ? `ADDED · ${cart[p.id]}` : 'ADD +'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* categories */}
       <section className="bt-cats" id="catrow">
@@ -224,6 +312,14 @@ export default function HomePage() {
 
       {/* filters */}
       <section className="bt-filters">
+        <button
+          className={`bt-vegtoggle ${vegOnly ? 'on' : ''}`}
+          onClick={() => setVegOnly((v) => !v)}
+          aria-pressed={vegOnly}
+        >
+          <span className="lbl">VEG</span>
+          <span className="sw"><i /></span>
+        </button>
         {(
           [
             ['pop', 'Sort by'],

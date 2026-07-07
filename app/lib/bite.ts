@@ -71,6 +71,9 @@ export interface Product {
   carbs: number;
   fat: number;
   rating: number;
+  isTodaysSpecial: boolean;
+  isVeg: boolean;
+  specialTag: string;
 }
 
 export interface OrderItem {
@@ -105,6 +108,9 @@ function normalizeProduct(p: any): Product {
     carbs: Number(p.carbs) || 0,
     fat: Number(p.fat) || 0,
     rating: Number(p.rating) || 0,
+    isTodaysSpecial: Boolean(p.isTodaysSpecial ?? p.is_todays_special),
+    isVeg: p.isVeg === undefined && p.is_veg === undefined ? true : Boolean(p.isVeg ?? p.is_veg),
+    specialTag: p.specialTag || p.special_tag || '',
   };
 }
 
@@ -243,4 +249,28 @@ export async function checkoutOrder(payload: CheckoutPayload): Promise<ApiOrder 
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   });
   return jsonOrThrow(res);
+}
+
+
+/* ───────────── banners ───────────── */
+export interface Banner {
+  id: number; title: string; imageUrl: string; linkUrl: string;
+  position: string; sortOrder: number;
+}
+export async function fetchBanners(): Promise<Banner[]> {
+  try {
+    const res = await fetch(`${API_BASE}/banners`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return (rows as any[])
+      .filter((b) => b.isActive ?? b.is_active ?? true)
+      .map((b) => ({
+        id: Number(b.id), title: b.title || '',
+        imageUrl: b.imageUrl || b.image_url || '',
+        linkUrl: b.linkUrl || b.link_url || '',
+        position: b.position || 'hero',
+        sortOrder: Number(b.sortOrder ?? b.sort_order) || 0,
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  } catch { return []; }
 }
