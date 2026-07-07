@@ -421,19 +421,17 @@ export default function CheckoutPage() {
             <div style={card}>
               <div style={h}>💳 Payment method</div>
               {([['cod', 'Cash on Delivery', 'Pay when your food arrives'],
-                 ['online', 'Pay Online', 'UPI / Card — coming soon']] as const).map(([val, label, sub]) => (
+                 ['online', 'Pay Online', 'UPI / Card / Netbanking via Razorpay']] as const).map(([val, label, sub]) => (
                 <label
                   key={val}
                   style={{
                     display: 'flex', gap: 10, alignItems: 'center', padding: '10px 8px',
-                    borderRadius: 10, cursor: val === 'online' ? 'not-allowed' : 'pointer',
-                    opacity: val === 'online' ? 0.5 : 1,
+                    borderRadius: 10, cursor: 'pointer',
                     background: payMethod === val ? C.greenSoft : 'transparent',
                   }}
                 >
                   <input
                     type="radio" name="pay" checked={payMethod === val}
-                    disabled={val === 'online'}
                     onChange={() => setPayMethod(val)}
                   />
                   <div>
