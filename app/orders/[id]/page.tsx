@@ -8,10 +8,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import AppShell from '../../components/AppShell';
 import AppHeader from '../../components/AppHeader';
 import {
   C, money, ApiOrder, fetchOrderTrack, STATUS_META, TRACK_STEPS, ApiOrderStatus,
+  cancelOrder, postReview,
 } from '../../lib/bite';
 import { loadGoogleMaps, MAPS_KEY } from '../../lib/maps';
 
@@ -22,8 +24,54 @@ export default function OrderTrackPage() {
   const search = useSearchParams();
   const justPlaced = search.get('placed');
 
+  const { data: session } = useSession();
+  const userId = (session?.user as any)?.id ? Number((session?.user as any).id) : undefined;
+
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [error, setError] = useState('');
+
+  /* cancel */
+  const [cancelling, setCancelling] = useState(false);
+  async function handleCancel() {
+    if (!order || !userId) return;
+    if (!confirm('Cancel this order? Any payment will be refunded automatically.')) return;
+    setCancelling(true);
+    try {
+      await cancelOrder(order.id, userId);
+      await load();
+    } catch (e: any) {
+      alert(e.message || 'Could not cancel the order');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  /* post-delivery rating */
+  const ratedKey = `bt_rated_order_`;
+  const [rating, setRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [ratingDone, setRatingDone] = useState(false);
+  const [ratingSaving, setRatingSaving] = useState(false);
+  useEffect(() => {
+    try { if (localStorage.getItem(ratedKey + id)) setRatingDone(true); } catch {}
+  }, [id, ratedKey]);
+  async function submitRating() {
+    if (!order || !userId || rating < 1) return;
+    setRatingSaving(true);
+    try {
+      const items = order.items || [];
+      await Promise.all(items.map((it) => postReview({
+        userId, productId: Number(it.productId), rating,
+        comment: ratingComment.trim() || undefined, orderId: Number(order.id),
+      })));
+      try { localStorage.setItem(ratedKey + id, '1'); } catch {}
+      setRatingDone(true);
+    } catch (e: any) {
+      alert(e.message || 'Could not save your rating');
+    } finally {
+      setRatingSaving(false);
+    }
+  }
 
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -148,6 +196,70 @@ export default function OrderTrackPage() {
               )}
             </div>
 
+            {/* ── CANCEL (only before cooking starts) ── */}
+            {['order_received', 'order_confirmed'].includes(order.status) && userId && (
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                style={{
+                  width: '100%', background: '#fff', color: '#c0392b',
+                  border: '1px solid #f5c6cb', borderRadius: 12, padding: '11px',
+                  fontWeight: 800, fontSize: 13, cursor: 'pointer', marginBottom: 14,
+                }}
+              >
+                {cancelling ? 'Cancelling…' : '✖ Cancel order (free until cooking starts)'}
+              </button>
+            )}
+
+            {/* ── RATE YOUR ORDER (after delivery) ── */}
+            {delivered && !ratingDone && (
+              <div style={{ ...card, border: `1px solid ${C.green}` }}>
+                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>⭐ How was your food?</div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setRating(n)}
+                      style={{
+                        fontSize: 28, background: 'none', border: 'none', cursor: 'pointer',
+                        filter: n <= rating ? 'none' : 'grayscale(1) opacity(0.4)',
+                      }}
+                      aria-label={`${n} star`}
+                    >
+                      ⭐
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  placeholder="Anything to add? (optional)"
+                  value={ratingComment}
+                  onChange={(e) => setRatingComment(e.target.value)}
+                  maxLength={300}
+                  style={{
+                    width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,
+                    padding: '10px 12px', fontSize: 13, minHeight: 56, resize: 'vertical',
+                    outline: 'none', marginBottom: 10,
+                  }}
+                />
+                <button
+                  onClick={submitRating}
+                  disabled={rating < 1 || ratingSaving}
+                  style={{
+                    width: '100%', background: rating < 1 ? C.line : C.green, color: '#fff',
+                    border: 'none', borderRadius: 10, padding: '11px', fontWeight: 800,
+                    fontSize: 13, cursor: rating < 1 ? 'default' : 'pointer',
+                  }}
+                >
+                  {ratingSaving ? 'Saving…' : 'Submit rating'}
+                </button>
+              </div>
+            )}
+            {delivered && ratingDone && (
+              <div style={{ ...card, textAlign: 'center', color: C.greenDeep, fontWeight: 700, fontSize: 13 }}>
+                🙏 Thanks for rating your order!
+              </div>
+            )}
+
             {/* ── LIVE MAP ── */}
             {MAPS_KEY && order.deliveryLat != null ? (
               <div style={{ borderRadius: 16, overflow: 'hidden', border: `1px solid ${C.line}`, marginBottom: 14 }}>
@@ -235,6 +347,7 @@ export default function OrderTrackPage() {
                   ['Item total', money(Number(order.subtotal))],
                   ...(Number(order.discount) > 0 ? [['Discount', `− ${money(Number(order.discount))}`]] : []),
                   ['Delivery', Number(order.deliveryCharge) === 0 ? 'FREE' : money(Number(order.deliveryCharge))],
+                  ...(Number((order as any).tip) > 0 ? [['Rider tip', money(Number((order as any).tip))]] : []),
                   ...(Number(order.walletUsed) > 0 ? [['Wallet', `− ${money(Number(order.walletUsed))}`]] : []),
                 ].map(([k, v]) => (
                   <div key={k as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>

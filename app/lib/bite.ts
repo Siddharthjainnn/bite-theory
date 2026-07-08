@@ -210,6 +210,28 @@ async function jsonOrThrow(res: Response) {
   return data;
 }
 
+/* ── user token: proves to the backend that this browser is user X ──
+   Minted by /api/user-token (Next server, session-based), verified by the
+   NestJS UserAuthGuard. Cached ~25 min (token itself lasts 30). */
+let _userToken: { value: string | null; exp: number } | null = null;
+async function getUserToken(): Promise<string | null> {
+  if (_userToken && Date.now() < _userToken.exp) return _userToken.value;
+  try {
+    const res = await fetch('/api/user-token', { cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    _userToken = { value: data?.token || null, exp: Date.now() + 25 * 60 * 1000 };
+    return _userToken.value;
+  } catch {
+    return null;
+  }
+}
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getUserToken();
+  return token
+    ? { 'Content-Type': 'application/json', 'x-user-token': token }
+    : { 'Content-Type': 'application/json' };
+}
+
 export async function fetchMyOrders(userId: number): Promise<ApiOrder[]> {
   const res = await fetch(`${API_BASE}/orders?userId=${userId}`, { cache: 'no-store' });
   return jsonOrThrow(res);
@@ -243,13 +265,24 @@ export interface CheckoutPayload {
   deliveryAddress?: string; deliveryLat?: number; deliveryLng?: number;
   couponCode?: string; useWallet?: boolean;
   paymentMethod?: 'cod' | 'online';
+  tipAmount?: number;
+  deliveryInstructions?: string;
+  cookingNote?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   razorpaySignature?: string;
 }
 export async function checkoutOrder(payload: CheckoutPayload): Promise<ApiOrder & { pointsEarned?: number }> {
   const res = await fetch(`${API_BASE}/orders/checkout`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    method: 'POST', headers: await authHeaders(), body: JSON.stringify(payload),
+  });
+  return jsonOrThrow(res);
+}
+
+/** Customer cancels their own order (allowed until the kitchen starts cooking). */
+export async function cancelOrder(orderId: number | string, userId: number): Promise<ApiOrder> {
+  const res = await fetch(`${API_BASE}/orders/${orderId}/cancel`, {
+    method: 'POST', headers: await authHeaders(), body: JSON.stringify({ userId }),
   });
   return jsonOrThrow(res);
 }
@@ -263,9 +296,13 @@ export interface PaymentOrder {
 export async function createPaymentOrder(payload: {
   userId: number; items: { productId: number; quantity: number }[];
   addressId?: number; couponCode?: string; useWallet?: boolean;
+  // full destination + extras are snapshotted server-side so the Razorpay
+  // webhook can finish the order even if this tab dies after paying
+  deliveryAddress?: string; deliveryLat?: number; deliveryLng?: number;
+  tipAmount?: number; deliveryInstructions?: string; cookingNote?: string;
 }): Promise<PaymentOrder> {
   const res = await fetch(`${API_BASE}/orders/create-payment`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    method: 'POST', headers: await authHeaders(), body: JSON.stringify(payload),
   });
   return jsonOrThrow(res);
 }

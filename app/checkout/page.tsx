@@ -125,17 +125,24 @@ export default function CheckoutPage() {
     }
   }
 
+  /* ── extras: rider tip, delivery instructions, cooking note ── */
+  const [tip, setTip] = useState(0);
+  const [instructions, setInstructions] = useState('');
+  const [cookingNote, setCookingNote] = useState('');
+
   /* ── bill math (display; server recomputes authoritatively) ── */
   const discount = coupon?.discount || 0;
   const delivery = subtotal - discount >= FREE_DELIVERY_ABOVE || subtotal === 0 ? 0 : DELIVERY_CHARGE;
   const beforeWallet = Math.max(0, subtotal - discount + delivery);
   const [useWallet, setUseWallet] = useState(false);
-  const walletUsed = useWallet ? Math.min(walletBalance, beforeWallet) : 0;
-  const payable = beforeWallet - walletUsed;
+  const walletUsed = useWallet ? Math.min(walletBalance, beforeWallet + tip) : 0;
+  const payable = beforeWallet + tip - walletUsed;
 
   const [payMethod, setPayMethod] = useState<'cod' | 'online'>('cod');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
+  const [paidButStuck, setPaidButStuck] = useState(false); // paid ok, order create failed
+
 
   async function placeOrder() {
     // Don't bounce to Google while the session is still hydrating — this was
@@ -158,15 +165,22 @@ export default function CheckoutPage() {
           deliveryLng: picked?.lng,
         };
 
+    const extras = {
+      tipAmount: tip || undefined,
+      deliveryInstructions: instructions.trim() || undefined,
+      cookingNote: cookingNote.trim() || undefined,
+    };
+
     try {
       // ── ONLINE: open Razorpay, verify, then create the order ──
       if (payMethod === 'online') {
         const pay = await createPaymentOrder({
           userId,
           items,
-          ...(selectedAddr ? { addressId: selectedAddr } : {}),
+          ...destination, // snapshot destination server-side for webhook recovery
           couponCode: coupon?.code,
           useWallet,
+          ...extras,
         });
 
         const result = await openRazorpay({
@@ -183,19 +197,42 @@ export default function CheckoutPage() {
           },
         });
 
-        const order = await checkoutOrder({
-          userId,
-          items,
-          ...destination,
-          couponCode: coupon?.code,
-          useWallet,
-          paymentMethod: 'online',
-          razorpayOrderId: result.razorpay_order_id,
-          razorpayPaymentId: result.razorpay_payment_id,
-          razorpaySignature: result.razorpay_signature,
-        });
-        clear();
-        router.push(`/orders/${order.id}?placed=1`);
+        // Payment succeeded — now create the order. If this call fails
+        // (flaky network etc.), retry twice; the backend is idempotent and
+        // the Razorpay webhook will finish the order server-side anyway,
+        // so the customer's money is never lost.
+        let order: any = null;
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            order = await checkoutOrder({
+              userId,
+              items,
+              ...destination,
+              couponCode: coupon?.code,
+              useWallet,
+              paymentMethod: 'online',
+              ...extras,
+              razorpayOrderId: result.razorpay_order_id,
+              razorpayPaymentId: result.razorpay_payment_id,
+              razorpaySignature: result.razorpay_signature,
+            });
+            break;
+          } catch (err: any) {
+            lastErr = err;
+            await new Promise((r) => setTimeout(r, 1200));
+          }
+        }
+        if (order) {
+          clear();
+          router.push(`/orders/${order.id}?placed=1`);
+        } else {
+          // Money is safe: the webhook will create the order automatically.
+          clear();
+          setPaidButStuck(true);
+          setPlacing(false);
+          console.error(lastErr);
+        }
         return;
       }
 
@@ -207,12 +244,16 @@ export default function CheckoutPage() {
         couponCode: coupon?.code,
         useWallet,
         paymentMethod: 'cod',
+        ...extras,
       });
       clear();
       router.push(`/orders/${order.id}?placed=1`);
     } catch (e: any) {
       // "Payment cancelled" isn't a real error — just let them retry
-      setError(e.message === 'Payment cancelled' ? '' : (e.message || 'Could not place order'));
+      const msg = e.message === 'Payment cancelled'
+        ? ''
+        : `${e.message || 'Could not place order'} — you were not charged. Tap Place Order to try again.`;
+      setError(msg);
       setPlacing(false);
     }
   }
@@ -417,6 +458,47 @@ export default function CheckoutPage() {
               </div>
             )}
 
+            {/* ── INSTRUCTIONS + TIP ── */}
+            <div style={card}>
+              <div style={h}>📝 Anything we should know?</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                <input
+                  style={input}
+                  placeholder="Delivery instructions (e.g. leave at door, call on arrival)"
+                  value={instructions}
+                  maxLength={300}
+                  onChange={(e) => setInstructions(e.target.value)}
+                />
+                <input
+                  style={input}
+                  placeholder="Cooking note (e.g. less spicy, no onion)"
+                  value={cookingNote}
+                  maxLength={300}
+                  onChange={(e) => setCookingNote(e.target.value)}
+                />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 12, marginBottom: 6 }}>
+                🛵 Tip your rider <span style={{ color: C.muted, fontWeight: 500 }}>(100% goes to them)</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[0, 10, 20, 30, 50].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTip(t)}
+                    style={{
+                      padding: '7px 14px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
+                      cursor: 'pointer',
+                      border: `1px solid ${tip === t ? C.green : C.line}`,
+                      background: tip === t ? C.greenSoft : '#fff',
+                      color: tip === t ? C.greenDeep : C.muted,
+                    }}
+                  >
+                    {t === 0 ? 'No tip' : `₹${t}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* ── PAYMENT ── */}
             <div style={card}>
               <div style={h}>💳 Payment method</div>
@@ -449,6 +531,7 @@ export default function CheckoutPage() {
                 ['Item total', money(subtotal)],
                 ...(discount > 0 ? [['Coupon discount', `− ${money(discount)}`]] : []),
                 ['Delivery fee', delivery === 0 ? 'FREE' : money(delivery)],
+                ...(tip > 0 ? [['Rider tip', money(tip)]] : []),
                 ...(walletUsed > 0 ? [['Wallet used', `− ${money(walletUsed)}`]] : []),
               ].map(([k, v]) => (
                 <div key={k as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', color: C.muted }}>
@@ -465,6 +548,14 @@ export default function CheckoutPage() {
               )}
             </div>
 
+            {paidButStuck && (
+              <div style={{ background: C.greenSoft, border: `1px solid ${C.green}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, marginBottom: 14 }}>
+                <b style={{ color: C.greenDeep }}>✅ Payment received — your money is safe.</b>{' '}
+                We hit a snag confirming the order in this tab, but our server will finish it
+                automatically within a minute.{' '}
+                <a href="/orders" style={{ color: C.greenDeep, fontWeight: 800 }}>Check your orders →</a>
+              </div>
+            )}
             {error && (
               <div style={{ background: '#fdecea', border: '1px solid #f5c6cb', color: '#c0392b', borderRadius: 12, padding: '10px 14px', fontSize: 13, marginBottom: 90 }}>
                 {error}
