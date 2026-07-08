@@ -71,7 +71,7 @@ const ORDER_FLOW = [
 /* ============ API layer ============ */
 const api = {
   async listProducts(): Promise<Product[]> {
-    const r = await fetch(`${API_BASE}/products`);
+    const r = await fetch(`${API_BASE}/products`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Failed to load products');
     const rows = await r.json();
     return rows.map((p: any) => ({
@@ -122,7 +122,7 @@ const api = {
     if (!r.ok) throw new Error('Delete failed');
   },
   async listCategories(): Promise<Category[]> {
-    const r = await fetch(`${API_BASE}/categories`);
+    const r = await fetch(`${API_BASE}/categories`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Failed to load categories');
     const rows = await r.json();
     return rows.map((c: any) => ({
@@ -154,7 +154,7 @@ const api = {
   },
 
   async listOrders(): Promise<Order[]> {
-    const r = await fetch(`${API_BASE}/orders`);
+    const r = await fetch(`${API_BASE}/orders`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Failed to load orders');
     const rows = await r.json();
     return rows.map((o: any) => ({
@@ -166,7 +166,7 @@ const api = {
     }));
   },
   async getOrderHistory(orderId: number): Promise<OrderHistoryEntry[]> {
-    const r = await fetch(`${API_BASE}/orders/${orderId}/history`);
+    const r = await fetch(`${API_BASE}/orders/${orderId}/history`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Failed to load history');
     return r.json();
   },
@@ -212,7 +212,7 @@ const api = {
 
   /* ----- GENERIC CRUD (used by every remaining module) ----- */
   async genericList(route: string): Promise<any[]> {
-    const r = await fetch(`${API_BASE}/${route}`);
+    const r = await fetch(`${API_BASE}/${route}`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw new Error('Failed to load');
     return r.json();
   },
