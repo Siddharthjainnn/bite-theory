@@ -13,9 +13,8 @@ import FoodImage from '../components/FoodImage';
 import { useCatalog } from '../lib/useCatalog';
 import { useCart } from '../providers/CartProvider';
 import { Product, money, catEmoji, effectivePrice, hasOffer, C } from '../lib/bite';
-
-const DELIVERY_FEE = 25;
-const FREE_DELIVERY_ABOVE = 199;
+import { useStoreSettings } from '../lib/useStoreSettings';
+import StoreClosedBanner from '../components/StoreClosedBanner';
 
 export default function CartPage() {
   const { products, loading } = useCatalog();
@@ -23,6 +22,7 @@ export default function CartPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [placing, setPlacing] = useState(false);
+  const { settings, status: storeStatus } = useStoreSettings();
 
   const lines = useMemo(() => {
     return Object.entries(cart)
@@ -38,8 +38,8 @@ export default function CartPage() {
     (s, l) => s + (hasOffer(l.p) ? (l.p.price - l.p.offerPrice) * l.qty : 0),
     0,
   );
-  const freeDelivery = subtotal >= FREE_DELIVERY_ABOVE || subtotal === 0;
-  const delivery = freeDelivery ? 0 : DELIVERY_FEE;
+  const freeDelivery = subtotal >= settings.freeDeliveryAbove || subtotal === 0;
+  const delivery = freeDelivery ? 0 : settings.deliveryCharge;
   const total = subtotal + delivery;
 
   function checkout() {
@@ -85,6 +85,7 @@ export default function CartPage() {
       }
     >
       <div className="bt-page-pad">
+        {!storeStatus.open && <StoreClosedBanner status={storeStatus} />}
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="cart-item">
@@ -181,7 +182,7 @@ export default function CartPage() {
                   style={{ fontSize: 11, color: C.muted }}
                 >
                   <span>
-                    Add {money(FREE_DELIVERY_ABOVE - subtotal)} more for free
+                    Add {money(settings.freeDeliveryAbove - subtotal)} more for free
                     delivery
                   </span>
                 </div>

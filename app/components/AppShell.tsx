@@ -1,30 +1,38 @@
 'use client';
 
+import { ReactNode } from 'react';
+import GlobalStyle from './GlobalStyle';
+import BottomNav from './BottomNav';
+
 /**
- * AppShell — mounts ONE ProfileDrawer for the whole app and exposes
- * openMenu() through context. AppHeader falls back to this context when a
- * page doesn't pass its own `onMenu`, so the hamburger works on EVERY page
- * (orders, cart, checkout, coupons, product, info, account/*) — previously
- * it was dead on all pages except home and menu.
- *
- * Wire-up: wrap children in app/layout.tsx (see FRONTEND-PATCHES.md).
+ * Wraps a page in the standard Bite Theory shell:
+ *   [header (passed in)] [scrollable content] [optional cartbar] [bottom nav]
  */
-
-import { createContext, useContext, useState, ReactNode } from 'react';
-import ProfileDrawer from './ProfileDrawer';
-
-const MenuContext = createContext<{ openMenu: () => void }>({ openMenu: () => {} });
-
-export function useMenu() {
-  return useContext(MenuContext);
-}
-
-export default function AppShell({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export default function AppShell({
+  header,
+  children,
+  footerExtra,
+  overlay,
+}: {
+  header?: ReactNode;
+  children: ReactNode;
+  footerExtra?: ReactNode; // e.g. a cart bar shown above the nav
+  overlay?: ReactNode; // e.g. drawer / intro / toast that floats over everything
+}) {
   return (
-    <MenuContext.Provider value={{ openMenu: () => setOpen(true) }}>
-      {children}
-      <ProfileDrawer open={open} onClose={() => setOpen(false)} />
-    </MenuContext.Provider>
+    <>
+      <GlobalStyle />
+      <div className="bt-stage">
+        <main className="bt-app">
+          {header}
+          <div className="bt-scroll">{children}</div>
+          <div className="bt-footer">
+            {footerExtra}
+            <BottomNav />
+          </div>
+          {overlay}
+        </main>
+      </div>
+    </>
   );
 }

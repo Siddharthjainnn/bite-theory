@@ -17,11 +17,14 @@ import TheoryBhaiyaAgent, {
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
+import { useStoreSettings } from './lib/useStoreSettings';
+import StoreClosedBanner from './components/StoreClosedBanner';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
 
 export default function HomePage() {
   const { products, categories, loading, error } = useCatalog();
+  const { status: storeStatus } = useStoreSettings();
   const { add, cart } = useCart();
 
   const [activeCat, setActiveCat] = useState<number | 'all'>('all');
@@ -182,6 +185,12 @@ export default function HomePage() {
         </h1>
         <p className="bt-hero-sub">Good food. Right price. Under ₹99 combos.</p>
       </section>
+
+      {!storeStatus.open && (
+        <section style={{ padding: '0 16px' }}>
+          <StoreClosedBanner status={storeStatus} />
+        </section>
+      )}
 
       {/* banners (admin-managed) */}
       {banners.length > 0 && (

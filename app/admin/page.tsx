@@ -13,6 +13,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 
+import StoreSettingsPanel from '../components/StoreSettingsPanel';
 /* ============ types ============ */
 type Status = 'active' | 'inactive';
 
@@ -618,7 +619,10 @@ const NAV: NavGroup[] = [
     { key: 'roles', label: 'Roles', icon: '🔑' },
     { key: 'permissions', label: 'Permissions', icon: '🗝️' },
   ]},
-  { title: 'System', items: [{ key: 'audit_logs', label: 'Audit Logs', icon: '📋' }] },
+  { title: 'System', items: [
+    { key: 'settings', label: 'Store Settings', icon: '⚙️' },
+    { key: 'audit_logs', label: 'Audit Logs', icon: '📋' },
+  ]},
 ];
 
 const ALL_KEYS = NAV.flatMap(g => g.items.map(i => i.key));
@@ -739,7 +743,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const showToast = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(''), 2400); }, []);
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === page);
 
-  const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items'];
+  const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items', 'settings'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -806,6 +810,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             {page === 'categories' && <Categories showToast={showToast} />}
             {page === 'orders' && <Orders showToast={showToast} />}
             {page === 'order_items' && <OrderItemsPage showToast={showToast} />}
+            {page === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {!DEDICATED.includes(page) && MODULES[page] && <GenericModule config={MODULES[page]} showToast={showToast} />}
           </div>
         </div>

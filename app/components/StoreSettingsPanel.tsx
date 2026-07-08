@@ -101,7 +101,7 @@ export default function StoreSettingsPanel({
       ...s,
       weeklyHours: {
         ...s.weeklyHours,
-        [d]: { open: '10:00', close: '23:00', closed: false, ...s.weeklyHours[d], ...patch },
+        [d]: { ...{ open: '10:00', close: '23:00', closed: false }, ...s.weeklyHours[d], ...patch },
       },
     });
 

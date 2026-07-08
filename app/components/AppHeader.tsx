@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import NotificationBell from './NotificationBell';
+import { useMenu } from './MenuProvider';
 
 /**
  * Shared header used across pages.
@@ -29,6 +30,8 @@ export default function AppHeader({
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initialQuery);
+  const { openMenu } = useMenu();
+  const handleMenu = onMenu || openMenu;
 
   function runSearch() {
     const term = q.trim();
@@ -44,7 +47,7 @@ export default function AppHeader({
             <button
               className="bt-icon-btn"
               aria-label="Open menu"
-              onClick={onMenu}
+              onClick={handleMenu}
             >
               ☰
             </button>
@@ -72,7 +75,7 @@ export default function AppHeader({
             <button
               className="bt-avatar-btn"
               aria-label="Open profile"
-              onClick={onMenu}
+              onClick={handleMenu}
             >
               S
             </button>
@@ -138,7 +141,7 @@ export default function AppHeader({
         <button
           className="bt-icon-btn"
           aria-label="Open menu"
-          onClick={onMenu}
+          onClick={handleMenu}
         >
           ☰
         </button>

@@ -11,9 +11,11 @@ export default function ProductCard({ p }: { p: Product }) {
   const router = useRouter();
   const qty = cart[p.id] || 0;
   const off = hasOffer(p);
+  const soldOut = p.stockStatus === 'out_of_stock';
+  const lowStock = p.stockStatus === 'low_stock' || p.stockStatus === 'low';
 
   return (
-    <div className="bt-card">
+    <div className="bt-card" style={soldOut ? { opacity: 0.55 } : undefined}>
       <Link
         href={`/product/${p.id}`}
         className="bt-card-img"
@@ -38,13 +40,21 @@ export default function ProductCard({ p }: { p: Product }) {
           {p.rating > 0 && (
             <span className="tag orange">★ {p.rating.toFixed(1)}</span>
           )}
+          {lowStock && !soldOut && (
+            <span className="tag orange" style={{ fontWeight: 800 }}>Only few left!</span>
+          )}
         </div>
         <div className="bt-card-foot">
           <div className="bt-price">
             <b>{money(effectivePrice(p))}</b>
             {off && <s>{money(p.price)}</s>}
           </div>
-          {qty > 0 ? (
+          {soldOut ? (
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#c62828',
+              background: '#fdecec', padding: '5px 10px', borderRadius: 20 }}>
+              Sold out
+            </span>
+          ) : qty > 0 ? (
             <div className="bt-qty">
               <button onClick={() => sub(p.id)} aria-label="Remove one">
                 −
