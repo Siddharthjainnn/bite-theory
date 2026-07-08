@@ -62,7 +62,7 @@ const ORDER_FLOW = [
   { key: 'order_confirmed', label: 'Order Confirmed' },
   { key: 'preparing_food', label: 'Preparing Food' },
   { key: 'food_ready', label: 'Food Ready' },
-  { key: 'assigned_to_delivery_partner', label: 'Assigned to Delivery Partner' },
+  { key: 'assigned_to_delivery', label: 'Assigned to Delivery Partner' },
   { key: 'out_for_delivery', label: 'Out for Delivery' },
   { key: 'arriving_soon', label: 'Arriving Soon' },
   { key: 'delivered', label: 'Delivered' },
@@ -652,7 +652,7 @@ function orderStatusPill(status: string) {
     order_confirmed: [C.orangeSoft, '#b76e00', 'Confirmed'],
     preparing_food: [C.orangeSoft, '#b76e00', 'Preparing'],
     food_ready: [C.orangeSoft, '#b76e00', 'Food Ready'],
-    assigned_to_delivery_partner: [C.orangeSoft, '#b76e00', 'Assigned'],
+    assigned_to_delivery: [C.orangeSoft, '#b76e00', 'Assigned'],
     out_for_delivery: [C.orangeSoft, '#b76e00', 'Out for Delivery'],
     arriving_soon: [C.orangeSoft, '#b76e00', 'Arriving Soon'],
     delivered: [C.greenSoft, '#2e7d32', 'Delivered'],
@@ -683,7 +683,7 @@ function Stars({ value }: { value: number }) {
 
 const STATUS_COLORS: Record<string, string> = {
   order_received: '#F59E0B', order_confirmed: '#fbbf24', preparing_food: '#fb923c', food_ready: '#f97316',
-  assigned_to_delivery_partner: '#34d399', out_for_delivery: '#10b981', arriving_soon: '#059669',
+  assigned_to_delivery: '#34d399', out_for_delivery: '#10b981', arriving_soon: '#059669',
   delivered: '#4CAF50', cancelled: '#d64545',
 };
 
