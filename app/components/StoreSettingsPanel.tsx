@@ -35,6 +35,7 @@ interface Settings {
   storeLat: number | null; storeLng: number | null; storeAddress: string;
   deliveryRadiusKm: number; avgPrepMinutes: number; avgRiderKmph: number;
   baseDeliveryCharge: number; perKmCharge: number; freeDeliveryWithinKm: number;
+  riderBaseFare: number; riderPerKmPay: number;
 }
 
 const G = '#0D3B2E', GREEN = '#2e7d32', AMBER = '#b76e00', LINE = '#e4ebe6';
@@ -77,6 +78,8 @@ export default function StoreSettingsPanel({
         baseDeliveryCharge: Number(d.baseDeliveryCharge) || 20,
         perKmCharge: Number(d.perKmCharge) || 8,
         freeDeliveryWithinKm: Number(d.freeDeliveryWithinKm) || 2,
+        riderBaseFare: Number(d.riderBaseFare) || 20,
+        riderPerKmPay: Number(d.riderPerKmPay) || 5,
       });
     }
     if (b.ok) setLive(await b.json());
@@ -216,6 +219,8 @@ export default function StoreSettingsPanel({
             ['perKmCharge', 'Charge per km (₹)'],
             ['avgPrepMinutes', 'Avg prep time (min)'],
             ['avgRiderKmph', 'Avg rider speed (km/h)'],
+            ['riderBaseFare', 'Rider base fare / delivery (₹)'],
+            ['riderPerKmPay', 'Rider pay per km (₹)'],
           ] as [keyof Settings, string][]).map(([k, label]) => (
             <div key={k}>
               <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>{label}</div>

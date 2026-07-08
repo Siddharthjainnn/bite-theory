@@ -229,6 +229,18 @@ export default function OrderTrackPage() {
               )}
             </div>
 
+            {/* ── DELIVERY OTP (§4.5): share with the rider at handoff ── */}
+            {!cancelled && !delivered && order.deliveryOtp &&
+              ['out_for_delivery', 'arriving_soon'].includes(order.status) && (
+              <div style={{ ...card, background: '#fff8e6', border: '1px solid #f3e3b3', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 26 }}>🔐</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, color: C.muted }}>Share this OTP with your rider to receive your order</div>
+                  <div style={{ fontWeight: 800, fontSize: 26, letterSpacing: 6, color: C.ink }}>{order.deliveryOtp}</div>
+                </div>
+              </div>
+            )}
+
             {/* ── CANCEL (only before cooking starts) ── */}
             {['order_received', 'order_confirmed'].includes(order.status) && userId && (
               <button

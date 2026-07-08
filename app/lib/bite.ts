@@ -202,6 +202,7 @@ export interface ApiOrder {
     locationUpdatedAt?: string | null;
   } | null;
   store?: { lat: number; lng: number; address?: string | null } | null;
+  deliveryOtp?: string | null;
 }
 
 export interface SavedAddress {

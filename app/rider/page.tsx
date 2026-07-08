@@ -18,6 +18,14 @@ interface Rider {
   id: number; name: string; mobile: string; vehicleNo?: string; isAvailable?: boolean;
 }
 
+interface RiderEarnings {
+  today: { amount: number; deliveries: number };
+  week: { amount: number; deliveries: number };
+  cashInHand: number; codCollected: number; codDeposited: number;
+  history: { orderId: number; orderNumber?: string; baseFare: number;
+    distancePay: number; tip: number; total: number; createdAt: string }[];
+}
+
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' }, cache: 'no-store', ...init,
@@ -36,8 +44,11 @@ export default function RiderPage() {
   const [available, setAvailable] = useState<ApiOrder[]>([]);
   const [mine, setMine] = useState<ApiOrder[]>([]);
   const [gpsOn, setGpsOn] = useState(false);
+  const [earnings, setEarnings] = useState<RiderEarnings | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const watchId = useRef<number | null>(null);
   const lastPing = useRef(0);
+  const lastPos = useRef<{ lat: number; lng: number } | null>(null);
 
   /* restore session */
   useEffect(() => {
@@ -49,12 +60,14 @@ export default function RiderPage() {
 
   const refresh = useCallback(async (r: Rider) => {
     try {
-      const [avail, own] = await Promise.all([
+      const [avail, own, earn] = await Promise.all([
         api('/orders/available-for-riders'),
         api(`/orders?deliveryPartnerId=${r.id}&active=true`),
+        api(`/delivery-partners/${r.id}/earnings`).catch(() => null),
       ]);
       setAvailable(avail);
       setMine(own);
+      if (earn) setEarnings(earn);
     } catch { /* transient */ }
   }, []);
 
@@ -83,6 +96,7 @@ export default function RiderPage() {
     watchId.current = navigator.geolocation.watchPosition(
       (pos) => {
         setGpsOn(true);
+        lastPos.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const now = Date.now();
         if (now - lastPing.current < PING_MS) return; // throttle
         lastPing.current = now;
@@ -126,9 +140,20 @@ export default function RiderPage() {
   }
   async function setStatus(id: number, status: string, note?: string) {
     if (!rider) return;
+    const body: Record<string, unknown> = { status, note };
+    if (status === 'delivered') {
+      /* §4.5 handoff proof: customer reads the 4-digit OTP from their tracking page */
+      const otp = window.prompt('Ask the customer for their 4-digit delivery OTP:');
+      if (otp == null) return; // rider cancelled
+      body.otp = otp.trim();
+      if (lastPos.current) {
+        body.riderLat = lastPos.current.lat;
+        body.riderLng = lastPos.current.lng;
+      }
+    }
     setBusy(true); setErr('');
     try {
-      await api(`/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, note }) });
+      await api(`/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify(body) });
       await refresh(rider);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   }
@@ -197,6 +222,55 @@ export default function RiderPage() {
 
       {err && <div style={{ ...card, color: '#c0392b', fontWeight: 600, fontSize: 13 }}>{err}</div>}
 
+      {/* ── earnings (§4.2) + COD cash (§4.3) + history (§4.4) ── */}
+      {earnings && (
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <b style={{ fontSize: 14 }}>💰 My earnings</b>
+            <button onClick={() => setShowHistory((v) => !v)}
+              style={{ background: 'none', border: 'none', color: C.greenDeep, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              {showHistory ? 'Hide history' : 'History ▾'}
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div style={{ background: '#e8f5e9', borderRadius: 12, padding: 10 }}>
+              <div style={{ fontSize: 11, color: C.muted }}>Today · {earnings.today.deliveries} deliveries</div>
+              <div style={{ fontWeight: 800, fontSize: 18, color: C.greenDeep }}>{money(earnings.today.amount)}</div>
+            </div>
+            <div style={{ background: '#f2f6f3', borderRadius: 12, padding: 10 }}>
+              <div style={{ fontSize: 11, color: C.muted }}>This week · {earnings.week.deliveries} deliveries</div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>{money(earnings.week.amount)}</div>
+            </div>
+          </div>
+          <div style={{ background: '#fff8e6', border: '1px solid #f3e3b3', borderRadius: 12, padding: 10, fontSize: 12.5 }}>
+            💵 <b>COD cash in hand: {money(earnings.cashInHand)}</b>
+            <div style={{ color: C.muted, marginTop: 2 }}>
+              Collected {money(earnings.codCollected)} · Deposited {money(earnings.codDeposited)} — deposit at the kitchen.
+            </div>
+          </div>
+          {showHistory && (
+            <div style={{ marginTop: 10 }}>
+              {earnings.history.length === 0 && (
+                <div style={{ fontSize: 12.5, color: C.muted }}>No completed deliveries yet.</div>
+              )}
+              {earnings.history.map((h) => (
+                <div key={h.orderId} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: `1px solid ${C.line}`, fontSize: 12.5 }}>
+                  <div>
+                    <b>{h.orderNumber || `#${h.orderId}`}</b>
+                    <div style={{ color: C.muted, fontSize: 11 }}>
+                      {new Date(h.createdAt).toLocaleString()} · fare {money(Number(h.baseFare))}
+                      {Number(h.distancePay) > 0 && ` + dist ${money(Number(h.distancePay))}`}
+                      {Number(h.tip) > 0 && ` + tip ${money(Number(h.tip))} 💚`}
+                    </div>
+                  </div>
+                  <b style={{ color: C.greenDeep }}>{money(Number(h.total))}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* my active deliveries */}
       <div style={{ margin: '0 14px 8px', fontWeight: 800, fontSize: 14, color: C.ink }}>
         My deliveries ({mine.length})
@@ -212,6 +286,11 @@ export default function RiderPage() {
           </div>
           <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 10 }}>
             📍 {o.deliveryAddress || 'Address on order'}
+            {Number((o as any).tip) > 0 && (
+              <span style={{ display: 'inline-block', marginLeft: 6, background: '#e8f5e9', color: C.greenDeep, borderRadius: 8, padding: '2px 7px', fontWeight: 700 }}>
+                💚 ₹{Number((o as any).tip)} tip for you
+              </span>
+            )}
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
             {o.deliveryLat != null && (
