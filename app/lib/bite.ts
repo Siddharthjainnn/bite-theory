@@ -199,7 +199,9 @@ export interface ApiOrder {
   partner?: {
     id: number; name: string; mobile: string; vehicleNo?: string;
     photo?: string; lat?: number | null; lng?: number | null;
+    locationUpdatedAt?: string | null;
   } | null;
+  store?: { lat: number; lng: number; address?: string | null } | null;
 }
 
 export interface SavedAddress {
@@ -237,11 +239,14 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 export async function fetchMyOrders(userId: number): Promise<ApiOrder[]> {
-  const res = await fetch(`${API_BASE}/orders?userId=${userId}`, { cache: 'no-store' });
+  // token proves ownership — backend rejects reading other users' orders
+  const res = await fetch(`${API_BASE}/orders?userId=${userId}`,
+    { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function fetchOrderTrack(orderId: number | string): Promise<ApiOrder> {
-  const res = await fetch(`${API_BASE}/orders/${orderId}/track`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/orders/${orderId}/track`,
+    { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function fetchAddresses(userId: number): Promise<SavedAddress[]> {

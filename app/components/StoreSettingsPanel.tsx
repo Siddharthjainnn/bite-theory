@@ -31,6 +31,10 @@ interface Settings {
   weeklyHours: Record<DayKey, DayHours>;
   holidays: Holiday[];
   forceClosed: boolean; closedMessage: string; timezone: string;
+  /* restaurant location + distance pricing */
+  storeLat: number | null; storeLng: number | null; storeAddress: string;
+  deliveryRadiusKm: number; avgPrepMinutes: number; avgRiderKmph: number;
+  baseDeliveryCharge: number; perKmCharge: number; freeDeliveryWithinKm: number;
 }
 
 const G = '#0D3B2E', GREEN = '#2e7d32', AMBER = '#b76e00', LINE = '#e4ebe6';
@@ -64,6 +68,15 @@ export default function StoreSettingsPanel({
         forceClosed: !!d.forceClosed,
         closedMessage: d.closedMessage || '',
         timezone: d.timezone || 'Asia/Kolkata',
+        storeLat: d.storeLat != null ? Number(d.storeLat) : null,
+        storeLng: d.storeLng != null ? Number(d.storeLng) : null,
+        storeAddress: d.storeAddress || '',
+        deliveryRadiusKm: Number(d.deliveryRadiusKm) || 8,
+        avgPrepMinutes: Number(d.avgPrepMinutes) || 20,
+        avgRiderKmph: Number(d.avgRiderKmph) || 20,
+        baseDeliveryCharge: Number(d.baseDeliveryCharge) || 20,
+        perKmCharge: Number(d.perKmCharge) || 8,
+        freeDeliveryWithinKm: Number(d.freeDeliveryWithinKm) || 2,
       });
     }
     if (b.ok) setLive(await b.json());
@@ -167,6 +180,46 @@ export default function StoreSettingsPanel({
             <div key={k}>
               <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>{label}</div>
               <input type="number" min={0} style={inputStyle} value={s[k] as number} onChange={num(k)} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* location + distance pricing (audit §2.1 / §5.4) */}
+      <div style={card}>
+        <div style={h}>📍 Restaurant location & distance pricing</div>
+        <div style={sub}>
+          Set the kitchen&apos;s coordinates to unlock delivery-radius rejection,
+          distance-based charges and real ETAs. Get lat/lng by right-clicking your
+          kitchen on Google Maps → the numbers copy to clipboard.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>Kitchen latitude</div>
+            <input type="number" step="any" style={inputStyle} value={s.storeLat ?? ''}
+              onChange={(e) => setS({ ...s, storeLat: e.target.value === '' ? null : Number(e.target.value) })} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>Kitchen longitude</div>
+            <input type="number" step="any" style={inputStyle} value={s.storeLng ?? ''}
+              onChange={(e) => setS({ ...s, storeLng: e.target.value === '' ? null : Number(e.target.value) })} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>Kitchen address (shown on tracking map)</div>
+            <input style={inputStyle} value={s.storeAddress}
+              onChange={(e) => setS({ ...s, storeAddress: e.target.value })} />
+          </div>
+          {([
+            ['deliveryRadiusKm', 'Delivery radius (km)'],
+            ['freeDeliveryWithinKm', 'Free delivery within (km)'],
+            ['baseDeliveryCharge', 'Base delivery charge (₹)'],
+            ['perKmCharge', 'Charge per km (₹)'],
+            ['avgPrepMinutes', 'Avg prep time (min)'],
+            ['avgRiderKmph', 'Avg rider speed (km/h)'],
+          ] as [keyof Settings, string][]).map(([k, label]) => (
+            <div key={k}>
+              <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>{label}</div>
+              <input type="number" min={0} step="any" style={inputStyle} value={(s[k] as number) ?? 0} onChange={num(k)} />
             </div>
           ))}
         </div>

@@ -77,6 +77,7 @@ export default function OrderTrackPage() {
   const mapRef = useRef<google.maps.Map | null>(null);
   const destMarker = useRef<google.maps.Marker | null>(null);
   const riderMarker = useRef<google.maps.Marker | null>(null);
+  const storeMarker = useRef<google.maps.Marker | null>(null);
   const routeLine = useRef<google.maps.Polyline | null>(null);
 
   const load = useCallback(async () => {
@@ -124,6 +125,18 @@ export default function OrderTrackPage() {
       }
       const map = mapRef.current;
 
+      /* kitchen pin — visible even before a rider is assigned */
+      const store = order.store?.lat != null
+        ? { lat: Number(order.store.lat), lng: Number(order.store.lng) } : null;
+      if (store) {
+        if (!storeMarker.current) {
+          storeMarker.current = new g.maps.Marker({
+            map, position: store, title: 'Bite Theory kitchen',
+            label: { text: '🍳', fontSize: '22px' } as any,
+          });
+        } else storeMarker.current.setPosition(store);
+      }
+
       if (!destMarker.current) {
         destMarker.current = new g.maps.Marker({
           map, position: dest, title: 'Delivery location',
@@ -148,6 +161,17 @@ export default function OrderTrackPage() {
 
         const bounds = new g.maps.LatLngBounds();
         bounds.extend(dest); bounds.extend(rider);
+        map.fitBounds(bounds, 60);
+      } else if (store) {
+        /* no rider yet: line kitchen → home, "preparing" view */
+        if (!routeLine.current) {
+          routeLine.current = new g.maps.Polyline({
+            map, path: [store, dest], strokeColor: '#f39c12',
+            strokeOpacity: 0.7, strokeWeight: 3,
+          });
+        } else routeLine.current.setPath([store, dest]);
+        const bounds = new g.maps.LatLngBounds();
+        bounds.extend(dest); bounds.extend(store);
         map.fitBounds(bounds, 60);
       }
     }).catch(() => { /* no-map fallback: timeline still shows */ });
@@ -193,6 +217,15 @@ export default function OrderTrackPage() {
               </div>
               {!cancelled && !delivered && (
                 <div style={{ fontSize: 12.5, marginTop: 4, opacity: 0.9 }}>{meta?.label}</div>
+              )}
+              {/* stale GPS: rider assigned but no location ping in >60s */}
+              {!cancelled && !delivered && order.partner &&
+                (!order.partner.locationUpdatedAt ||
+                  Date.now() - new Date(order.partner.locationUpdatedAt).getTime() > 60_000) && (
+                <div style={{ fontSize: 12, marginTop: 6, padding: '4px 8px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.15)', display: 'inline-block' }}>
+                  📡 Rider location updating…
+                </div>
               )}
             </div>
 
