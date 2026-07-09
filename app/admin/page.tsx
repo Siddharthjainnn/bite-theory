@@ -14,6 +14,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
 import StoreSettingsPanel from '../components/StoreSettingsPanel';
+import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
+import {
+  fetchStoreSettings, InvoiceConfig as InvoiceConfigT,
+  fetchCouponAssignments, assignCoupon, deleteCouponAssignment,
+} from '../lib/bite';
+import {
+  customerInvoice, chefTicket, printHtml, openHtmlPreview, InvoiceOrder,
+} from '../lib/invoice';
 /* ============ types ============ */
 type Status = 'active' | 'inactive';
 
@@ -203,6 +211,27 @@ const api = {
     });
     if (!r.ok) {
       let msg = 'Could not assign rider';
+      try { const j = await r.json(); if (j?.message) msg = j.message; } catch {}
+      throw new Error(msg);
+    }
+    return r.json();
+  },
+
+  /** Full order incl. items + prepVideoUrl (findOneFull). Admin key attached. */
+  async getOrderFull(orderId: number): Promise<any> {
+    const r = await fetch(`${API_BASE}/orders/${orderId}`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw new Error('Failed to load order');
+    return r.json();
+  },
+
+  /** Attach / clear the "food being made" clip on an order. */
+  async setPrepVideo(orderId: number, prepVideoUrl: string | null) {
+    const r = await fetch(`${API_BASE}/orders/${orderId}/prep-video`, {
+      method: 'PATCH', headers: WRITE_HEADERS,
+      body: JSON.stringify({ prepVideoUrl }),
+    });
+    if (!r.ok) {
+      let msg = 'Could not save prep video';
       try { const j = await r.json(); if (j?.message) msg = j.message; } catch {}
       throw new Error(msg);
     }
@@ -630,6 +659,7 @@ const NAV: NavGroup[] = [
   ]},
   { title: 'Marketing', items: [
     { key: 'coupons', label: 'Coupons', icon: '🎟️' },
+    { key: 'coupon_assign', label: 'Assign Coupon', icon: '🎁' },
     { key: 'campaigns', label: 'Campaigns', icon: '📣' },
     { key: 'banners', label: 'Banners', icon: '🖼️' },
     { key: 'referrals', label: 'Referrals', icon: '🔗' },
@@ -651,6 +681,7 @@ const NAV: NavGroup[] = [
   ]},
   { title: 'System', items: [
     { key: 'settings', label: 'Store Settings', icon: '⚙️' },
+    { key: 'invoice_layout', label: 'Invoice Layout', icon: '🧾' },
     { key: 'audit_logs', label: 'Audit Logs', icon: '📋' },
   ]},
 ];
@@ -773,7 +804,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const showToast = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(''), 2400); }, []);
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === page);
 
-  const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items', 'settings'];
+  const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -841,6 +872,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             {page === 'orders' && <Orders showToast={showToast} />}
             {page === 'order_items' && <OrderItemsPage showToast={showToast} />}
             {page === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
+            {page === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
+            {page === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {!DEDICATED.includes(page) && MODULES[page] && <GenericModule config={MODULES[page]} showToast={showToast} />}
           </div>
         </div>
@@ -1381,6 +1414,58 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
   const [riders, setRiders] = useState<RiderOption[]>([]);
   const [chosenRider, setChosenRider] = useState<number | ''>(current.deliveryPartnerId || '');
 
+  /* prep video + printing */
+  const [full, setFull] = useState<any>(null);
+  const [prepVideoUrl, setPrepVideoUrl] = useState<string>('');
+  const [savingVideo, setSavingVideo] = useState(false);
+  const [invoiceCfg, setInvoiceCfg] = useState<InvoiceConfigT | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.getOrderFull(order.id)
+      .then((o) => { if (alive) { setFull(o); setPrepVideoUrl(o?.prepVideoUrl || ''); } })
+      .catch(() => {});
+    fetchStoreSettings()
+      .then((s) => { if (alive) setInvoiceCfg(s?.invoiceConfig || null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [order.id]);
+
+  async function savePrepVideo() {
+    setSavingVideo(true);
+    try {
+      const o = await api.setPrepVideo(order.id, prepVideoUrl.trim() || null);
+      setFull(o);
+      showToast(prepVideoUrl.trim() ? 'Prep video attached — customer notified 🎬' : 'Prep video removed');
+    } catch (e: any) { showToast(e.message || 'Could not save video'); }
+    setSavingVideo(false);
+  }
+
+  function buildInvoiceOrder(): InvoiceOrder {
+    const src = full || current;
+    return {
+      orderNumber: src.orderNumber,
+      placedAt: src.placedAt,
+      items: (src.items || []).map((it: any) => ({
+        productName: it.productName, quantity: Number(it.quantity),
+        unitPrice: Number(it.unitPrice), lineTotal: Number(it.lineTotal),
+      })),
+      subtotal: Number(src.subtotal), discount: Number(src.discount),
+      deliveryCharge: Number(src.deliveryCharge), tax: Number(src.tax || 0),
+      walletUsed: Number(src.walletUsed), tip: Number(src.tip || 0),
+      total: Number(src.total),
+      deliveryAddress: src.deliveryAddress,
+      customerName: src.customerName || `User #${src.userId}`,
+      paymentMethod: src.paymentMethod,
+      cookingNote: src.cookingNote,
+      deliveryInstructions: src.deliveryInstructions,
+      status: src.status,
+    };
+  }
+  function printChef() { printHtml(chefTicket(buildInvoiceOrder(), invoiceCfg)); }
+  function printCustomer() { printHtml(customerInvoice(buildInvoiceOrder(), invoiceCfg)); }
+  function previewCustomer() { openHtmlPreview(customerInvoice(buildInvoiceOrder(), invoiceCfg)); }
+
   const load = useCallback(async () => {
     setLoading(true);
     try { setHistory(await api.getOrderHistory(order.id)); } catch (e: any) { showToast(e.message || 'Could not load history'); }
@@ -1493,6 +1578,42 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
         </div>
       )}
 
+      {/* ── PREP VIDEO (signature feature) ── */}
+      <div style={{ marginTop: 18, padding: 14, border: `1px solid ${C.line}`, borderRadius: 12, background: '#fafcfb' }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: C.ink }}>
+          🎬 Prep video (shown to the customer while cooking)
+        </div>
+        <ImageUpload
+          folder="orders"
+          accept="video"
+          value={prepVideoUrl}
+          onChange={setPrepVideoUrl}
+        />
+        <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+          <button style={{ ...btnPrimary, opacity: savingVideo ? 0.6 : 1 }} disabled={savingVideo} onClick={savePrepVideo}>
+            {savingVideo ? 'Saving…' : (full?.prepVideoUrl ? 'Update video' : 'Attach & notify customer')}
+          </button>
+          {full?.prepVideoUrl && (
+            <button style={btnGhost} disabled={savingVideo} onClick={() => { setPrepVideoUrl(''); }}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── PRINT: chef ticket + customer invoice ── */}
+      <div style={{ marginTop: 14, padding: 14, border: `1px solid ${C.line}`, borderRadius: 12, background: '#fff' }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: C.ink }}>🖨️ Print</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button style={btnGhost} onClick={printChef} disabled={!full}>👨‍🍳 Chef ticket</button>
+          <button style={btnGhost} onClick={printCustomer} disabled={!full}>🧾 Customer invoice</button>
+          <button style={{ ...btnGhost, color: C.muted }} onClick={previewCustomer} disabled={!full}>👁 Preview</button>
+        </div>
+        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8 }}>
+          Layout & branding are controlled in Store Settings → Invoice layout.
+        </div>
+      </div>
+
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
         <button style={btnGhost} onClick={onClose}>Close</button>
         {isCancelled ? <Pill kind="out">Order cancelled</Pill>
@@ -1502,6 +1623,134 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
           : <Pill kind="active">Order complete</Pill>}
       </div>
     </Modal>
+  );
+}
+
+/* ============ ASSIGN COUPON TO USER ============ */
+function CouponAssignments({ showToast }: { showToast: (m: string) => void }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [couponId, setCouponId] = useState<number | ''>('');
+  const [userId, setUserId] = useState<number | ''>('');
+  const [userSearch, setUserSearch] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [a, c, u] = await Promise.all([
+        fetchCouponAssignments(ADMIN_KEY_HEADER()),
+        api.genericList('coupons').catch(() => []),
+        api.genericList('users').catch(() => []),
+      ]);
+      setRows(a); setCoupons(c); setUsers(u);
+    } catch (e: any) { showToast(e.message || 'Load failed'); }
+    setLoading(false);
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  const userLabel = (u: any) => {
+    const name = [u.firstName ?? u.first_name, u.lastName ?? u.last_name].filter(Boolean).join(' ');
+    return `${name || 'User'} · ${u.email || u.mobile || ''} · #${u.id}`;
+  };
+  const filteredUsers = userSearch.trim()
+    ? users.filter((u) => userLabel(u).toLowerCase().includes(userSearch.toLowerCase()))
+    : users;
+
+  async function assign() {
+    if (!couponId || !userId) { showToast('Pick a coupon and a customer'); return; }
+    setBusy(true);
+    try {
+      await assignCoupon(Number(couponId), Number(userId), note.trim() || undefined, ADMIN_KEY_HEADER());
+      showToast('Coupon assigned 🎁');
+      setNote(''); setUserId(''); setUserSearch('');
+      await load();
+    } catch (e: any) { showToast(e.message || 'Could not assign'); }
+    setBusy(false);
+  }
+
+  async function removeRow(id: number) {
+    try {
+      await deleteCouponAssignment(id, ADMIN_KEY_HEADER());
+      showToast('Assignment removed');
+      await load();
+    } catch (e: any) { showToast(e.message || 'Could not remove'); }
+  }
+
+  return (
+    <>
+      <PageHead title="Assign Coupon" sub="Gift a specific coupon to a specific customer. Assigned coupons bypass the global usage limit — the gift is the authorization." />
+
+      <div style={{ ...cardStyle, padding: 18, marginBottom: 18 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>🎁 New assignment</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 12, color: C.muted }}>Coupon</label>
+            <select style={inputStyle} value={couponId} onChange={(e) => setCouponId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">— select coupon —</option>
+              {coupons.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code} {c.description ? `· ${c.description}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.muted }}>Customer</label>
+            <input style={{ ...inputStyle, marginBottom: 6 }} placeholder="Search name / email / mobile…" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
+            <select style={inputStyle} value={userId} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')} size={1}>
+              <option value="">— select customer —</option>
+              {filteredUsers.slice(0, 100).map((u) => (
+                <option key={u.id} value={u.id}>{userLabel(u)}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <label style={{ fontSize: 12, color: C.muted }}>Note (optional, internal)</label>
+          <input style={inputStyle} placeholder="e.g. compensation for late order #BT123" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <button style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={assign}>
+            {busy ? 'Assigning…' : 'Assign coupon'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ ...cardStyle, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
+          <thead><tr>
+            <th style={th}>Coupon</th><th style={th}>Customer</th><th style={th}>Note</th>
+            <th style={th}>Status</th><th style={th}>Assigned</th><th style={th}></th>
+          </tr></thead>
+          <tbody>
+            {loading ? <tr><td style={td} colSpan={6}>Loading…</td></tr>
+              : rows.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No coupons assigned yet.</td></tr>
+              : rows.map((r) => (
+                <tr key={r.id}>
+                  <td style={td}><b>{r.couponCode || `#${r.couponId}`}</b></td>
+                  <td style={td}>{r.userName || r.userEmail || `User #${r.userId}`}</td>
+                  <td style={td}><small style={{ color: C.muted }}>{r.note || '—'}</small></td>
+                  <td style={td}>
+                    {r.isUsed
+                      ? <Pill kind="out">Used{r.orderId ? ` · #${r.orderId}` : ''}</Pill>
+                      : <Pill kind="active">Available</Pill>}
+                  </td>
+                  <td style={td}><small>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</small></td>
+                  <td style={td}>
+                    {!r.isUsed && (
+                      <button style={{ ...btnGhost, padding: '6px 12px', fontSize: 12, color: C.red, borderColor: '#f5c6cb' }} onClick={() => removeRow(r.id)}>Remove</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

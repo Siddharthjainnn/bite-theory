@@ -13,8 +13,9 @@ import AppShell from '../../components/AppShell';
 import AppHeader from '../../components/AppHeader';
 import {
   C, money, ApiOrder, fetchOrderTrack, STATUS_META, TRACK_STEPS, ApiOrderStatus,
-  cancelOrder, postReview,
+  cancelOrder, postReview, fetchStoreSettings, InvoiceConfig,
 } from '../../lib/bite';
+import { customerInvoice, printHtml, InvoiceOrder } from '../../lib/invoice';
 import { loadGoogleMaps, MAPS_KEY } from '../../lib/maps';
 
 const POLL_MS = 10000;
@@ -29,6 +30,36 @@ export default function OrderTrackPage() {
 
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [error, setError] = useState('');
+  const [invoiceCfg, setInvoiceCfg] = useState<InvoiceConfig | null>(null);
+
+  useEffect(() => {
+    fetchStoreSettings()
+      .then((s) => setInvoiceCfg(s?.invoiceConfig || null))
+      .catch(() => {});
+  }, []);
+
+  function handlePrintInvoice() {
+    if (!order) return;
+    const inv: InvoiceOrder = {
+      orderNumber: order.orderNumber,
+      placedAt: order.placedAt,
+      items: (order.items || []).map((it) => ({
+        productName: it.productName, quantity: it.quantity,
+        unitPrice: Number(it.unitPrice), lineTotal: Number(it.lineTotal),
+      })),
+      subtotal: Number(order.subtotal),
+      discount: Number(order.discount),
+      deliveryCharge: Number(order.deliveryCharge),
+      tax: Number((order as any).tax || 0),
+      walletUsed: Number(order.walletUsed),
+      tip: Number((order as any).tip || 0),
+      total: Number(order.total),
+      deliveryAddress: order.deliveryAddress,
+      paymentMethod: (order as any).paymentMethod,
+      status: order.status,
+    };
+    printHtml(customerInvoice(inv, invoiceCfg));
+  }
 
   /* cancel */
   const [cancelling, setCancelling] = useState(false);
@@ -229,6 +260,26 @@ export default function OrderTrackPage() {
               )}
             </div>
 
+            {/* ── PREP VIDEO (signature feature): watch your food being made ── */}
+            {order.prepVideoUrl && !cancelled && (
+              <div style={{ ...card, border: `1px solid ${C.green}`, overflow: 'hidden', padding: 0 }}>
+                <div style={{ padding: '12px 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 20 }}>🎬</span>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>Your food, being made fresh</div>
+                </div>
+                <video
+                  src={order.prepVideoUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  style={{ width: '100%', maxHeight: 320, background: '#000', display: 'block' }}
+                />
+                <div style={{ padding: '8px 14px 12px', fontSize: 12, color: C.muted }}>
+                  Made with care in our kitchen just for you. 💚
+                </div>
+              </div>
+            )}
+
             {/* ── DELIVERY OTP (§4.5): share with the rider at handoff ── */}
             {!cancelled && !delivered && order.deliveryOtp &&
               ['out_for_delivery', 'arriving_soon'].includes(order.status) && (
@@ -403,6 +454,16 @@ export default function OrderTrackPage() {
                   <span>Paid / To pay</span><span>{money(Number(order.total))}</span>
                 </div>
               </div>
+              <button
+                onClick={handlePrintInvoice}
+                style={{
+                  width: '100%', marginTop: 12, background: '#fff', color: C.greenDeep,
+                  border: `1px solid ${C.green}`, borderRadius: 10, padding: '10px',
+                  fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                🧾 Download / print invoice
+              </button>
             </div>
             <div style={{ height: 20 }} />
           </>

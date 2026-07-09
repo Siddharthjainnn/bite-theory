@@ -3,9 +3,10 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import AppShell from '../components/AppShell';
 import AppHeader from '../components/AppHeader';
-import { API_BASE, C, money } from '../lib/bite';
+import { API_BASE, C, money, fetchMyGiftedCoupons } from '../lib/bite';
 
 interface CouponRow {
   id: number;
@@ -30,9 +31,17 @@ function normalize(c: CouponRow) {
 }
 
 export default function CouponsPage() {
+  const { data: session } = useSession();
+  const userId = (session?.user as any)?.id ? Number((session?.user as any).id) : undefined;
   const [rows, setRows] = useState<ReturnType<typeof normalize>[]>([]);
+  const [gifted, setGifted] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userId) { setGifted([]); return; }
+    fetchMyGiftedCoupons(userId).then(setGifted).catch(() => setGifted([]));
+  }, [userId]);
 
   useEffect(() => {
     fetch(`${API_BASE}/coupons`, { cache: 'no-store' })
@@ -70,6 +79,39 @@ export default function CouponsPage() {
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 14 }}>
           Tap a coupon to copy the code, then paste it at checkout.
         </div>
+
+        {gifted.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: C.ink, marginBottom: 10 }}>🎁 Just for you</div>
+            {gifted.map((g) => (
+              <div
+                key={g.id}
+                style={{
+                  position: 'relative', background: `linear-gradient(135deg, ${C.greenSoft}, #fff)`,
+                  border: `1.5px solid ${C.green}`, borderRadius: 16, padding: '14px 16px', marginBottom: 12,
+                }}
+              >
+                <div style={{ display: 'inline-block', background: C.green, color: '#fff', fontWeight: 800, fontSize: 11, padding: '3px 10px', borderRadius: 999, marginBottom: 8 }}>
+                  GIFTED
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{g.description || 'A coupon just for you'}</div>
+                {g.note && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{g.note}</div>}
+                <button
+                  onClick={() => copy(g.code)}
+                  style={{
+                    marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: '#fff', border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 15, letterSpacing: 1, color: C.ink }}>{g.code}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: copied === g.code ? C.green : C.orangeDeep }}>
+                    {copied === g.code ? '✓ COPIED' : 'COPY'}
+                  </span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (

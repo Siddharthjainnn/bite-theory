@@ -30,6 +30,8 @@ export default function MapPicker({
 }) {
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const acRef = useRef<google.maps.places.Autocomplete | null>(null);
   const [ready, setReady] = useState(false);
   const [noMap, setNoMap] = useState(!MAPS_KEY);
   const [resolving, setResolving] = useState(false);
@@ -75,6 +77,28 @@ export default function MapPicker({
           const c = map.getCenter();
           if (c) settle(c.lat(), c.lng());
         });
+
+        /* Places autocomplete: typing an address recenters the map, which
+           triggers the same idle→settle flow used by dragging the pin. */
+        if (searchRef.current && g.maps.places?.Autocomplete) {
+          try {
+            const ac = new g.maps.places.Autocomplete(searchRef.current, {
+              fields: ['geometry', 'formatted_address'],
+              componentRestrictions: { country: 'in' },
+            });
+            ac.bindTo('bounds', map);
+            ac.addListener('place_changed', () => {
+              const place = ac.getPlace();
+              const loc = place.geometry?.location;
+              if (!loc) return;
+              map.setCenter(loc);
+              map.setZoom(17);
+              // idle listener will reverse-geocode + fire onPick
+            });
+            acRef.current = ac;
+          } catch { /* places not enabled on this key — map still works */ }
+        }
+
         setReady(true);
       } catch {
         if (!cancelled) setNoMap(true);
@@ -112,6 +136,22 @@ export default function MapPicker({
   }
 
   return (
+    <div>
+      {/* Places autocomplete search box */}
+      <div style={{ position: 'relative', marginBottom: 8 }}>
+        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 15, pointerEvents: 'none' }}>🔍</span>
+        <input
+          ref={searchRef}
+          type="text"
+          placeholder="Search for area, street, landmark…"
+          style={{
+            width: '100%', padding: '11px 12px 11px 36px', fontSize: 13.5,
+            border: `1px solid ${C.line}`, borderRadius: 12, outline: 'none',
+            background: '#fff', color: C.ink,
+          }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+        />
+      </div>
     <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.line}` }}>
       <div ref={mapDiv} style={{ width: '100%', height }} />
       {/* fixed center pin */}
@@ -148,6 +188,7 @@ export default function MapPicker({
       >
         {resolving ? 'Locating…' : picked?.address || 'Drag the map to set your location'}
       </div>
+    </div>
     </div>
   );
 }
