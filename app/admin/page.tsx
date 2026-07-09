@@ -57,6 +57,11 @@ const WRITE_HEADERS: Record<string, string> = {
 const ADMIN_KEY_HEADER = () => ({ 'x-admin-key': getAdminKey() });
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
+type RiderOption = {
+  id: number; name: string | null; mobile: string | null;
+  vehicleNo: string | null; isAvailable: boolean | null; activeOrders: number;
+};
+
 const ORDER_FLOW = [
   { key: 'order_received', label: 'Order Received' },
   { key: 'order_confirmed', label: 'Order Confirmed' },
@@ -175,7 +180,32 @@ const api = {
       method: 'PATCH', headers: WRITE_HEADERS,
       body: JSON.stringify({ status, note }),
     });
-    if (!r.ok) throw new Error('Status update failed');
+    if (!r.ok) {
+      let msg = 'Status update failed';
+      try { const j = await r.json(); if (j?.message) msg = j.message; } catch {}
+      throw new Error(msg);
+    }
+    return r.json();
+  },
+  /* Riders the admin can dispatch to (active, availability + current load). */
+  async listRidersForAssignment(): Promise<RiderOption[]> {
+    const r = await fetch(`${API_BASE}/delivery-partners/for-assignment`, {
+      headers: WRITE_HEADERS,
+    });
+    if (!r.ok) throw new Error('Could not load riders');
+    return r.json();
+  },
+  /* Assign a SPECIFIC rider to an order (admin dispatch). */
+  async assignRider(orderId: number, partnerId: number) {
+    const r = await fetch(`${API_BASE}/orders/${orderId}/assign-rider`, {
+      method: 'PATCH', headers: WRITE_HEADERS,
+      body: JSON.stringify({ partnerId }),
+    });
+    if (!r.ok) {
+      let msg = 'Could not assign rider';
+      try { const j = await r.json(); if (j?.message) msg = j.message; } catch {}
+      throw new Error(msg);
+    }
     return r.json();
   },
 
@@ -1348,6 +1378,8 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(order);
   const [busy, setBusy] = useState(false);
+  const [riders, setRiders] = useState<RiderOption[]>([]);
+  const [chosenRider, setChosenRider] = useState<number | ''>(current.deliveryPartnerId || '');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1360,6 +1392,23 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
   const isCancelled = current.status === 'cancelled';
   const nextStep = !isCancelled ? ORDER_FLOW[curIdx + 1] : null;
 
+  /* The next step needs a rider chosen (assigned_to_delivery), and no rider
+     is attached yet → show the picker instead of a blind advance button. */
+  const needsRider =
+    !!nextStep &&
+    nextStep.key === 'assigned_to_delivery' &&
+    !current.deliveryPartnerId;
+
+  /* Load the rider list once we're at the dispatch step. */
+  useEffect(() => {
+    if (!needsRider) return;
+    let alive = true;
+    api.listRidersForAssignment()
+      .then((list) => { if (alive) setRiders(list); })
+      .catch((e) => showToast(e.message || 'Could not load riders'));
+    return () => { alive = false; };
+  }, [needsRider, showToast]);
+
   async function advance() {
     if (!nextStep) return;
     setBusy(true);
@@ -1369,6 +1418,24 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
       showToast(`Advanced to "${nextStep.label}"`);
       await load(); onChanged();
     } catch (e: any) { showToast(e.message || 'Could not advance'); }
+    setBusy(false);
+  }
+
+  /* Assign the chosen rider, which also moves the order to assigned_to_delivery. */
+  async function assignChosenRider() {
+    if (!chosenRider) return;
+    setBusy(true);
+    try {
+      await api.assignRider(order.id, Number(chosenRider));
+      const r = riders.find((x) => x.id === Number(chosenRider));
+      setCurrent((c) => ({
+        ...c,
+        status: 'assigned_to_delivery',
+        deliveryPartnerId: Number(chosenRider),
+      }));
+      showToast(`Assigned to ${r?.name || 'rider #' + chosenRider}`);
+      await load(); onChanged();
+    } catch (e: any) { showToast(e.message || 'Could not assign rider'); }
     setBusy(false);
   }
 
@@ -1401,9 +1468,36 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
         })}
       </div>
 
+      {needsRider && (
+        <div style={{ marginTop: 18, padding: 14, border: `1px solid ${C.line}`, borderRadius: 12, background: '#fafcfb' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: C.ink }}>
+            🛵 Choose a delivery partner
+          </div>
+          {riders.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: C.muted }}>Loading riders… (none appear here if no active rider exists)</div>
+          ) : (
+            <select
+              value={chosenRider}
+              onChange={(e) => setChosenRider(e.target.value ? Number(e.target.value) : '')}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.line}`, fontSize: 13, color: C.ink, background: '#fff' }}
+            >
+              <option value="">— select a rider —</option>
+              {riders.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name || 'Rider #' + r.id}{r.mobile ? ` · ${r.mobile}` : ''}
+                  {r.isAvailable ? ' · free' : ` · ${r.activeOrders} active`}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
         <button style={btnGhost} onClick={onClose}>Close</button>
         {isCancelled ? <Pill kind="out">Order cancelled</Pill>
+          : needsRider
+            ? <button style={btnPrimary} disabled={busy || !chosenRider} onClick={assignChosenRider}>{busy ? 'Assigning…' : 'Assign rider'}</button>
           : nextStep ? <button style={btnPrimary} disabled={busy} onClick={advance}>{busy ? 'Updating…' : `Advance → ${nextStep.label}`}</button>
           : <Pill kind="active">Order complete</Pill>}
       </div>
