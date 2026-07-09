@@ -86,7 +86,7 @@ export default function AppHeader({
                   text mark so the header never looks broken. */}
               <img
                 className="bt-logo"
-                src="/logo.svg"
+                src="/logo.jpeg"
                 alt="Bite Theory"
                 onError={(e) => {
                   const el = e.currentTarget;
