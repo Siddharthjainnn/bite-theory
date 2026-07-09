@@ -110,6 +110,12 @@ export default function OrderTrackPage() {
   const riderMarker = useRef<google.maps.Marker | null>(null);
   const storeMarker = useRef<google.maps.Marker | null>(null);
   const routeLine = useRef<google.maps.Polyline | null>(null);
+  /* live-navigation extras */
+  const dirService = useRef<google.maps.DirectionsService | null>(null);
+  const riderAnim = useRef<number | null>(null);              // requestAnimationFrame id
+  const riderPos = useRef<google.maps.LatLng | null>(null);   // marker's current on-screen position
+  const routeKey = useRef<string>('');                        // last origin→dest we routed, to avoid re-requesting
+  const didFit = useRef<boolean>(false);                      // fit bounds only once
 
   const load = useCallback(async () => {
     try {
@@ -122,21 +128,67 @@ export default function OrderTrackPage() {
     }
   }, [id]);
 
-  /* poll until terminal state */
+  /* poll until terminal state — faster cadence once the rider is moving */
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
+    const intervalFor = (status?: string) =>
+      status === 'out_for_delivery' || status === 'arriving_soon' ? 5000 : POLL_MS;
     load().then((o) => {
       if (o && o.status !== 'delivered' && o.status !== 'cancelled') {
-        timer = setInterval(async () => {
-          const next = await load();
-          if (next && (next.status === 'delivered' || next.status === 'cancelled')) {
-            if (timer) clearInterval(timer);
-          }
-        }, POLL_MS);
+        let ms = intervalFor(o.status);
+        const start = (delay: number) => {
+          timer = setInterval(async () => {
+            const next = await load();
+            if (next && (next.status === 'delivered' || next.status === 'cancelled')) {
+              if (timer) clearInterval(timer);
+              return;
+            }
+            /* if the delivery leg just began, resample faster */
+            const want = intervalFor(next?.status);
+            if (want !== ms && timer) {
+              clearInterval(timer);
+              ms = want;
+              start(ms);
+            }
+          }, delay);
+        };
+        start(ms);
       }
     });
     return () => { if (timer) clearInterval(timer); };
   }, [load]);
+
+  /* Glide the rider marker from its current on-screen spot to the newest GPS
+     fix over ~1s using requestAnimationFrame + linear interpolation, so the
+     scooter visibly drives instead of jumping every poll. */
+  const animateRiderTo = useCallback((g: typeof google, target: google.maps.LatLng) => {
+    const marker = riderMarker.current;
+    if (!marker) return;
+    const from = riderPos.current || marker.getPosition() || target;
+    // no meaningful move → snap, skip animation
+    if (g.maps.geometry?.spherical &&
+        g.maps.geometry.spherical.computeDistanceBetween(from, target) < 2) {
+      marker.setPosition(target);
+      riderPos.current = target;
+      return;
+    }
+    if (riderAnim.current) cancelAnimationFrame(riderAnim.current);
+    const start = performance.now();
+    const DURATION = 1000; // ms
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / DURATION);
+      const lat = from.lat() + (target.lat() - from.lat()) * t;
+      const lng = from.lng() + (target.lng() - from.lng()) * t;
+      const pos = new g.maps.LatLng(lat, lng);
+      marker.setPosition(pos);
+      riderPos.current = pos;
+      if (t < 1) riderAnim.current = requestAnimationFrame(step);
+    };
+    riderAnim.current = requestAnimationFrame(step);
+  }, []);
+
+  /* cancel any in-flight animation on unmount */
+  useEffect(() => () => { if (riderAnim.current) cancelAnimationFrame(riderAnim.current); }, []);
 
   /* map: init + update markers whenever order changes */
   useEffect(() => {
@@ -176,34 +228,71 @@ export default function OrderTrackPage() {
       } else destMarker.current.setPosition(dest);
 
       if (rider) {
+        const target = new g.maps.LatLng(rider.lat, rider.lng);
+
+        /* create the rider marker once, then GLIDE it to each new fix
+           instead of teleporting — this is what makes it look like it's
+           actually driving between polls (Swiggy/Zomato style). */
         if (!riderMarker.current) {
           riderMarker.current = new g.maps.Marker({
-            map, position: rider, title: order.partner?.name || 'Rider',
+            map, position: target, title: order.partner?.name || 'Rider',
             label: { text: '🛵', fontSize: '22px' } as any,
+            zIndex: 999,
           });
-        } else riderMarker.current.setPosition(rider);
+          riderPos.current = target;
+        } else {
+          animateRiderTo(g, target);
+        }
 
-        if (!routeLine.current) {
-          routeLine.current = new g.maps.Polyline({
-            map, path: [rider, dest], strokeColor: '#2e7d32',
-            strokeOpacity: 0.85, strokeWeight: 4,
-          });
-        } else routeLine.current.setPath([rider, dest]);
+        /* real ROAD route rider→home via Directions API, not a straight
+           line through buildings. Only re-request when the origin moved
+           meaningfully, to stay within quota. */
+        const key = `${rider.lat.toFixed(4)},${rider.lng.toFixed(4)}->${dest.lat},${dest.lng}`;
+        if (key !== routeKey.current) {
+          routeKey.current = key;
+          if (!dirService.current) dirService.current = new g.maps.DirectionsService();
+          dirService.current.route(
+            {
+              origin: rider, destination: dest,
+              travelMode: g.maps.TravelMode.DRIVING,
+            },
+            (res, status) => {
+              const path = status === 'OK' && res?.routes?.[0]?.overview_path
+                ? res.routes[0].overview_path
+                : [target, new g.maps.LatLng(dest.lat, dest.lng)]; // fallback: straight line
+              if (!routeLine.current) {
+                routeLine.current = new g.maps.Polyline({
+                  map, path, strokeColor: '#2e7d32', strokeOpacity: 0.9, strokeWeight: 5,
+                });
+              } else {
+                routeLine.current.setPath(path);
+                routeLine.current.setOptions({ strokeColor: '#2e7d32', strokeOpacity: 0.9, strokeWeight: 5 });
+              }
+            },
+          );
+        }
 
-        const bounds = new g.maps.LatLngBounds();
-        bounds.extend(dest); bounds.extend(rider);
-        map.fitBounds(bounds, 60);
+        /* fit both pins in view once; afterwards let the user pan/zoom freely */
+        if (!didFit.current) {
+          const bounds = new g.maps.LatLngBounds();
+          bounds.extend(dest); bounds.extend(rider);
+          map.fitBounds(bounds, 60);
+          didFit.current = true;
+        }
       } else if (store) {
-        /* no rider yet: line kitchen → home, "preparing" view */
+        /* no rider yet: dashed kitchen → home line, "preparing" view */
         if (!routeLine.current) {
           routeLine.current = new g.maps.Polyline({
             map, path: [store, dest], strokeColor: '#f39c12',
             strokeOpacity: 0.7, strokeWeight: 3,
           });
         } else routeLine.current.setPath([store, dest]);
-        const bounds = new g.maps.LatLngBounds();
-        bounds.extend(dest); bounds.extend(store);
-        map.fitBounds(bounds, 60);
+        if (!didFit.current) {
+          const bounds = new g.maps.LatLngBounds();
+          bounds.extend(dest); bounds.extend(store);
+          map.fitBounds(bounds, 60);
+          didFit.current = true;
+        }
       }
     }).catch(() => { /* no-map fallback: timeline still shows */ });
   }, [order]);

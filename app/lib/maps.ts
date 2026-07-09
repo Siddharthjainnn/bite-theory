@@ -16,7 +16,7 @@ export function loadGoogleMaps(): Promise<typeof google> {
   if (loader) return loader;
   loader = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&libraries=marker,places&loading=async`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&libraries=marker,places,geometry&loading=async`;
     s.async = true;
     s.onload = () => resolve((window as any).google);
     s.onerror = () => { loader = null; reject(new Error('LOAD_FAILED')); };
