@@ -40,3 +40,12 @@ body {
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* Google Places Autocomplete dropdown — keep it above modals/drawers */
+.pac-container {
+  z-index: 100000 !important;
+  border-radius: 12px;
+  margin-top: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  font-family: inherit;
+}
+.pac-item { padding: 6px 12px; font-size: 13px; cursor: pointer; }

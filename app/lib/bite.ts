@@ -203,6 +203,11 @@ export interface ApiOrder {
   } | null;
   store?: { lat: number; lng: number; address?: string | null } | null;
   deliveryOtp?: string | null;
+  prepVideoUrl?: string | null;
+  cookingNote?: string | null;
+  deliveryInstructions?: string | null;
+  tip?: number | null;
+  paymentMethod?: string | null;
 }
 
 export interface SavedAddress {
@@ -464,6 +469,95 @@ export async function claimReferral(userId: number, code: string):
     body: JSON.stringify({ userId, code }),
   });
   return jsonOrThrow(res);
+}
+
+/* ───────────── customizable invoice / bill layout ───────────── */
+export interface InvoiceConfig {
+  brandName: string; logoUrl: string; tagline: string; addressLine: string;
+  phone: string; gstin: string; fssai: string;
+  accentColor: string; paper: 'thermal58' | 'thermal80' | 'a4';
+  showLogo: boolean; showGstin: boolean; showFssai: boolean; showCustomer: boolean;
+  showItemsTable: boolean;
+  columns: { qty: boolean; unitPrice: boolean; lineTotal: boolean };
+  showTaxBreakup: boolean; showPaymentMethod: boolean; showQrNote: boolean;
+  headerNote: string; footerNote: string; thankYouNote: string;
+  chefTicketTitle: string; chefShowNotes: boolean;
+  autoPrintOnReady: boolean;
+}
+
+export const DEFAULT_INVOICE_CONFIG: InvoiceConfig = {
+  brandName: 'Bite Theory', logoUrl: '', tagline: 'Smart Food. Better Living.',
+  addressLine: 'Indore, Madhya Pradesh', phone: '+91 90000 00000', gstin: '', fssai: '',
+  accentColor: '#2e7d32', paper: 'thermal80',
+  showLogo: true, showGstin: false, showFssai: false, showCustomer: true,
+  showItemsTable: true, columns: { qty: true, unitPrice: true, lineTotal: true },
+  showTaxBreakup: true, showPaymentMethod: true, showQrNote: false,
+  headerNote: '', footerNote: 'Thank you for ordering with us!', thankYouNote: 'See you again soon 🍱',
+  chefTicketTitle: 'KITCHEN TICKET', chefShowNotes: true, autoPrintOnReady: false,
+};
+
+/** Public settings read — includes invoiceConfig once migration is applied. */
+export async function fetchStoreSettings(): Promise<any> {
+  const res = await fetch(`${API_BASE}/settings`, { cache: 'no-store' });
+  return jsonOrThrow(res);
+}
+
+/* ───────────── prep video (admin) ───────────── */
+export async function setOrderPrepVideo(
+  orderId: number | string, prepVideoUrl: string | null,
+  adminHeaders: Record<string, string>,
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/orders/${orderId}/prep-video`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...adminHeaders },
+    body: JSON.stringify({ prepVideoUrl }),
+  });
+  return jsonOrThrow(res);
+}
+
+/* ───────────── admin-assigned coupons ───────────── */
+export interface CouponAssignmentRow {
+  id: number; couponId: number; userId: number; note?: string | null;
+  isUsed: boolean; orderId?: number | null; createdAt: string;
+  usedAt?: string | null; couponCode?: string; userEmail?: string; userName?: string;
+}
+export async function fetchCouponAssignments(
+  adminHeaders: Record<string, string>, userId?: number,
+): Promise<CouponAssignmentRow[]> {
+  const q = userId ? `?userId=${userId}` : '';
+  const res = await fetch(`${API_BASE}/coupon-assignments${q}`, {
+    headers: adminHeaders, cache: 'no-store',
+  });
+  return jsonOrThrow(res);
+}
+export async function assignCoupon(
+  couponId: number, userId: number, note: string | undefined,
+  adminHeaders: Record<string, string>,
+): Promise<CouponAssignmentRow> {
+  const res = await fetch(`${API_BASE}/coupon-assignments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...adminHeaders },
+    body: JSON.stringify({ couponId, userId, note }),
+  });
+  return jsonOrThrow(res);
+}
+export async function deleteCouponAssignment(
+  id: number, adminHeaders: Record<string, string>,
+): Promise<{ deleted: boolean; id: number }> {
+  const res = await fetch(`${API_BASE}/coupon-assignments/${id}`, {
+    method: 'DELETE', headers: adminHeaders,
+  });
+  return jsonOrThrow(res);
+}
+/** Customer: unused coupons gifted to me. */
+export async function fetchMyGiftedCoupons(userId: number): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE}/coupon-assignments?userId=${userId}&mine=1`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
 }
 
 /* ───────────── admin auth ───────────── */
