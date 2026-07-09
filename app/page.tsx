@@ -20,6 +20,7 @@ import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } fro
 import { useStoreSettings } from './lib/useStoreSettings';
 import StoreClosedBanner from './components/StoreClosedBanner';
 import DesktopLanding from './components/DesktopLanding';
+import DesktopApp from './components/DesktopApp';
 import { useDesktopLanding } from './lib/useDesktopLanding';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
@@ -32,7 +33,7 @@ export default function HomePage() {
   // Desktop-only marketing landing gate. On mobile this is always false, so
   // the app renders exactly as before. On desktop, show the landing until the
   // visitor clicks "Order Now". Admin/rider routes never mount this component.
-  const { showLanding, enterApp } = useDesktopLanding();
+  const { showLanding, enterApp, isDesktop } = useDesktopLanding();
 
   const [activeCat, setActiveCat] = useState<number | 'all'>('all');
   const [sort, setSort] = useState<Sort>('pop');
@@ -150,6 +151,12 @@ export default function HomePage() {
 
   if (showLanding) {
     return <DesktopLanding onEnter={enterApp} />;
+  }
+
+  // Desktop + already entered → full-width desktop ordering layout.
+  // Mobile always falls through to the app below (isDesktop is false there).
+  if (isDesktop) {
+    return <DesktopApp />;
   }
 
   return (

@@ -240,7 +240,19 @@ export default function ProfileDrawer({
 .drawer.on{transform:translateX(0)}
 @media(min-width:520px){
   .drawer-scrim{top:18px;bottom:18px;height:calc(100vh - 36px);border-radius:30px}
-  .drawer{top:18px;bottom:18px;height:calc(100vh - 36px);right:50%;margin-right:-240px;max-width:300px;border-radius:0 30px 30px 0}
+  /* Desktop: dock the drawer to the RIGHT edge of the centered phone frame.
+     Closed = slid fully off to the right; open = flush against the frame. */
+  .drawer{top:18px;bottom:18px;height:calc(100vh - 36px);
+    right:50%;margin-right:-240px;max-width:300px;border-radius:0 30px 30px 0;
+    transform:translateX(340px)}
+  .drawer.on{transform:translateX(0)}
+}
+@media(min-width:1024px){
+  /* Full-width desktop: frame is edge-to-edge, so dock to the true right edge. */
+  .drawer-scrim{left:0;transform:none;max-width:100%;top:0;bottom:0;height:100vh;border-radius:0}
+  .drawer{right:0;margin-right:0;top:0;bottom:0;height:100vh;border-radius:0;max-width:340px;
+    transform:translateX(360px)}
+  .drawer.on{transform:translateX(0)}
 }
 .drawer-head{background:linear-gradient(135deg,${C.dark},${C.darkSoft});padding:16px 18px 20px;position:relative;border-radius:0 0 22px 22px}
 .drawer-x{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.14);border:none;color:#fff;

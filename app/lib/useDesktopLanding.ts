@@ -24,13 +24,15 @@ const ENTERED_KEY = 'bt_entered_app';
 export function useDesktopLanding() {
   // start false to match server render (avoids hydration flash); decide on mount
   const [showLanding, setShowLanding] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
     const decide = () => {
       let entered = false;
       try { entered = sessionStorage.getItem(ENTERED_KEY) === '1'; } catch {}
-      const isDesktop = window.innerWidth >= DESKTOP_MIN;
-      setShowLanding(isDesktop && !entered);
+      const desktop = window.innerWidth >= DESKTOP_MIN;
+      setIsDesktop(desktop);
+      setShowLanding(desktop && !entered);
     };
     decide();
     window.addEventListener('resize', decide);
@@ -42,5 +44,5 @@ export function useDesktopLanding() {
     setShowLanding(false);
   };
 
-  return { showLanding, enterApp };
+  return { showLanding, enterApp, isDesktop };
 }
