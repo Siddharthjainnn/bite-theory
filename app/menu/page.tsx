@@ -8,7 +8,6 @@ import AppShell from '../components/AppShell';
 import AppHeader from '../components/AppHeader';
 import ProductCard from '../components/ProductCard';
 import CartBar from '../components/CartBar';
-import ProfileDrawer from '../components/ProfileDrawer';
 import { useCatalog } from '../lib/useCatalog';
 import { Category, Product } from '../lib/bite';
 
@@ -19,7 +18,6 @@ function MenuInner() {
 
   const [active, setActive] = useState<number | null>(null);
   const [q, setQ] = useState(initialQ);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [vegOnly] = useState(true); // pure-veg app: veg stays on
 
   // search filter (name + description), veg-only
@@ -55,17 +53,16 @@ function MenuInner() {
   return (
     <AppShell
       header={
-        <AppHeader
-          variant="home"
-          showSearch
-          initialQuery={initialQ}
-          onMenu={() => setDrawerOpen(true)}
-        />
+        // Bugs #3 & #10: removed `showSearch` so the header no longer renders a
+        // second search bar — the in-page live search below is the only one.
+        // Also dropped the page-local ProfileDrawer + onMenu: the shared drawer
+        // mounted by MenuProvider (app/layout.tsx) handles the hamburger, so we
+        // no longer mount a duplicate drawer here.
+        <AppHeader variant="home" />
       }
       footerExtra={<CartBar />}
-      overlay={<ProfileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
     >
-      {/* live in-page search too, so results update as you type */}
+      {/* live in-page search — the single source of truth for search on /menu */}
       <div style={{ padding: '10px 12px 2px' }}>
         <div
           style={{
