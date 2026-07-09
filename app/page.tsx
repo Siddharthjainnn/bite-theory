@@ -19,6 +19,8 @@ import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
 import { useStoreSettings } from './lib/useStoreSettings';
 import StoreClosedBanner from './components/StoreClosedBanner';
+import DesktopLanding from './components/DesktopLanding';
+import { useDesktopLanding } from './lib/useDesktopLanding';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
 
@@ -26,6 +28,11 @@ export default function HomePage() {
   const { products, categories, loading, error } = useCatalog();
   const { status: storeStatus } = useStoreSettings();
   const { add, cart } = useCart();
+
+  // Desktop-only marketing landing gate. On mobile this is always false, so
+  // the app renders exactly as before. On desktop, show the landing until the
+  // visitor clicks "Order Now". Admin/rider routes never mount this component.
+  const { showLanding, enterApp } = useDesktopLanding();
 
   const [activeCat, setActiveCat] = useState<number | 'all'>('all');
   const [sort, setSort] = useState<Sort>('pop');
@@ -140,6 +147,10 @@ export default function HomePage() {
     () => products.filter((p) => p.isTodaysSpecial && (!vegOnly || p.isVeg)),
     [products, vegOnly],
   );
+
+  if (showLanding) {
+    return <DesktopLanding onEnter={enterApp} />;
+  }
 
   return (
     <AppShell
