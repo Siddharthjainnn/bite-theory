@@ -182,9 +182,11 @@ export default function BiteAgentIntro({
 .intro-glow{position:absolute;top:8%;left:50%;transform:translateX(-50%);width:220px;height:220px;border-radius:50%;
   background:radial-gradient(circle,rgba(76,175,80,.5),transparent 66%)}
 .intro-avatar{position:relative;max-height:220px;width:auto;object-fit:contain;
-  filter:drop-shadow(0 16px 26px rgba(0,0,0,.4));animation:bob 3.4s ease-in-out infinite;
-  transform:translateY(14px) scale(.9);opacity:0;transition:transform .6s cubic-bezier(.2,.8,.2,1),opacity .6s}
-.intro-wrap.in .intro-avatar{transform:translateY(0) scale(1);opacity:1}
+  filter:drop-shadow(0 16px 26px rgba(0,0,0,.4));
+  animation:mascotLife 4s ease-in-out infinite;
+  transform-origin:bottom center;
+  opacity:0;transition:opacity .6s}
+.intro-wrap.in .intro-avatar{opacity:1}
 .intro-avatar-fallback{display:flex;align-items:flex-end;justify-content:center;font-size:150px;line-height:1;
   position:relative;animation:bob 3.4s ease-in-out infinite}
 .intro-badge{position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:7px;
@@ -220,6 +222,13 @@ export default function BiteAgentIntro({
   letter-spacing:1.5px;text-transform:uppercase;margin-top:16px}
 
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes mascotLife{
+  0%   {transform:translateY(0)   rotate(0deg)   scale(1)}
+  25%  {transform:translateY(-6px) rotate(-1.5deg) scale(1.01)}
+  50%  {transform:translateY(-9px) rotate(0deg)   scale(1.015)}
+  75%  {transform:translateY(-6px) rotate(1.5deg)  scale(1.01)}
+  100% {transform:translateY(0)   rotate(0deg)   scale(1)}
+}
 @keyframes wave{0%,60%,100%{transform:rotate(0)}30%{transform:rotate(18deg)}}
 @keyframes spin{to{transform:translateX(-50%) rotate(360deg)}}
 @keyframes drift{0%,100%{transform:translate(0,0)}50%{transform:translate(14px,-16px)}}
