@@ -114,7 +114,8 @@ export default function OrderTrackPage() {
   const dirService = useRef<google.maps.DirectionsService | null>(null);
   const riderAnim = useRef<number | null>(null);              // requestAnimationFrame id
   const riderPos = useRef<google.maps.LatLng | null>(null);   // marker's current on-screen position
-  const routeKey = useRef<string>('');                        // last origin→dest we routed, to avoid re-requesting
+  const routePath = useRef<google.maps.LatLng[] | null>(null); // the drawn road route, to measure rider deviation
+  const routeDest = useRef<string>('');                        // destination the current route was drawn to
   const didFit = useRef<boolean>(false);                      // fit bounds only once
 
   const load = useCallback(async () => {
@@ -256,12 +257,32 @@ export default function OrderTrackPage() {
           }
         }
 
-        /* real ROAD route rider→home via Directions API, not a straight
-           line through buildings. Only re-request when the origin moved
-           meaningfully, to stay within quota. */
-        const key = `${rider.lat.toFixed(4)},${rider.lng.toFixed(4)}->${dest.lat},${dest.lng}`;
-        if (key !== routeKey.current) {
-          routeKey.current = key;
+        /* ── COST-OPTIMISED ROUTING ──────────────────────────────────────
+           Each Directions call is a billable event. The old code re-routed
+           every ~11m of rider movement (~30 calls/delivery). Instead we:
+             1. draw the road route ONCE when the rider first appears,
+             2. keep gliding the marker along it every poll (free),
+             3. only re-request a route if the rider has strayed far from the
+                drawn path (took a different road) OR the destination changed.
+           This drops ~30 calls/delivery to ~2–3, keeping you inside the free
+           10,000/month tier well into thousands of orders. */
+        const destKey = `${dest.lat},${dest.lng}`;
+        let needsRoute = !routePath.current || routeDest.current !== destKey;
+
+        if (!needsRoute && routePath.current && g.maps.geometry?.spherical) {
+          /* how far is the rider from the nearest point of the drawn route?
+             if they've strayed > ~150m, they're on a different road — re-route. */
+          let minDist = Infinity;
+          for (const p of routePath.current) {
+            const d = g.maps.geometry.spherical.computeDistanceBetween(target, p);
+            if (d < minDist) minDist = d;
+            if (minDist < 150) break; // close enough, stop scanning early
+          }
+          if (minDist > 150) needsRoute = true;
+        }
+
+        if (needsRoute) {
+          routeDest.current = destKey;
           if (!dirService.current) dirService.current = new g.maps.DirectionsService();
           dirService.current.route(
             {
@@ -271,9 +292,7 @@ export default function OrderTrackPage() {
             (res, status) => {
               const ok = status === 'OK' && res?.routes?.[0]?.overview_path;
               if (!ok) {
-                /* Bug 3: this used to fail silently, hiding a misconfigured
-                   Directions API behind a straight line. Surface it so it's
-                   diagnosable from the browser console. */
+                /* Bug 3: surface failures instead of silently drawing a line. */
                 console.warn(
                   `[tracking] Directions API returned "${status}" — drawing straight-line ` +
                   `fallback. If this is REQUEST_DENIED, enable the Directions API (and billing) ` +
@@ -282,6 +301,7 @@ export default function OrderTrackPage() {
               const path = ok
                 ? res!.routes[0].overview_path
                 : [target, new g.maps.LatLng(dest.lat, dest.lng)]; // fallback: straight line
+              routePath.current = path as google.maps.LatLng[]; // remember for deviation checks
               if (!routeLine.current) {
                 routeLine.current = new g.maps.Polyline({
                   map, path, strokeColor: '#2e7d32', strokeOpacity: 0.9, strokeWeight: 5,
