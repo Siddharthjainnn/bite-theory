@@ -44,6 +44,7 @@ export default function RiderPage() {
   const [busy, setBusy] = useState(false);
   const [available, setAvailable] = useState<ApiOrder[]>([]);
   const [mine, setMine] = useState<ApiOrder[]>([]);
+  const [completed, setCompleted] = useState<ApiOrder[]>([]); // #13/#16 delivered history
   const [gpsOn, setGpsOn] = useState(false);
   const [earnings, setEarnings] = useState<RiderEarnings | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -61,14 +62,20 @@ export default function RiderPage() {
 
   const refresh = useCallback(async (r: Rider) => {
     try {
-      const [avail, own, earn] = await Promise.all([
+      const [avail, own, earn, done] = await Promise.all([
         api('/orders/available-for-riders'),
         api(`/orders?deliveryPartnerId=${r.id}&active=true`),
         api(`/delivery-partners/${r.id}/earnings`).catch(() => null),
+        /* #13/#16: the rider's delivered orders (all their orders minus the
+           active ones) so they have a real completed-deliveries history. */
+        api(`/orders?deliveryPartnerId=${r.id}`).catch(() => []),
       ]);
       setAvailable(avail);
       setMine(own);
       if (earn) setEarnings(earn);
+      setCompleted(
+        (Array.isArray(done) ? done : []).filter((o: ApiOrder) => o.status === 'delivered'),
+      );
     } catch { /* transient */ }
   }, []);
 
@@ -157,6 +164,12 @@ export default function RiderPage() {
     setBusy(true); setErr('');
     try {
       await api(`/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify(body) });
+      /* #63: as soon as delivery succeeds, drop the order from the active list
+         so the "Mark delivered" button can't be clicked again (and re-prompt
+         OTP) in the moment before refresh completes. */
+      if (status === 'delivered') {
+        setMine((list) => list.filter((o) => o.id !== id));
+      }
       await refresh(rider);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   }
@@ -359,6 +372,33 @@ export default function RiderPage() {
           </button>
         </div>
       ))}
+
+      {/* #13/#16: completed deliveries history */}
+      <div style={{ margin: '18px 14px 8px', fontWeight: 800, fontSize: 14, color: C.ink }}>
+        Completed deliveries ({completed.length})
+      </div>
+      {completed.length === 0 ? (
+        <div style={{ ...card, color: C.muted, fontSize: 13 }}>No completed deliveries yet.</div>
+      ) : (
+        completed.map((o) => (
+          <div key={o.id} style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <b style={{ fontSize: 13.5 }}>{o.orderNumber}</b>
+              <span style={{
+                fontSize: 11, fontWeight: 700, color: '#fff', background: C.green,
+                padding: '2px 9px', borderRadius: 20,
+              }}>Delivered</span>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted }}>
+              📍 {o.deliveryAddress || 'Address on order'}
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+              Order {money(Number(o.total))}
+              {(o as any).deliveredAt && ` · ${new Date((o as any).deliveredAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
