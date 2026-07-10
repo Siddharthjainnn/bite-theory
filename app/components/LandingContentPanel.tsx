@@ -16,7 +16,7 @@ const G = '#0D3B2E', AMBER = '#b76e00', LINE = '#e4ebe6';
 
 interface Feature { icon: string; title: string; subtitle: string }
 interface LandingContent {
-  logoUrl: string; brandName: string;
+  logoUrl: string; brandName: string; city: string;
   tagline1: string; tagline2: string; heroSubtitle: string; heroBadge: string;
   stat1Value: string; stat1Label: string;
   stat2Value: string; stat2Label: string;
@@ -27,7 +27,7 @@ interface LandingContent {
 }
 
 const BLANK: LandingContent = {
-  logoUrl: '', brandName: 'Bite Theory',
+  logoUrl: '', brandName: 'Bites Theory', city: 'Indore',
   tagline1: 'Smart Food.', tagline2: 'Better Living.',
   heroSubtitle: '', heroBadge: '100% PURE VEG · INDORE KA APNA',
   stat1Value: '4.8★', stat1Label: '1,200+ ratings',
@@ -110,6 +110,8 @@ export default function LandingContentPanel({
         <input style={input} value={lc.logoUrl} onChange={(e) => set('logoUrl', e.target.value)} placeholder="https://…/logo.png (blank = letter badge)" />
         <label style={label}>Brand name</label>
         <input style={input} value={lc.brandName} onChange={(e) => set('brandName', e.target.value)} />
+        <label style={label}>City (shown in header, e.g. Indore)</label>
+        <input style={input} value={lc.city} onChange={(e) => set('city', e.target.value)} placeholder="Indore" />
       </div>
 
       <div style={card}>

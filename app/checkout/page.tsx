@@ -192,7 +192,7 @@ export default function CheckoutPage() {
           amount: pay.amount,
           currency: pay.currency,
           orderId: pay.razorpayOrderId,
-          name: 'Bite Theory',
+          name: 'Bites Theory',
           description: 'Order payment',
           prefill: {
             name: user?.name || undefined,

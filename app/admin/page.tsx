@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Bite Theory — Admin Console v5
+ * Bites Theory — Admin Console v5
  * Location:  app/admin/page.tsx
  *
  * LIVE & WIRED (dedicated pages): Dashboard, Products, Categories, Orders, Order Items
@@ -837,7 +837,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         <aside className={`bt-sidebar ${drawerOpen ? 'open' : ''}`}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 16px', borderBottom: '1px solid rgba(255,255,255,.08)', marginBottom: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${C.green},${C.orange})`, display: 'grid', placeItems: 'center', fontWeight: 800, color: '#fff', fontSize: 17 }}>B</div>
-            <div><b style={{ color: '#fff', fontSize: 15 }}>Bite Theory</b><span style={{ display: 'block', fontSize: 10, color: '#8fb3a3', letterSpacing: 1 }}>ADMIN CONSOLE</span></div>
+            <div><b style={{ color: '#fff', fontSize: 15 }}>Bites Theory</b><span style={{ display: 'block', fontSize: 10, color: '#8fb3a3', letterSpacing: 1 }}>ADMIN CONSOLE</span></div>
             <button onClick={() => setDrawerOpen(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#cfe3d8', fontSize: 20, cursor: 'pointer', display: drawerOpen ? 'block' : 'none' }}>×</button>
           </div>
           {NAV.map(group => (
@@ -2192,7 +2192,7 @@ export default function AdminPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${C.green},${C.orange})`, display: 'grid', placeItems: 'center', fontWeight: 800, color: '#fff', fontSize: 20 }}>B</div>
           <div>
-            <b style={{ fontSize: 17, color: C.ink }}>Bite Theory</b>
+            <b style={{ fontSize: 17, color: C.ink }}>Bites Theory</b>
             <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1.2, fontWeight: 700 }}>ADMIN CONSOLE</div>
           </div>
         </div>
@@ -2214,7 +2214,7 @@ export default function AdminPage() {
         </button>
 
         <div style={{ marginTop: 14, fontSize: 11, color: C.muted, textAlign: 'center' }}>
-          Access is restricted to Bite Theory staff.
+          Access is restricted to Bites Theory staff.
         </div>
       </div>
     </div>

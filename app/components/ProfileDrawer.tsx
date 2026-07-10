@@ -20,7 +20,7 @@ const ITEMS: Item[] = [
   { ic: '🧾', label: 'Order History', href: '/orders' },
   { ic: '🎟️', label: 'My Coupons', href: '/coupons' },
   { ic: '🎁', label: 'Refer & Earn', refer: true },
-  { ic: 'ℹ️', label: 'About Bite Theory', href: '/info?tab=about' },
+  { ic: 'ℹ️', label: 'About Bites Theory', href: '/info?tab=about' },
   { ic: '🛟', label: 'Help & Support', href: '/info?tab=help' },
   { ic: '📄', label: 'Terms & Privacy', href: '/info?tab=terms' },
   { ic: '📍', label: 'Saved Addresses', href: '/account/addresses' },
@@ -116,7 +116,7 @@ export default function ProfileDrawer({
                 <span className="drawer-ava">{initials(user?.name)}</span>
               )}
               <div>
-                <div className="drawer-name">{user?.name || 'Bite Theory User'}</div>
+                <div className="drawer-name">{user?.name || 'Bites Theory User'}</div>
                 <div className="drawer-mail">{user?.email}</div>
                 <span className="drawer-tier">🏅 {tier} MEMBER</span>
               </div>

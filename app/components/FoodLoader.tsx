@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Bite Theory's signature food loader 🍲
+ * Bites Theory's signature food loader 🍲
  *
  * - `full`   → full-screen takeover (route transitions / page loads)
  * - default  → inline block (sections, panels)

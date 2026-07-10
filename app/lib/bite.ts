@@ -1,5 +1,5 @@
 /**
- * Bite Theory — shared library
+ * Bites Theory — shared library
  * Types, theme tokens, API helpers, and small utilities used by every page.
  */
 
@@ -486,7 +486,7 @@ export interface InvoiceConfig {
 }
 
 export const DEFAULT_INVOICE_CONFIG: InvoiceConfig = {
-  brandName: 'Bite Theory', logoUrl: '', tagline: 'Smart Food. Better Living.',
+  brandName: 'Bites Theory', logoUrl: '', tagline: 'Smart Food. Better Living.',
   addressLine: 'Indore, Madhya Pradesh', phone: '+91 90000 00000', gstin: '', fssai: '',
   accentColor: '#2e7d32', paper: 'thermal80',
   showLogo: true, showGstin: false, showFssai: false, showCustomer: true,

@@ -8,6 +8,7 @@ import { signIn, useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { C } from '../lib/bite';
+import { useLanding } from '../lib/useLanding';
 import GlobalStyle from '../components/GlobalStyle';
 
 function LoginInner() {
@@ -15,6 +16,8 @@ function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const callbackUrl = params.get('callbackUrl') || '/';
+  const { content } = useLanding();
+  const brandName = content.brandName || 'Bites Theory';
 
   // already logged in → leave the login page
   useEffect(() => {
@@ -58,9 +61,9 @@ function LoginInner() {
               }}
             >
               <span className="brandmark" style={{ width: 40, height: 40, fontSize: 22 }}>
-                B
+                {(brandName||"B").charAt(0)}
               </span>
-              Bite Theory
+              {brandName}
             </div>
 
             <div
@@ -152,7 +155,7 @@ function LoginInner() {
                 lineHeight: 1.5,
               }}
             >
-              By continuing you agree to Bite Theory&apos;s
+              By continuing you agree to {brandName}&apos;s
               <br />
               Terms of Service & Privacy Policy.
             </p>

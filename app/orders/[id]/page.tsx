@@ -214,7 +214,7 @@ export default function OrderTrackPage() {
       if (store) {
         if (!storeMarker.current) {
           storeMarker.current = new g.maps.Marker({
-            map, position: store, title: 'Bite Theory kitchen',
+            map, position: store, title: 'Bites Theory kitchen',
             label: { text: '🍳', fontSize: '22px' } as any,
           });
         } else storeMarker.current.setPosition(store);

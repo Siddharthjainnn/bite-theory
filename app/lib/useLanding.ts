@@ -11,7 +11,7 @@ import { API_BASE } from './bite';
 
 export interface LandingFeature { icon: string; title: string; subtitle: string }
 export interface LandingContent {
-  logoUrl: string; brandName: string;
+  logoUrl: string; brandName: string; city: string;
   tagline1: string; tagline2: string; heroSubtitle: string; heroBadge: string;
   stat1Value: string; stat1Label: string;
   stat2Value: string; stat2Label: string;
@@ -29,7 +29,8 @@ export interface StoreLocation {
 
 const DEFAULT_LANDING: LandingContent = {
   logoUrl: '',
-  brandName: 'Bite Theory',
+  brandName: 'Bites Theory',
+  city: 'Indore',
   tagline1: 'Smart Food.',
   tagline2: 'Better Living.',
   heroSubtitle:

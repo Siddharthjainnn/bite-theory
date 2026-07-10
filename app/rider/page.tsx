@@ -177,7 +177,7 @@ export default function RiderPage() {
       <div style={page}>
         <div style={{ background: C.dark, color: '#fff', padding: '26px 20px', borderRadius: '0 0 24px 24px', marginBottom: 20 }}>
           <div style={{ fontSize: 26 }}>🛵</div>
-          <div style={{ fontWeight: 800, fontSize: 20 }}>Bite Theory Rider</div>
+          <div style={{ fontWeight: 800, fontSize: 20 }}>Bites Theory Rider</div>
           <div style={{ fontSize: 13, opacity: 0.85 }}>Deliver happiness, one bite at a time</div>
         </div>
         <div style={card}>

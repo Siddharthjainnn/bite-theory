@@ -63,7 +63,7 @@ function CompleteProfileInner() {
               <div className="bt-brand">
                 <span className="brandmark">B</span>
                 <div>
-                  <div className="bt-brand-name">Bite Theory</div>
+                  <div className="bt-brand-name">Bites Theory</div>
                   <div className="bt-loc">📍 Indore</div>
                 </div>
               </div>

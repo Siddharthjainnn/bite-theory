@@ -5,7 +5,7 @@ import GlobalStyle from './GlobalStyle';
 import BottomNav from './BottomNav';
 
 /**
- * Wraps a page in the standard Bite Theory shell:
+ * Wraps a page in the standard Bites Theory shell:
  *   [header (passed in)] [scrollable content] [optional cartbar] [bottom nav]
  */
 export default function AppShell({

@@ -10,10 +10,10 @@ import { C } from '../lib/bite';
 
 const TABS: Record<string, { title: string; body: React.ReactNode }> = {
   about: {
-    title: 'About Bite Theory',
+    title: 'About Bites Theory',
     body: (
       <>
-        <p>Bite Theory is a 100% pure-veg cloud kitchen in Indore serving smart, nutrition-first meals — thalis, high-protein bowls, healthy snacks and more — at honest prices.</p>
+        <p>Bites Theory is a 100% pure-veg cloud kitchen in Indore serving smart, nutrition-first meals — thalis, high-protein bowls, healthy snacks and more — at honest prices.</p>
         <p>Our mission: <b>Smart Food. Better Living.</b> Every dish lists its calories and macros so you always know what you’re eating.</p>
       </>
     ),
@@ -34,7 +34,7 @@ const TABS: Record<string, { title: string; body: React.ReactNode }> = {
     title: 'Terms & Privacy',
     body: (
       <>
-        <p><b>Terms of Service.</b> By using Bite Theory you agree to order for lawful personal use. Prices, offers and coupons may change without notice. Orders can’t be cancelled once the kitchen starts preparing them.</p>
+        <p><b>Terms of Service.</b> By using Bites Theory you agree to order for lawful personal use. Prices, offers and coupons may change without notice. Orders can’t be cancelled once the kitchen starts preparing them.</p>
         <p><b>Privacy.</b> We collect your name, email and mobile number only to process and deliver your orders and to send order updates. We never sell your data. You can request deletion of your account by contacting support.</p>
       </>
     ),

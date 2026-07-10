@@ -15,6 +15,7 @@ import { useCatalog } from '../lib/useCatalog';
 import { useCart } from '../providers/CartProvider';
 import { C, money, effectivePrice, hasOffer, Product } from '../lib/bite';
 import { useStoreSettings } from '../lib/useStoreSettings';
+import { useLanding } from '../lib/useLanding';
 import { useMenu } from './MenuProvider';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
@@ -28,6 +29,9 @@ export default function DesktopApp({
   const { openMenu } = useMenu();
   const openProfile = onOpenProfile || openMenu;
   const { products, categories, loading } = useCatalog();
+  const { content } = useLanding();
+  const brandName = content.brandName || 'Bites Theory';
+  const brandCity = content.city || '';
   const { settings } = useStoreSettings();
   const { cart, add, sub, count, totalFor } = useCart();
 
@@ -69,7 +73,7 @@ export default function DesktopApp({
       {/* ── TOP BAR ── */}
       <header className="da-top">
         <div className="da-logo">B</div>
-        <div className="da-brand">Bite Theory <span>· Indore</span></div>
+        <div className="da-brand">{brandName} {brandCity && <span>· {brandCity}</span>}</div>
         <div className="da-search">
           <span>🔍</span>
           <input

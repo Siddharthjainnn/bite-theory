@@ -70,7 +70,7 @@ export default function BiteAgentIntro({
       <div className="intro-inner">
         <div className="intro-brand">
           <span className="brandmark">B</span>
-          <span>Bite Theory</span>
+          <span>Bites Theory</span>
           <button className="intro-skip" onClick={() => onDone(null)}>
             Skip →
           </button>

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import NotificationBell from './NotificationBell';
 import { useMenu } from './MenuProvider';
+import { useLanding } from '../lib/useLanding';
 
 /**
  * Shared header used across pages.
@@ -52,6 +53,14 @@ export default function AppHeader({
   const { data: session } = useSession();
   const user = session?.user as any;
 
+  /* brand identity is admin-managed (GET /settings → landingContent).
+     name, logo and city all come from here so a rebrand in /admin updates
+     the header everywhere — no code change needed. */
+  const { content } = useLanding();
+  const brandName = content.brandName || 'Bites Theory';
+  const brandCity = content.city || '';
+  const brandLogo = content.logoUrl || '';
+
   const handleMenu = onMenu || openMenu; // hamburger → nav drawer
 
   // #8: avatar opens the account menu, not the same drawer as the hamburger.
@@ -82,22 +91,22 @@ export default function AppHeader({
               ☰
             </button>
             <div className="bt-brand">
-              {/* #1: real logo asset. If it 404s, the onError fallback shows the
-                  text mark so the header never looks broken. */}
+              {/* logo: admin-uploaded URL first, then the bundled asset, then a
+                  text mark if both fail — header never looks broken. */}
               <img
                 className="bt-logo"
-                src="/logo.jpeg"
-                alt="Bite Theory"
+                src={brandLogo || '/logo.jpeg'}
+                alt={brandName}
                 onError={(e) => {
                   const el = e.currentTarget;
                   el.style.display = 'none';
                   el.nextElementSibling?.removeAttribute('hidden');
                 }}
               />
-              <span className="brandmark" hidden>B</span>
+              <span className="brandmark" hidden>{(brandName || 'B').charAt(0)}</span>
               <div>
-                <div className="bt-brand-name">Bite Theory</div>
-                <div className="bt-loc">📍 Indore</div>
+                <div className="bt-brand-name">{brandName}</div>
+                {brandCity && <div className="bt-loc">📍 {brandCity}</div>}
               </div>
             </div>
           </div>

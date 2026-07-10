@@ -1,5 +1,5 @@
 /**
- * NextAuth (Auth.js) configuration for Bite Theory customers.
+ * NextAuth (Auth.js) configuration for Bites Theory customers.
  *
  * Flow:
  *  1. User clicks "Continue with Google".
