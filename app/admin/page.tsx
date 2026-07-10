@@ -798,7 +798,20 @@ function BarChart({ data, color = C.green, height = 140 }: { data: { label: stri
 
 /* ============ main ============ */
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
-  const [page, setPage] = useState<PageKey>('dashboard');
+  /* #9: on refresh the admin used to bounce back to Dashboard because the
+     current page lived only in React state. Persist it in the URL hash
+     (e.g. #orders) so a refresh — or a shared link — reopens the same page. */
+  const [page, _setPage] = useState<PageKey>('dashboard');
+  useEffect(() => {
+    const fromHash = (typeof window !== 'undefined' ? window.location.hash.replace('#', '') : '') as PageKey;
+    const valid = NAV.flatMap(g => g.items).some(i => i.key === fromHash);
+    if (valid && fromHash !== page) _setPage(fromHash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const setPage = useCallback((p: PageKey) => {
+    _setPage(p);
+    if (typeof window !== 'undefined') window.history.replaceState(null, '', `#${p}`);
+  }, []);
   const [toast, setToast] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const showToast = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(''), 2400); }, []);
