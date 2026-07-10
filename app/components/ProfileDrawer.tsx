@@ -21,7 +21,7 @@ const ITEMS: Item[] = [
   { ic: '🎟️', label: 'My Coupons', href: '/coupons' },
   { ic: '🎁', label: 'Refer & Earn', refer: true },
   { ic: 'ℹ️', label: 'About Bites Theory', href: '/info?tab=about' },
-  { ic: '🛟', label: 'Help & Support', href: '/info?tab=help' },
+  { ic: '🛟', label: 'Help & Support', href: '/account/support' },
   { ic: '📄', label: 'Terms & Privacy', href: '/info?tab=terms' },
   { ic: '📍', label: 'Saved Addresses', href: '/account/addresses' },
   { ic: '💳', label: 'Wallet & Transactions', href: '/account/wallet' },

@@ -569,3 +569,25 @@ export async function adminLogin(email: string, password: string):
   });
   return jsonOrThrow(res);
 }
+
+/* ───────────── support tickets (#27 / #53) ───────────── */
+export interface SupportTicket {
+  id: number; userId?: number; orderId?: number;
+  subject?: string; message?: string; status?: string;
+  createdAt?: string; updatedAt?: string;
+}
+/** Customer raises a support ticket. */
+export async function createSupportTicket(payload: {
+  userId: number; subject: string; message: string; orderId?: number;
+}): Promise<SupportTicket> {
+  const res = await fetch(`${API_BASE}/support-tickets`, {
+    method: 'POST', headers: await authHeaders(), body: JSON.stringify(payload),
+  });
+  return jsonOrThrow(res);
+}
+/** Customer's own tickets. */
+export async function fetchMySupportTickets(userId: number): Promise<SupportTicket[]> {
+  const res = await fetch(`${API_BASE}/support-tickets?userId=${userId}`,
+    { cache: 'no-store', headers: await authHeaders() });
+  return jsonOrThrow(res);
+}
