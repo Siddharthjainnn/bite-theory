@@ -140,7 +140,9 @@ export default function RiderPage() {
   }
   async function setStatus(id: number, status: string, note?: string) {
     if (!rider) return;
-    const body: Record<string, unknown> = { status, note };
+    /* C1: prove which rider is acting so the backend can confirm this rider
+       is actually assigned to the order before allowing the change. */
+    const body: Record<string, unknown> = { status, note, deliveryPartnerId: rider.id };
     if (status === 'delivered') {
       /* §4.5 handoff proof: customer reads the 4-digit OTP from their tracking page */
       const otp = window.prompt('Ask the customer for their 4-digit delivery OTP:');

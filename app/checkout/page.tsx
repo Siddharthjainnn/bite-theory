@@ -75,6 +75,13 @@ export default function CheckoutPage() {
   async function saveNewAddress() {
     if (!userId) return;
     if (!newAddr.fullAddress.trim()) { alert('Please enter your full address'); return; }
+    /* C3: an address with no coordinates can't be checked against the delivery
+       zone — the customer could pay for a place we don't serve. Require a map
+       pin so lat/lng are always present. */
+    if (picked?.lat == null || picked?.lng == null) {
+      alert('Please drop a pin on the map so we can confirm we deliver to your location.');
+      return;
+    }
     setSavingAddr(true);
     try {
       const saved = await createAddress({
