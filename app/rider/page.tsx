@@ -23,7 +23,8 @@ interface RiderEarnings {
   week: { amount: number; deliveries: number };
   cashInHand: number; codCollected: number; codDeposited: number;
   history: { orderId: number; orderNumber?: string; baseFare: number;
-    distancePay: number; tip: number; total: number; createdAt: string }[];
+    distancePay: number; tip: number; total: number; createdAt: string;
+    orderValue?: number; walletUsed?: number; paymentMethod?: string; cashToCollect?: number }[];
 }
 
 async function api(path: string, init?: RequestInit) {
@@ -260,7 +261,18 @@ export default function RiderPage() {
                   <div>
                     <b>{h.orderNumber || `#${h.orderId}`}</b>
                     <div style={{ color: C.muted, fontSize: 11 }}>
-                      {new Date(h.createdAt).toLocaleString()} · fare {money(Number(h.baseFare))}
+                      {new Date(h.createdAt).toLocaleString()}
+                      {/* Bug #64/#65: show this order's real value + how it was paid,
+                          so deliveries no longer all look identical. */}
+                      {h.orderValue != null && ` · order ${money(Number(h.orderValue))}`}
+                      {h.paymentMethod && ` · ${h.paymentMethod === 'cod' ? 'COD' : 'Online'}`}
+                      {/* Bug #61: only show cash-to-collect when there's actually
+                          cash to collect (COD with a non-zero balance). */}
+                      {h.paymentMethod === 'cod' && Number(h.cashToCollect) > 0 &&
+                        ` · collect ${money(Number(h.cashToCollect))}`}
+                    </div>
+                    <div style={{ color: C.muted, fontSize: 11 }}>
+                      Your payout: fare {money(Number(h.baseFare))}
                       {Number(h.distancePay) > 0 && ` + dist ${money(Number(h.distancePay))}`}
                       {Number(h.tip) > 0 && ` + tip ${money(Number(h.tip))} 💚`}
                     </div>
