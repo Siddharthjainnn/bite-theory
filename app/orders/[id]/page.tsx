@@ -244,6 +244,18 @@ export default function OrderTrackPage() {
           animateRiderTo(g, target);
         }
 
+        /* Bug 5: if the rider has drifted near/outside the visible map, gently
+           pan to keep them and the home pin in frame (like Google Maps) rather
+           than making the customer chase the marker by hand. */
+        if (didFit.current) {
+          const b = map.getBounds();
+          if (b && !b.contains(target)) {
+            const follow = new g.maps.LatLngBounds();
+            follow.extend(dest); follow.extend(target);
+            map.panToBounds(follow, 60);
+          }
+        }
+
         /* real ROAD route rider→home via Directions API, not a straight
            line through buildings. Only re-request when the origin moved
            meaningfully, to stay within quota. */
@@ -257,8 +269,18 @@ export default function OrderTrackPage() {
               travelMode: g.maps.TravelMode.DRIVING,
             },
             (res, status) => {
-              const path = status === 'OK' && res?.routes?.[0]?.overview_path
-                ? res.routes[0].overview_path
+              const ok = status === 'OK' && res?.routes?.[0]?.overview_path;
+              if (!ok) {
+                /* Bug 3: this used to fail silently, hiding a misconfigured
+                   Directions API behind a straight line. Surface it so it's
+                   diagnosable from the browser console. */
+                console.warn(
+                  `[tracking] Directions API returned "${status}" — drawing straight-line ` +
+                  `fallback. If this is REQUEST_DENIED, enable the Directions API (and billing) ` +
+                  `for this Maps key in Google Cloud.`);
+              }
+              const path = ok
+                ? res!.routes[0].overview_path
                 : [target, new g.maps.LatLng(dest.lat, dest.lng)]; // fallback: straight line
               if (!routeLine.current) {
                 routeLine.current = new g.maps.Polyline({
@@ -272,10 +294,12 @@ export default function OrderTrackPage() {
           );
         }
 
-        /* fit both pins in view once; afterwards let the user pan/zoom freely */
+        /* Bug 2: fit ALL relevant pins (kitchen + rider + home) once, so the
+           customer sees the whole journey, not just rider→home. */
         if (!didFit.current) {
           const bounds = new g.maps.LatLngBounds();
           bounds.extend(dest); bounds.extend(rider);
+          if (store) bounds.extend(store);
           map.fitBounds(bounds, 60);
           didFit.current = true;
         }
@@ -330,7 +354,9 @@ export default function OrderTrackPage() {
                 <div>
                   <div style={{ fontSize: 12, opacity: 0.8 }}>{cancelled ? 'Order cancelled' : delivered ? 'Enjoy your meal!' : 'Estimated arrival'}</div>
                   <div style={{ fontWeight: 800, fontSize: 20 }}>
-                    {cancelled ? '—' : delivered ? 'Delivered ✅' : `${order.etaMinutes || 35} mins`}
+                    {cancelled ? '—' : delivered ? 'Delivered ✅'
+                      : order.etaMinutes == null ? 'Calculating…'
+                      : `${order.etaMinutes} ${order.etaMinutes === 1 ? 'min' : 'mins'}`}
                   </div>
                 </div>
                 <div style={{ fontSize: 34 }}>{meta?.emoji}</div>
