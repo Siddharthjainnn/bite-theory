@@ -185,6 +185,18 @@ export default function CheckoutPage() {
     try {
       // ── ONLINE: open Razorpay, verify, then create the order ──
       if (payMethod === 'online') {
+        /* Bug #58: if a coupon/wallet brought the payable to ₹0, there's
+           nothing to charge — placing an online order would hit the backend's
+           "no online payment needed" error. Just place it directly. */
+        if (payable < 1) {
+          const order = await checkoutOrder({
+            userId, items, ...destination,
+            couponCode: coupon?.code, useWallet, paymentMethod: 'cod', ...extras,
+          });
+          clear();
+          router.push(`/orders/${order.id}?placed=1`);
+          return;
+        }
         const pay = await createPaymentOrder({
           userId,
           items,

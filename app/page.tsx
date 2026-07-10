@@ -18,6 +18,7 @@ import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
 import { useStoreSettings } from './lib/useStoreSettings';
+import { useFeaturedCoupon } from './lib/useFeaturedCoupon';
 import StoreClosedBanner from './components/StoreClosedBanner';
 import DesktopLanding from './components/DesktopLanding';
 import DesktopApp from './components/DesktopApp';
@@ -29,6 +30,7 @@ export default function HomePage() {
   const { products, categories, loading, error } = useCatalog();
   const { status: storeStatus } = useStoreSettings();
   const { add, cart } = useCart();
+  const featuredCoupon = useFeaturedCoupon();
 
   // Desktop-only marketing landing gate. On mobile this is always false, so
   // the app renders exactly as before. On desktop, show the landing until the
@@ -313,15 +315,17 @@ export default function HomePage() {
 
       {/* offers */}
       <section className="bt-offers">
-        <div className="bt-offer dark">
-          <span className="bt-offer-ic" style={{ background: C.orange }}>
-            %
-          </span>
-          <div>
-            <div className="bt-offer-t">70% OFF up to ₹100</div>
-            <div className="bt-offer-s">USE BITE70</div>
+        {featuredCoupon && (
+          <div className="bt-offer dark">
+            <span className="bt-offer-ic" style={{ background: C.orange }}>
+              %
+            </span>
+            <div>
+              <div className="bt-offer-t">{featuredCoupon.label}</div>
+              <div className="bt-offer-s">USE {featuredCoupon.code}</div>
+            </div>
           </div>
-        </div>
+        )}
         <div className="bt-offer soft">
           <span className="bt-offer-ic" style={{ background: C.green }}>
             🍛

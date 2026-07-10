@@ -14,11 +14,13 @@ import { useCatalog } from '../lib/useCatalog';
 import { useCart } from '../providers/CartProvider';
 import { Product, money, catEmoji, effectivePrice, hasOffer, C } from '../lib/bite';
 import { useStoreSettings } from '../lib/useStoreSettings';
+import { useFeaturedCoupon } from '../lib/useFeaturedCoupon';
 import StoreClosedBanner from '../components/StoreClosedBanner';
 
 export default function CartPage() {
   const { products, loading } = useCatalog();
   const { cart, add, sub, remove } = useCart();
+  const featuredCoupon = useFeaturedCoupon();
   const { data: session, status } = useSession();
   const router = useRouter();
   const [placing, setPlacing] = useState(false);
@@ -157,9 +159,11 @@ export default function CartPage() {
               </div>
             ))}
 
-            <div className="coupon">
-              🎟️ Apply <b>BITE70</b> for 70% off up to ₹100
-            </div>
+            {featuredCoupon && (
+              <div className="coupon">
+                🎟️ Apply <b>{featuredCoupon.code}</b> for {featuredCoupon.label}
+              </div>
+            )}
 
             <div className="bill">
               <div className="bill-row">
