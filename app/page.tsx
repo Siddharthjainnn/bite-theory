@@ -222,6 +222,11 @@ export default function HomePage() {
               vegOnly={vegOnly}
               onAdd={add}
               onClose={() => setShowBucket(false)}
+              onSkip={() => {
+                // true skip → clean home page (no leftover healthy filter)
+                setShowBucket(false);
+                setActiveCat('all');
+              }}
             />
           )}
         </>
