@@ -15,6 +15,7 @@ import TheoryBhaiyaAgent, {
   BHAIYA_LINES,
 } from './components/TheoryBhaiyaAgent';
 import SpinTheThali from './components/SpinTheThali';
+import MacroBucketBuilder from './components/MacroBucketBuilder';
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
@@ -49,6 +50,7 @@ export default function HomePage() {
   const [showIntro, setShowIntro] = useState(false);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [showSpin, setShowSpin] = useState(false);
+  const [showBucket, setShowBucket] = useState(false);
 
   // today's special
   const [agentProduct, setAgentProduct] = useState<Product | null>(null);
@@ -117,6 +119,13 @@ export default function HomePage() {
     if (g && g.key === 'surprise') {
       // Surprise me! → Spin the Thali wheel
       setShowSpin(true);
+      return;
+    }
+    if (g && g.key === 'healthy') {
+      // Healthy / High Protein → Macro Bucket Builder.
+      // (The goal→category effect still sets the healthy category in the
+      // background, so closing the builder lands on the right menu view.)
+      setShowBucket(true);
       return;
     }
     if (g && g.key !== 'surprise') {
@@ -205,6 +214,14 @@ export default function HomePage() {
               vegOnly={vegOnly}
               onAdd={add}
               onClose={() => setShowSpin(false)}
+            />
+          )}
+          {showBucket && !loading && (
+            <MacroBucketBuilder
+              products={products}
+              vegOnly={vegOnly}
+              onAdd={add}
+              onClose={() => setShowBucket(false)}
             />
           )}
         </>
