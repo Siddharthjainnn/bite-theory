@@ -74,6 +74,7 @@ export interface Product {
   isTodaysSpecial: boolean;
   isVeg: boolean;
   specialTag: string;
+  isSpinWheel: boolean;
   stockStatus?: string;
   stockQty?: number | null;
 }
@@ -113,6 +114,7 @@ function normalizeProduct(p: any): Product {
     isTodaysSpecial: Boolean(p.isTodaysSpecial ?? p.is_todays_special),
     isVeg: p.isVeg === undefined && p.is_veg === undefined ? true : Boolean(p.isVeg ?? p.is_veg),
     specialTag: p.specialTag || p.special_tag || '',
+    isSpinWheel: Boolean(p.isSpinWheel ?? p.is_spin_wheel),
     stockStatus: p.stockStatus || p.stock_status || 'in_stock',
     stockQty: p.stockQty ?? p.stock_qty ?? null,
   };

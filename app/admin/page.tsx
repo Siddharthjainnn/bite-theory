@@ -35,6 +35,7 @@ interface Product {
   price: number; offerPrice: number; calories: number; protein: number;
   carbs: number; fat: number; rating: number; status: Status;
   isTodaysSpecial?: boolean; isVeg?: boolean; specialTag?: string;
+  isSpinWheel?: boolean;
 }
 interface Order {
   id: number; orderNumber: string; userId: number; addressId: number;
@@ -98,6 +99,7 @@ const api = {
       isTodaysSpecial: Boolean(p.isTodaysSpecial ?? p.is_todays_special),
       isVeg: p.isVeg === undefined && p.is_veg === undefined ? true : Boolean(p.isVeg ?? p.is_veg),
       specialTag: p.specialTag ?? p.special_tag ?? '',
+      isSpinWheel: Boolean(p.isSpinWheel ?? p.is_spin_wheel),
     }));
   },
   async createProduct(d: Partial<Product>) {
@@ -110,6 +112,7 @@ const api = {
         // FIX: these were being dropped, so Today's Special never saved
         isTodaysSpecial: !!d.isTodaysSpecial, isVeg: d.isVeg !== false,
         specialTag: d.specialTag || undefined,
+        isSpinWheel: !!d.isSpinWheel,
       }),
     });
     if (!r.ok) throw new Error('Create failed');
@@ -125,6 +128,7 @@ const api = {
         // FIX: these were being dropped, so toggling Today's Special did nothing
         isTodaysSpecial: !!d.isTodaysSpecial, isVeg: d.isVeg !== false,
         specialTag: d.specialTag || undefined,
+        isSpinWheel: !!d.isSpinWheel,
       }),
     });
     if (!r.ok) throw new Error('Update failed');
@@ -1979,7 +1983,7 @@ function Products({ showToast }: { showToast: (m: string) => void }) {
 
 function ProductModal({ product, cats, onClose, onSave }:
   { product: Partial<Product>; cats: Category[]; onClose: () => void; onSave: (d: Partial<Product>) => void }) {
-  const [f, setF] = useState<Partial<Product>>({ name: '', description: '', image: '', videoUrl: '', price: 0, offerPrice: 0, calories: 0, protein: 0, carbs: 0, fat: 0, status: 'active', categoryId: cats[0]?.id, isTodaysSpecial: false, isVeg: true, specialTag: '', ...product });
+  const [f, setF] = useState<Partial<Product>>({ name: '', description: '', image: '', videoUrl: '', price: 0, offerPrice: 0, calories: 0, protein: 0, carbs: 0, fat: 0, status: 'active', categoryId: cats[0]?.id, isTodaysSpecial: false, isVeg: true, specialTag: '', isSpinWheel: false, ...product });
   const set = (k: keyof Product, v: any) => setF(s => ({ ...s, [k]: v }));
   const num = (k: keyof Product, v: string) => set(k, v === '' ? 0 : Number(v));
   return (
@@ -2015,6 +2019,15 @@ function ProductModal({ product, cats, onClose, onSave }:
           <div>
             <div style={{ fontWeight: 700, fontSize: 13 }}>🟢 Vegetarian</div>
             <div style={{ fontSize: 11, color: C.muted }}>Untick for non-veg (VEG filter hides it)</div>
+          </div>
+        </label>
+      </Row>
+      <Row>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: f.isSpinWheel ? '#f0fdf4' : '#fff' }}>
+          <input type="checkbox" checked={!!f.isSpinWheel} onChange={e => set('isSpinWheel', e.target.checked)} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>🎡 Spin Wheel item</div>
+            <div style={{ fontSize: 11, color: C.muted }}>Included in the &quot;Surprise me!&quot; wheel (needs 4+ flagged items, else wheel uses full menu)</div>
           </div>
         </label>
       </Row>

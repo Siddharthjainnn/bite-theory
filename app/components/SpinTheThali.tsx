@@ -37,12 +37,17 @@ const WIN_LINES = [
 const MAX_RESPINS = 3;
 const SS_KEY = 'bt_spin_count';
 
-/* Fisher–Yates shuffle + pick up to 8 in-stock, veg-respecting items,
-   image-first. Runs once in a lazy state initializer (repo idiom). */
+/* Fisher–Yates shuffle + pick up to 8 in-stock, veg-respecting items.
+   Admin-curated: if 4+ items are flagged isSpinWheel, the wheel uses ONLY
+   those (randomly sampled each open). Fewer than 4 flagged → fall back to
+   the full eligible menu so the wheel never breaks. Image-first either way.
+   Runs once in a lazy state initializer (repo idiom). */
 function buildPool(products: Product[], vegOnly: boolean): Product[] {
   const ok = products.filter(
     (p) => p.stockStatus !== 'out_of_stock' && (!vegOnly || p.isVeg),
   );
+  const flagged = ok.filter((p) => p.isSpinWheel);
+  const source = flagged.length >= 4 ? flagged : ok;
   const shuffle = <T,>(a: T[]) => {
     const arr = [...a];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -51,8 +56,8 @@ function buildPool(products: Product[], vegOnly: boolean): Product[] {
     }
     return arr;
   };
-  const withImg = ok.filter((p) => p.image);
-  const noImg = ok.filter((p) => !p.image);
+  const withImg = source.filter((p) => p.image);
+  const noImg = source.filter((p) => !p.image);
   return [...shuffle(withImg), ...shuffle(noImg)].slice(0, 8);
 }
 
