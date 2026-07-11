@@ -14,6 +14,7 @@ import BiteAgentIntro, { Goal } from './components/BiteAgentIntro';
 import TheoryBhaiyaAgent, {
   BHAIYA_LINES,
 } from './components/TheoryBhaiyaAgent';
+import SpinTheThali from './components/SpinTheThali';
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
@@ -47,6 +48,7 @@ export default function HomePage() {
   // intro
   const [showIntro, setShowIntro] = useState(false);
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [showSpin, setShowSpin] = useState(false);
 
   // today's special
   const [agentProduct, setAgentProduct] = useState<Product | null>(null);
@@ -112,6 +114,11 @@ export default function HomePage() {
     try {
       localStorage.setItem('bt_intro_seen', new Date().toDateString());
     } catch {}
+    if (g && g.key === 'surprise') {
+      // Surprise me! → Spin the Thali wheel
+      setShowSpin(true);
+      return;
+    }
     if (g && g.key !== 'surprise') {
       setTimeout(() => {
         document
@@ -192,6 +199,14 @@ export default function HomePage() {
             />
           )}
           {showIntro && <BiteAgentIntro onDone={finishIntro} />}
+          {showSpin && !loading && (
+            <SpinTheThali
+              products={products}
+              vegOnly={vegOnly}
+              onAdd={add}
+              onClose={() => setShowSpin(false)}
+            />
+          )}
         </>
       }
     >
