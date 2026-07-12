@@ -30,16 +30,18 @@ function findCat(categories: Category[], primary: RegExp): number | null {
 export default function IndianFoodChooser({
   categories,
   onSelectCategory,
+  onCustomize,
   onSkip,
 }: {
   categories: Category[];
   /** land on this category id in the menu ('all' = unfiltered) */
   onSelectCategory: (catId: number | 'all') => void;
+  /** open the Customize Thali builder */
+  onCustomize: () => void;
   /** ✕ — back to clean home */
   onSkip: () => void;
 }) {
   const [step, setStep] = useState<'main' | 'thali'>('main');
-  const [teaser, setTeaser] = useState(false);
 
   function pick(kind: Pick2) {
     const catId =
@@ -53,7 +55,7 @@ export default function IndianFoodChooser({
     <div className="ifc-wrap" role="dialog" aria-label="Indian food chooser">
       <button className="ifc-x" onClick={onSkip} aria-label="Skip">✕</button>
       {step === 'thali' && (
-        <button className="ifc-back" onClick={() => { setTeaser(false); setStep('main'); }}>
+        <button className="ifc-back" onClick={() => setStep('main')}>
           ← Wapas
         </button>
       )}
@@ -96,19 +98,13 @@ export default function IndianFoodChooser({
               <span className="ifc-go">→</span>
             </button>
 
-            <button
-              className={`ifc-card ${teaser ? 'teased' : 'soon'}`}
-              onClick={() => setTeaser(true)}
-            >
+            <button className="ifc-card" onClick={onCustomize}>
               <span className="ifc-emoji">🎨</span>
               <span className="ifc-card-title">
-                Customize Thali <span className="ifc-soon-badge">JALD AA RAHA HAI</span>
+                Customize Thali <span className="ifc-soon-badge">NAYA</span>
               </span>
-              <span className="ifc-card-sub">
-                {teaser
-                  ? 'Apni sabzi, dal, roti khud chunna — bahut jald! Tab tak Regular Thali try karo 😊'
-                  : 'Har item khud choose karo — sabzi se sweet tak'}
-              </span>
+              <span className="ifc-card-sub">Har item khud choose karo — sabzi se sweet tak</span>
+              <span className="ifc-go">→</span>
             </button>
           </div>
         </>

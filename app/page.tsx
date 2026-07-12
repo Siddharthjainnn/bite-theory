@@ -17,6 +17,7 @@ import TheoryBhaiyaAgent, {
 import SpinTheThali from './components/SpinTheThali';
 import MacroBucketBuilder from './components/MacroBucketBuilder';
 import IndianFoodChooser from './components/IndianFoodChooser';
+import ThaliBuilder, { ThaliConfig } from './components/ThaliBuilder';
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
@@ -53,6 +54,7 @@ export default function HomePage() {
   const [showSpin, setShowSpin] = useState(false);
   const [showBucket, setShowBucket] = useState(false);
   const [showIndian, setShowIndian] = useState(false);
+  const [showThali, setShowThali] = useState(false);
 
   // today's special
   const [agentProduct, setAgentProduct] = useState<Product | null>(null);
@@ -248,9 +250,29 @@ export default function HomePage() {
                     ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 350);
               }}
+              onCustomize={() => {
+                setShowIndian(false);
+                setShowThali(true);
+              }}
               onSkip={() => {
                 // true skip → clean home page
                 setShowIndian(false);
+                setActiveCat('all');
+              }}
+            />
+          )}
+          {showThali && (
+            <ThaliBuilder
+              onDone={(config: ThaliConfig) => {
+                // Cart/checkout integration lands in the next patch —
+                // park the built thali so nothing is lost meanwhile.
+                try {
+                  localStorage.setItem('bt_pending_thali', JSON.stringify(config));
+                } catch {}
+                setShowThali(false);
+              }}
+              onSkip={() => {
+                setShowThali(false);
                 setActiveCat('all');
               }}
             />
