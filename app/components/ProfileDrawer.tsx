@@ -1,5 +1,6 @@
 'use client';
 
+import StreakCard from './StreakCard';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut, signIn } from 'next-auth/react';
@@ -141,6 +142,9 @@ export default function ProfileDrawer({
             <div className="dstat"><b style={{ color: C.green }}>{money(user?.walletBalance || 0)}</b><span>Wallet</span></div>
             <div className="dstat"><b style={{ color: C.orange }}>{user?.loyaltyPoints || 0}</b><span>Points</span></div>
           </div>
+        )}
+        {loggedIn && userId > 0 && (
+          <StreakCard userId={userId} userName={(user?.name || '').split(' ')[0]} />
         )}
 
         <div className="drawer-menu">

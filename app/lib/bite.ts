@@ -85,6 +85,7 @@ export interface OrderItem {
   image: string;
   price: number;
   qty: number;
+  thaliConfig?: { items?: { section: string; name: string; qty: number; unitPrice: number; lineTotal: number }[]; total?: number } | null;
 }
 
 export interface Order {
@@ -186,6 +187,7 @@ export const TRACK_STEPS: ApiOrderStatus[] = [
 export interface ApiOrderItem {
   id: number; productId: number; productName: string;
   unitPrice: number; quantity: number; lineTotal: number;
+  thaliConfig?: { items?: { section: string; name: string; qty: number; unitPrice: number; lineTotal: number }[]; total?: number } | null;
 }
 export interface ApiOrder {
   id: number; orderNumber: string; userId: number;
@@ -276,6 +278,7 @@ export async function validateCoupon(code: string, subtotal: number, userId?: nu
   return res.json();
 }
 export interface CheckoutPayload {
+  thaliItems?: { templateId: number; selections: { optionId: number; qty: number }[] }[];
   userId: number;
   items: { productId: number; quantity: number }[];
   addressId?: number;
@@ -312,6 +315,7 @@ export interface PaymentOrder {
 }
 export async function createPaymentOrder(payload: {
   userId: number; items: { productId: number; quantity: number }[];
+  thaliItems?: { templateId: number; selections: { optionId: number; qty: number }[] }[];
   addressId?: number; couponCode?: string; useWallet?: boolean;
   // full destination + extras are snapshotted server-side so the Razorpay
   // webhook can finish the order even if this tab dies after paying

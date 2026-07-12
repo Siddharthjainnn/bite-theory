@@ -18,6 +18,7 @@ import SpinTheThali from './components/SpinTheThali';
 import MacroBucketBuilder from './components/MacroBucketBuilder';
 import IndianFoodChooser from './components/IndianFoodChooser';
 import ThaliBuilder, { ThaliConfig } from './components/ThaliBuilder';
+import FlashDealBar from './components/FlashDealBar';
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
@@ -33,7 +34,7 @@ type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
 export default function HomePage() {
   const { products, categories, loading, error } = useCatalog();
   const { status: storeStatus } = useStoreSettings();
-  const { add, cart } = useCart();
+  const { add, addThali, cart } = useCart();
   const featuredCoupon = useFeaturedCoupon();
 
   // Desktop-only marketing landing gate. On mobile this is always false, so
@@ -216,6 +217,7 @@ export default function HomePage() {
               onClose={closeAgent}
             />
           )}
+          <FlashDealBar />
           {showIntro && <BiteAgentIntro onDone={finishIntro} />}
           {showSpin && !loading && (
             <SpinTheThali
@@ -264,11 +266,13 @@ export default function HomePage() {
           {showThali && (
             <ThaliBuilder
               onDone={(config: ThaliConfig) => {
-                // Cart/checkout integration lands in the next patch —
-                // park the built thali so nothing is lost meanwhile.
-                try {
-                  localStorage.setItem('bt_pending_thali', JSON.stringify(config));
-                } catch {}
+                addThali({
+                  templateId: config.templateId,
+                  templateName: config.templateName,
+                  total: config.total,
+                  selections: config.selections,
+                  portions: config.portions,
+                });
                 setShowThali(false);
               }}
               onSkip={() => {

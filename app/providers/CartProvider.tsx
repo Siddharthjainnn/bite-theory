@@ -17,6 +17,16 @@ import { Product, effectivePrice } from '../lib/bite';
 
 type CartMap = Record<number, number>; // productId -> qty
 
+/** A customized thali held in the cart (priced/validated server-side at checkout). */
+export interface ThaliCartItem {
+  key: string;                       // local unique key
+  templateId: number;
+  templateName: string;
+  total: number;                     // display only — server recomputes
+  selections: Record<string, string[]>;
+  portions: { optionId: number; qty: number }[];
+}
+
 interface CartCtx {
   /* cart */
   cart: CartMap;
@@ -26,7 +36,11 @@ interface CartCtx {
   setQty: (id: number, qty: number) => void;
   clear: () => void;
   count: number;
-  /* derive totals against a product list */
+  /* customized thalis */
+  thalis: ThaliCartItem[];
+  addThali: (t: Omit<ThaliCartItem, 'key'>) => void;
+  removeThali: (key: string) => void;
+  /* derive totals against a product list (includes thalis) */
   totalFor: (products: Product[]) => number;
   /* recently viewed */
   recent: number[];
@@ -37,6 +51,7 @@ const Ctx = createContext<CartCtx | null>(null);
 
 const LS_CART = 'bt_cart_v1';
 const LS_RECENT = 'bt_recent_v1';
+const LS_THALI = 'bt_thali_v1';
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -56,12 +71,14 @@ function save(key: string, value: unknown) {
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartMap>({});
+  const [thalis, setThalis] = useState<ThaliCartItem[]>([]);
   const [recent, setRecent] = useState<number[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   // hydrate once on mount (client only)
   useEffect(() => {
     setCart(load<CartMap>(LS_CART, {}));
+    setThalis(load<ThaliCartItem[]>(LS_THALI, []));
     setRecent(load<number[]>(LS_RECENT, []));
     setHydrated(true);
   }, []);
@@ -73,6 +90,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (hydrated) save(LS_RECENT, recent);
   }, [recent, hydrated]);
+  useEffect(() => {
+    if (hydrated) save(LS_THALI, thalis);
+  }, [thalis, hydrated]);
 
   const add = (id: number) =>
     setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
@@ -100,24 +120,37 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return n;
     });
 
-  const clear = () => setCart({});
+  const addThali = (t: Omit<ThaliCartItem, 'key'>) =>
+    setThalis((arr) => [
+      ...arr,
+      { ...t, key: `th_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}` },
+    ]);
+
+  const removeThali = (key: string) =>
+    setThalis((arr) => arr.filter((t) => t.key !== key));
+
+  // clearing the cart clears thalis too (post-order semantics)
+  const clear = () => { setCart({}); setThalis([]); };
 
   const count = useMemo(
-    () => Object.values(cart).reduce((a, b) => a + b, 0),
-    [cart],
+    () => Object.values(cart).reduce((a, b) => a + b, 0) + thalis.length,
+    [cart, thalis],
   );
 
   const totalFor = (products: Product[]) =>
     Object.entries(cart).reduce((sum, [id, qty]) => {
       const p = products.find((x) => x.id === Number(id));
       return sum + (p ? effectivePrice(p) * qty : 0);
-    }, 0);
+    }, 0) + thalis.reduce((s, t) => s + t.total, 0);
 
   const markViewed = (id: number) =>
     setRecent((r) => [id, ...r.filter((x) => x !== id)].slice(0, 12));
 
   const value: CartCtx = {
     cart,
+    thalis,
+    addThali,
+    removeThali,
     add,
     sub,
     remove,

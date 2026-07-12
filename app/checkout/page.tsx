@@ -8,6 +8,7 @@
  * 4. Payment: COD now, online placeholder.
  * 5. Place order → POST /orders/checkout → /orders/[id] live tracking.
  */
+import { useFlashDeal } from '../components/FlashDealBar';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -27,7 +28,7 @@ import StoreClosedBanner from '../components/StoreClosedBanner';
 export default function CheckoutPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const { cart, clear } = useCart();
+  const { cart, thalis, removeThali, clear } = useCart();
   const { products, loading: catLoading } = useCatalog();
 
   const user = session?.user as any;
@@ -45,7 +46,8 @@ export default function CheckoutPage() {
         .filter(Boolean) as { p: (typeof products)[number]; qty: number }[],
     [cart, products],
   );
-  const subtotal = lines.reduce((s, l) => s + effectivePrice(l.p) * l.qty, 0);
+  const subtotal = lines.reduce((s, l) => s + effectivePrice(l.p) * l.qty, 0)
+    + thalis.reduce((s, t) => s + t.total, 0);
 
   /* ── addresses ── */
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
@@ -138,7 +140,9 @@ export default function CheckoutPage() {
 
   /* ── bill math (display; server recomputes authoritatively) ── */
   const { settings, status: storeStatus } = useStoreSettings();
-  const discount = coupon?.discount || 0;
+  const flashDeal = useFlashDeal();
+  const flashOff = flashDeal ? Math.round(subtotal * Number(flashDeal.discountPct)) / 100 : 0;
+  const discount = (coupon?.discount || 0) + flashOff;
   const delivery =
     subtotal - discount >= settings.freeDeliveryAbove || subtotal === 0
       ? 0 : settings.deliveryCharge;
@@ -161,13 +165,14 @@ export default function CheckoutPage() {
     if (status === 'loading') return;
     if (!userId) { router.push('/login?callbackUrl=/checkout'); return; }
     if (!user?.mobile) { router.push('/complete-profile?callbackUrl=/checkout'); return; }
-    if (!lines.length) return;
+    if (!lines.length && !thalis.length) return;
     if (!selectedAddr && !(addingNew && newAddr.fullAddress.trim())) {
       setError('Please select or add a delivery address'); return;
     }
     setPlacing(true); setError('');
 
     const items = lines.map((l) => ({ productId: l.p.id, quantity: l.qty }));
+    const thaliItems = thalis.map((t) => ({ templateId: t.templateId, selections: t.portions }));
     const destination = selectedAddr
       ? { addressId: selectedAddr }
       : {
@@ -190,7 +195,7 @@ export default function CheckoutPage() {
            "no online payment needed" error. Just place it directly. */
         if (payable < 1) {
           const order = await checkoutOrder({
-            userId, items, ...destination,
+            userId, items, thaliItems, ...destination,
             couponCode: coupon?.code, useWallet, paymentMethod: 'cod', ...extras,
           });
           clear();
@@ -200,6 +205,7 @@ export default function CheckoutPage() {
         const pay = await createPaymentOrder({
           userId,
           items,
+          thaliItems,
           ...destination, // snapshot destination server-side for webhook recovery
           couponCode: coupon?.code,
           useWallet,
@@ -300,7 +306,7 @@ export default function CheckoutPage() {
     <AppShell
       header={<AppHeader variant="page" title="Checkout" />}
       footerExtra={
-        lines.length > 0 ? (
+        lines.length + thalis.length > 0 ? (
           <div className="checkout-bar">
             <div className="checkout-total">
               <b>{money(payable)}</b>
@@ -327,7 +333,7 @@ export default function CheckoutPage() {
         {!storeStatus.open && <StoreClosedBanner status={storeStatus} />}
         {catLoading ? (
           <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Loading…</div>
-        ) : !lines.length ? (
+        ) : !(lines.length + thalis.length) ? (
           <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>
             Your cart is empty. <a href="/menu" style={{ color: C.greenDeep, fontWeight: 700 }}>Browse the menu →</a>
           </div>
@@ -443,6 +449,25 @@ export default function CheckoutPage() {
                 <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '5px 0' }}>
                   <span>{p.name} × {qty}</span>
                   <b>{money(effectivePrice(p) * qty)}</b>
+                </div>
+              ))}
+              {thalis.map((t) => (
+                <div key={t.key} style={{ padding: '6px 0', borderTop: `1px dashed ${C.line}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span>🍛 {t.templateName} (Custom)</span>
+                    <b>{money(t.total)}</b>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                    {Object.entries(t.selections)
+                      .map(([sec, names]) => `${sec}: ${names.join(', ')}`)
+                      .join(' · ')}
+                  </div>
+                  <button
+                    onClick={() => removeThali(t.key)}
+                    style={{ background: 'none', border: 'none', color: '#b3261e', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: 3 }}
+                  >
+                    Remove
+                  </button>
                 </div>
               ))}
             </div>

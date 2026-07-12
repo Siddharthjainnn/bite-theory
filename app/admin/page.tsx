@@ -15,6 +15,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 
 import StoreSettingsPanel from '../components/StoreSettingsPanel';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
+import ThaliAdminPanel from '../components/ThaliAdminPanel';
 import {
   fetchStoreSettings, InvoiceConfig as InvoiceConfigT,
   fetchCouponAssignments, assignCoupon, deleteCouponAssignment,
@@ -654,6 +655,7 @@ const NAV: NavGroup[] = [
     { key: 'products', label: 'Products', icon: '🍱' },
     { key: 'categories', label: 'Categories', icon: '🗂️' },
     { key: 'inventory', label: 'Inventory', icon: '📦' },
+    { key: 'thali', label: 'Thali Builder', icon: '🍛' },
   ]},
   { title: 'Customers', items: [
     { key: 'users', label: 'Customers', icon: '👥' },
@@ -821,7 +823,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const showToast = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(''), 2400); }, []);
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === page);
 
-  const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout'];
+  const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -891,6 +893,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             {page === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {page === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
             {page === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
+            {page === 'thali' && <ThaliAdminPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {!DEDICATED.includes(page) && MODULES[page] && <GenericModule config={MODULES[page]} showToast={showToast} />}
           </div>
         </div>

@@ -6,6 +6,7 @@
  * status timeline, items and bill. Polls /orders/:id/track every 10s
  * until delivered/cancelled. Works without a Maps key (timeline only).
  */
+import ScratchCard from '../../components/ScratchCard';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -564,13 +565,24 @@ export default function OrderTrackPage() {
               </div>
             )}
 
+            {delivered && userId ? <ScratchCard orderId={Number(order.id)} userId={userId} /> : null}
+
             {/* ── ITEMS + BILL ── */}
             <div style={card}>
               <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>🧾 Bill</div>
               {(order.items || []).map((it) => (
-                <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0' }}>
-                  <span>{it.productName} × {it.quantity}</span>
-                  <span>{money(Number(it.lineTotal))}</span>
+                <div key={it.id} style={{ padding: '4px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span>{it.thaliConfig ? '🍛 ' : ''}{it.productName} × {it.quantity}</span>
+                    <span>{money(Number(it.lineTotal))}</span>
+                  </div>
+                  {it.thaliConfig?.items && (
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 1, paddingLeft: 4 }}>
+                      {it.thaliConfig.items
+                        .map((x: { name: string; qty: number }) => (x.qty > 1 ? `${x.qty} × ${x.name}` : x.name))
+                        .join(', ')}
+                    </div>
+                  )}
                 </div>
               ))}
               <div style={{ borderTop: `1px dashed ${C.line}`, marginTop: 8, paddingTop: 8, fontSize: 13, color: C.muted }}>
