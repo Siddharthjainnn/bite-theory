@@ -16,6 +16,7 @@ import TheoryBhaiyaAgent, {
 } from './components/TheoryBhaiyaAgent';
 import SpinTheThali from './components/SpinTheThali';
 import MacroBucketBuilder from './components/MacroBucketBuilder';
+import IndianFoodChooser from './components/IndianFoodChooser';
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
 import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
@@ -51,6 +52,7 @@ export default function HomePage() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [showSpin, setShowSpin] = useState(false);
   const [showBucket, setShowBucket] = useState(false);
+  const [showIndian, setShowIndian] = useState(false);
 
   // today's special
   const [agentProduct, setAgentProduct] = useState<Product | null>(null);
@@ -126,6 +128,11 @@ export default function HomePage() {
       // (The goal→category effect still sets the healthy category in the
       // background, so closing the builder lands on the right menu view.)
       setShowBucket(true);
+      return;
+    }
+    if (g && g.key === 'indian') {
+      // Indian Food → Combo | Thali chooser
+      setShowIndian(true);
       return;
     }
     if (g && g.key !== 'surprise') {
@@ -225,6 +232,25 @@ export default function HomePage() {
               onSkip={() => {
                 // true skip → clean home page (no leftover healthy filter)
                 setShowBucket(false);
+                setActiveCat('all');
+              }}
+            />
+          )}
+          {showIndian && !loading && (
+            <IndianFoodChooser
+              categories={categories}
+              onSelectCategory={(catId) => {
+                setShowIndian(false);
+                setActiveCat(catId);
+                setTimeout(() => {
+                  document
+                    .getElementById('catrow')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 350);
+              }}
+              onSkip={() => {
+                // true skip → clean home page
+                setShowIndian(false);
                 setActiveCat('all');
               }}
             />
