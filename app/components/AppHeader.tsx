@@ -215,10 +215,13 @@ export default function AppHeader({
         <style>{`
 .bt-logo{height:34px;width:auto;display:block}
 .bt-acct-wrap{position:relative}
-.bt-acct-scrim{position:fixed;inset:0;z-index:60}
-.bt-acct-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:61;background:#fff;
-  border:1px solid #e4ebe6;border-radius:14px;box-shadow:0 10px 30px rgba(13,59,46,.16);
-  padding:8px;min-width:180px;display:flex;flex-direction:column;gap:2px}
+.bt-acct-scrim{position:fixed;inset:0;z-index:2000}
+.bt-acct-pop{position:fixed;top:64px;right:14px;z-index:2001;background:#fff;
+  border:1px solid #e4ebe6;border-radius:16px;box-shadow:0 16px 40px rgba(13,59,46,.22);
+  padding:8px;min-width:200px;display:flex;flex-direction:column;gap:2px;
+  animation:acctPop .2s cubic-bezier(.34,1.4,.64,1) both}
+@keyframes acctPop{from{opacity:0;transform:translateY(-8px) scale(.96)}to{opacity:1;transform:none}}
+@media(min-width:520px){.bt-acct-pop{right:calc(50% - 240px + 14px)}}
 .bt-acct-name{font-size:12px;font-weight:800;color:#0D3B2E;padding:6px 10px 8px;border-bottom:1px solid #eef3f0;margin-bottom:4px}
 .bt-acct-pop button{display:flex;align-items:center;gap:8px;background:none;border:none;text-align:left;
   padding:9px 10px;border-radius:9px;font-size:13px;color:#0D3B2E;cursor:pointer}

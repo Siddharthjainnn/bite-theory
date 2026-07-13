@@ -736,7 +736,8 @@ a{text-decoration:none;color:inherit}
   font-size:13px;color:${C.muted}}
 .tsm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;padding:4px 16px 8px}
 @media(min-width:520px){.tsm-grid{grid-template-columns:repeat(3,1fr)}}
-.tsm-grid .bt-sp-card{flex:none;width:100%}
+.tsm-grid .bt-sp-card{flex:0 0 auto;width:100%;min-width:0}
+.tsm-grid .bt-sp-img{height:104px}
 .tsm-empty{padding:40px 20px;text-align:center;color:${C.muted};font-size:13px}
 
 /* ── Bottom nav "Special" button (gold pill accent, like a spotlight tab) ── */
@@ -855,6 +856,37 @@ a{text-decoration:none;color:inherit}
 .bt-nav-special span:last-child{margin-top:4px;color:var(--bt-orange-deep);font-weight:800}
 @keyframes specFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 @keyframes specHalo{0%,100%{opacity:.55}50%{opacity:1}}
+
+
+/* ── z-index scale (stop overlays fighting) ── */
+.bt-head{z-index:20}
+.drawer-scrim{z-index:1000}
+.drawer{z-index:1001}
+.tsm-scrim{z-index:1500}
+.bt-nav{z-index:900}
+/* account menu (2000/2001) sits above all */
+
+/* ── Header: professional refinement ── */
+.bt-head{padding:14px 16px 16px}
+.bt-head-row{gap:9px}
+/* glass icon + avatar with subtle ring */
+.bt-icon-btn{width:40px;height:40px;background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(6px);font-size:17px}
+.bt-avatar-btn{width:40px;height:40px;border:2px solid rgba(255,255,255,.35);
+  background:linear-gradient(135deg,var(--bt-green),var(--bt-orange));font-size:15px;
+  box-shadow:0 4px 12px rgba(0,0,0,.28)}
+/* brand lockup: tighter, clearer hierarchy */
+.bt-brand-name{font-size:18px;font-weight:850;letter-spacing:-.2px;gap:6px}
+.bt-loc{font-size:11.5px;color:rgba(255,255,255,.7);margin-top:2px;font-weight:500}
+.bt-loc::before{content:"";display:none}
+/* Ask Bhaiya: slightly calmer so it stops shouting over the brand */
+.bt-bhaiya-btn{height:40px;border-radius:20px;font-size:11px;
+  box-shadow:0 4px 14px rgba(245,158,11,.34);border:1px solid rgba(255,255,255,.18)}
+/* notification bell align */
+.bt-head-actions{gap:7px}
+/* refined live search inside header */
+.bt-search--live{border:1.5px solid rgba(13,59,46,.08);border-radius:15px;
+  box-shadow:0 4px 14px rgba(4,22,15,.12);margin-top:13px}
 
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
