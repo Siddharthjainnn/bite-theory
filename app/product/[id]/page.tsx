@@ -219,46 +219,24 @@ export default function ProductDetailPage({
           </div>
         </div>
 
-        {/* add / qty */}
-        <div style={{ margin: '18px 0 6px' }}>
+        {/* add to cart */}
+        <div className="pd-cta">
+          <div className="pd-sticky-price">
+            <b>{money(effectivePrice(product))}</b>
+            {off && <s>{money(product.price)}</s>}
+          </div>
           {qty > 0 ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                justifyContent: 'space-between',
-                background: C.greenSoft,
-                borderRadius: 13,
-                padding: '10px 14px',
-              }}
-            >
-              <span style={{ fontWeight: 700, color: C.greenDeep }}>
-                {qty} in cart
-              </span>
+            <div className="pd-sticky-incart">
+              <span>{qty} in cart</span>
               <div className="bt-qty">
-                <button onClick={() => sub(product.id)}>−</button>
+                <button onClick={() => sub(product.id)} aria-label="Remove one">−</button>
                 <span>{qty}</span>
-                <button onClick={() => add(product.id)}>+</button>
+                <button onClick={() => add(product.id)} aria-label="Add one">+</button>
               </div>
             </div>
           ) : (
-            <button
-              onClick={() => add(product.id)}
-              style={{
-                width: '100%',
-                background: `linear-gradient(135deg,${C.green},${C.greenDeep})`,
-                color: '#fff',
-                border: 'none',
-                fontSize: 16,
-                fontWeight: 800,
-                padding: 14,
-                borderRadius: 13,
-                cursor: 'pointer',
-                boxShadow: '0 6px 16px rgba(76,175,80,.35)',
-              }}
-            >
-              Add to Cart · {money(effectivePrice(product))}
+            <button className="pd-sticky-btn" onClick={() => add(product.id)}>
+              Add to cart
             </button>
           )}
         </div>

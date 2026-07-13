@@ -609,6 +609,43 @@ a{text-decoration:none;color:inherit}
 .bt-chip--clear{background:#fff;color:#c0392b;border-color:#f3d2cd;font-weight:750}
 .bt-chip--clear.on,.bt-chip--clear:active{background:#fdecec}
 
+/* ── Product detail: premium layer ── */
+.pd-hero{aspect-ratio:4/3;max-height:360px;
+  background:radial-gradient(130% 110% at 50% 8%, #fff 0%, ${C.greenSoft} 78%, #dff0e2 100%);
+  box-shadow:inset 0 -30px 40px -30px rgba(13,59,46,.18)}
+.pd-hero .food-emoji{font-size:110px;filter:drop-shadow(0 8px 16px rgba(13,59,46,.18))}
+.pd-hero-off{background:linear-gradient(135deg,var(--bt-orange),#f7a73a);
+  box-shadow:0 4px 12px rgba(245,158,11,.4);border-radius:9px;font-weight:850}
+
+.pd-name{letter-spacing:-.6px;font-weight:850}
+.pd-rating{box-shadow:0 3px 10px rgba(76,175,80,.3)}
+.pd-price b{letter-spacing:-1px}
+
+/* macros as an elevated "nutrition card" — the healthy-brand signature */
+.pd-macros{background:#fff;border:1px solid rgba(13,59,46,.06);border-radius:18px;
+  padding:6px;gap:0;box-shadow:0 6px 18px rgba(13,59,46,.07);overflow:hidden}
+.pd-macro{background:none!important;border:none!important;border-radius:0;
+  position:relative;padding:14px 6px}
+.pd-macro:not(:last-child)::after{content:"";position:absolute;right:0;top:22%;bottom:22%;
+  width:1px;background:rgba(13,59,46,.08)}
+.pd-macro b{font-size:19px;letter-spacing:-.5px}
+.pd-macro span{text-transform:uppercase;letter-spacing:.4px;font-size:9px}
+
+/* add-to-cart CTA (in body flow, above reviews) */
+.pd-cta{margin:20px 0 6px;display:flex;gap:12px;align-items:center}
+.pd-sticky-price{display:flex;flex-direction:column;line-height:1.1;flex-shrink:0}
+.pd-sticky-price b{font-size:19px;font-weight:850;color:${C.ink};letter-spacing:-.5px}
+.pd-sticky-price s{font-size:12px;color:#9aa8a0}
+.pd-sticky-btn{flex:1;background:linear-gradient(135deg,var(--bt-green),var(--bt-green-deep));
+  color:#fff;border:none;font-size:15px;font-weight:800;padding:14px;border-radius:14px;cursor:pointer;
+  box-shadow:0 8px 20px rgba(76,175,80,.4),inset 0 1px 0 rgba(255,255,255,.22);
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
+.pd-sticky-btn:active{transform:scale(.97)}
+.pd-cta .bt-qty{padding:9px 14px}
+.pd-sticky-incart{flex:1;display:flex;align-items:center;justify-content:space-between;
+  background:${C.greenSoft};border-radius:14px;padding:10px 14px}
+.pd-sticky-incart span{font-weight:750;color:${C.greenDeep};font-size:14px}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
