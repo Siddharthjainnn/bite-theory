@@ -598,6 +598,17 @@ a{text-decoration:none;color:inherit}
 .rec-sold{font-size:10px;font-weight:800;color:#c62828;background:#fdecec;
   padding:4px 9px;border-radius:16px}
 
+/* ── Quick filter chips (premium, multi-select) ── */
+.bt-filters{gap:8px;padding-top:12px;padding-bottom:2px}
+.bt-chip{border-radius:22px;font-weight:650;padding:8px 14px;
+  box-shadow:0 1px 3px rgba(13,59,46,.06);
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1),background .2s,color .2s,box-shadow .2s}
+.bt-chip:active{transform:scale(.94)}
+.bt-chip.on{background:linear-gradient(135deg,var(--bt-green),var(--bt-green-deep));
+  color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(76,175,80,.32)}
+.bt-chip--clear{background:#fff;color:#c0392b;border-color:#f3d2cd;font-weight:750}
+.bt-chip--clear.on,.bt-chip--clear:active{background:#fdecec}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

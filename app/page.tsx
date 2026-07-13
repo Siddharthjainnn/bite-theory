@@ -47,6 +47,14 @@ export default function HomePage() {
 
   const [activeCat, setActiveCat] = useState<number | 'all'>('all');
   const [sort, setSort] = useState<Sort>('pop');
+  // Swiggy-style quick filters (multi-select, layered on top of sort)
+  const [quick, setQuick] = useState<Set<string>>(new Set());
+  const toggleQuick = (k: string) =>
+    setQuick((s) => {
+      const n = new Set(s);
+      n.has(k) ? n.delete(k) : n.add(k);
+      return n;
+    });
   const [vegOnly, setVegOnly] = useState(true); // pure-veg app: veg stays ON by default
   const [banners, setBanners] = useState<Banner[]>([]);
   const [bannerIdx, setBannerIdx] = useState(0);
@@ -163,6 +171,10 @@ export default function HomePage() {
         ? products
         : products.filter((p) => p.categoryId === activeCat);
     if (vegOnly) list = list.filter((p) => p.isVeg);
+    if (quick.has('under150')) list = list.filter((p) => (p.offerPrice || p.price) <= 150);
+    if (quick.has('rating4')) list = list.filter((p) => p.rating >= 4);
+    if (quick.has('offers')) list = list.filter((p) => p.offerPrice > 0 && p.offerPrice < p.price);
+    if (quick.has('protein')) list = list.filter((p) => p.protein >= 15);
     const arr = [...list];
     if (sort === 'protein') arr.sort((a, b) => b.protein - a.protein);
     else if (sort === 'lowcal') arr.sort((a, b) => a.calories - b.calories);
@@ -173,7 +185,7 @@ export default function HomePage() {
       );
     else arr.sort((a, b) => b.rating - a.rating);
     return arr;
-  }, [products, activeCat, sort, vegOnly]);
+  }, [products, activeCat, sort, vegOnly, quick]);
 
   const recommended = useMemo(
     () => products
@@ -494,10 +506,30 @@ export default function HomePage() {
           <span className="lbl">VEG</span>
           <span className="sw"><i /></span>
         </button>
+
+        {/* quick filters (multi-select) */}
         {(
           [
-            ['pop', 'Sort by'],
-            ['protein', 'High Protein'],
+            ['under150', '💸 Under ₹150'],
+            ['rating4', '⭐ Rating 4+'],
+            ['offers', '🏷️ Offers'],
+            ['protein', '💪 High Protein'],
+          ] as [string, string][]
+        ).map(([k, lbl]) => (
+          <button
+            key={k}
+            className={`bt-chip ${quick.has(k) ? 'on' : ''}`}
+            onClick={() => toggleQuick(k)}
+            aria-pressed={quick.has(k)}
+          >
+            {lbl}
+          </button>
+        ))}
+
+        {/* sort */}
+        {(
+          [
+            ['pop', 'Top Rated'],
             ['lowcal', 'Under 400 cal'],
             ['cheap', 'Cheapest'],
           ] as [Sort, string][]
@@ -510,6 +542,12 @@ export default function HomePage() {
             {lbl}
           </button>
         ))}
+
+        {quick.size > 0 && (
+          <button className="bt-chip bt-chip--clear" onClick={() => setQuick(new Set())}>
+            Clear ✕
+          </button>
+        )}
       </section>
 
       {/* products */}
