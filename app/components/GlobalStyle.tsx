@@ -678,6 +678,12 @@ a{text-decoration:none;color:inherit}
   border-radius:14px;font-weight:800;transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
 .checkout-total b{letter-spacing:-.5px}
 
+/* ── Checkout: input focus ring + trust bar polish ── */
+.bt-page-pad input:focus,
+.bt-page-pad textarea:focus{border-color:var(--bt-green)!important;
+  box-shadow:0 0 0 3px rgba(76,175,80,.16)!important}
+.checkout-btn:disabled{opacity:.6;cursor:not-allowed}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

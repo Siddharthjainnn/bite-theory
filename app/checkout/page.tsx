@@ -293,13 +293,17 @@ export default function CheckoutPage() {
   }, [status, router]);
 
   const card: React.CSSProperties = {
-    background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16,
-    padding: 14, marginBottom: 14,
+    background: '#fff', border: '1px solid rgba(13,59,46,.06)', borderRadius: 20,
+    padding: 16, marginBottom: 14,
+    boxShadow: '0 6px 18px rgba(13,59,46,.06)',
   };
-  const h: React.CSSProperties = { fontWeight: 800, fontSize: 14, color: C.ink, marginBottom: 10 };
+  const h: React.CSSProperties = {
+    fontWeight: 850, fontSize: 15, color: C.ink, marginBottom: 12, letterSpacing: '-0.2px',
+  };
   const input: React.CSSProperties = {
-    width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,
-    padding: '10px 12px', fontSize: 13, outline: 'none', background: '#fff',
+    width: '100%', border: '1px solid rgba(13,59,46,.12)', borderRadius: 12,
+    padding: '12px 14px', fontSize: 13.5, outline: 'none', background: '#fff',
+    transition: 'border-color .18s, box-shadow .18s',
   };
 
   return (
@@ -566,9 +570,12 @@ export default function CheckoutPage() {
                 <label
                   key={val}
                   style={{
-                    display: 'flex', gap: 10, alignItems: 'center', padding: '10px 8px',
-                    borderRadius: 10, cursor: 'pointer',
-                    background: payMethod === val ? C.greenSoft : 'transparent',
+                    display: 'flex', gap: 11, alignItems: 'center', padding: '12px 12px',
+                    borderRadius: 13, cursor: 'pointer', marginBottom: 7,
+                    background: payMethod === val ? C.greenSoft : '#fff',
+                    border: `1.5px solid ${payMethod === val ? C.green : 'rgba(13,59,46,.08)'}`,
+                    boxShadow: payMethod === val ? '0 3px 10px rgba(76,175,80,.15)' : 'none',
+                    transition: 'all .18s',
                   }}
                 >
                   <input
@@ -576,7 +583,7 @@ export default function CheckoutPage() {
                     onChange={() => setPayMethod(val)}
                   />
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
+                    <div style={{ fontWeight: 750, fontSize: 13.5 }}>{label}</div>
                     <div style={{ fontSize: 11.5, color: C.muted }}>{sub}</div>
                   </div>
                 </label>
