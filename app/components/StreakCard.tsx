@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { API_BASE, C } from '../lib/bite';
+import { C, fetchStreak } from '../lib/bite';
 
 export default function StreakCard({ userId, userName }: { userId: number; userName?: string }) {
   const [streak, setStreak] = useState<number | null>(null);
@@ -16,8 +16,7 @@ export default function StreakCard({ userId, userName }: { userId: number; userN
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`${API_BASE}/orders/streak/${userId}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    fetchStreak(userId)
       .then((d) => setStreak(Number(d.streak) || 0))
       .catch(() => setStreak(0));
   }, [userId]);

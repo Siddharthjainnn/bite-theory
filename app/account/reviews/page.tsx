@@ -10,7 +10,7 @@ import { useSession } from 'next-auth/react';
 import AppShell from '../../components/AppShell';
 import AppHeader from '../../components/AppHeader';
 import FoodImage from '../../components/FoodImage';
-import { API_BASE, C, catEmoji, imgUrl, MyReview, fetchMyReviews } from '../../lib/bite';
+import { API_BASE, C, catEmoji, imgUrl, MyReview, fetchMyReviews, deleteReview } from '../../lib/bite';
 
 function Stars({ n }: { n: number }) {
   return (
@@ -52,8 +52,7 @@ export default function MyReviewsPage() {
     const prev = rows;
     setRows((x) => x.filter((y) => y.id !== r.id));
     try {
-      const res = await fetch(`${API_BASE}/reviews/${r.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error();
+      await deleteReview(r.id); // sends x-user-token; backend checks ownership
     } catch { setRows(prev); }
   }
 

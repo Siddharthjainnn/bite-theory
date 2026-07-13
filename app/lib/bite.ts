@@ -254,18 +254,24 @@ export async function fetchMyOrders(userId: number): Promise<ApiOrder[]> {
     { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
+/** My healthy-day streak (self-only on the server now). */
+export async function fetchStreak(userId: number): Promise<{ streak: number }> {
+  const res = await fetch(`${API_BASE}/orders/streak/${userId}`,
+    { cache: 'no-store', headers: await authHeaders() });
+  return jsonOrThrow(res);
+}
 export async function fetchOrderTrack(orderId: number | string): Promise<ApiOrder> {
   const res = await fetch(`${API_BASE}/orders/${orderId}/track`,
     { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function fetchAddresses(userId: number): Promise<SavedAddress[]> {
-  const res = await fetch(`${API_BASE}/addresses?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/addresses?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function createAddress(a: Partial<SavedAddress>): Promise<SavedAddress> {
   const res = await fetch(`${API_BASE}/addresses`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a),
+    method: 'POST', headers: await authHeaders(), body: JSON.stringify(a),
   });
   return jsonOrThrow(res);
 }
@@ -374,31 +380,31 @@ export interface MyReview {
 }
 
 export async function fetchWalletTransactions(userId: number): Promise<WalletTxn[]> {
-  const res = await fetch(`${API_BASE}/wallet-transactions?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/wallet-transactions?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function fetchWalletSummary(userId: number): Promise<WalletSummary> {
-  const res = await fetch(`${API_BASE}/wallet-transactions/summary?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/wallet-transactions/summary?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function fetchFavorites(userId: number): Promise<FavoriteRow[]> {
-  const res = await fetch(`${API_BASE}/favorites?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/favorites?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function fetchFavoriteIds(userId: number): Promise<number[]> {
-  const res = await fetch(`${API_BASE}/favorites/ids?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/favorites/ids?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function toggleFavorite(userId: number, productId: number):
   Promise<{ favorited: boolean; productId: number }> {
   const res = await fetch(`${API_BASE}/favorites/toggle`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: await authHeaders(),
     body: JSON.stringify({ userId, productId }),
   });
   return jsonOrThrow(res);
 }
 export async function fetchMyReviews(userId: number): Promise<MyReview[]> {
-  const res = await fetch(`${API_BASE}/reviews?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/reviews?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 
@@ -415,8 +421,16 @@ export async function postReview(r: {
   userId: number; productId: number; rating: number; comment?: string; orderId?: number;
 }): Promise<ProductReview> {
   const res = await fetch(`${API_BASE}/reviews`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: await authHeaders(),
     body: JSON.stringify(r),
+  });
+  return jsonOrThrow(res);
+}
+
+/** Delete my review (ownership enforced server-side via x-user-token). */
+export async function deleteReview(id: number): Promise<{ deleted: boolean; id: number }> {
+  const res = await fetch(`${API_BASE}/reviews/${id}`, {
+    method: 'DELETE', headers: await authHeaders(),
   });
   return jsonOrThrow(res);
 }
@@ -430,21 +444,21 @@ export interface PointsEntry {
   reason?: string | null; orderId?: number | null; createdAt?: string;
 }
 export async function fetchLoyaltySummary(userId: number): Promise<LoyaltySummary> {
-  const res = await fetch(`${API_BASE}/loyalty-points/summary?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/loyalty-points/summary?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function fetchPointsHistory(userId: number): Promise<PointsEntry[]> {
-  const res = await fetch(`${API_BASE}/loyalty-points?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/loyalty-points?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function updateAddress(id: number, patch: Partial<SavedAddress>): Promise<SavedAddress> {
   const res = await fetch(`${API_BASE}/addresses/${id}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    method: 'PATCH', headers: await authHeaders(), body: JSON.stringify(patch),
   });
   return jsonOrThrow(res);
 }
 export async function deleteAddress(id: number): Promise<{ deleted: boolean; id: number }> {
-  const res = await fetch(`${API_BASE}/addresses/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/addresses/${id}`, { method: 'DELETE', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 
@@ -454,7 +468,7 @@ export interface AppNotification {
   title: string | null; body: string | null; createdAt: string | null;
 }
 export async function fetchNotifications(userId: number): Promise<AppNotification[]> {
-  const res = await fetch(`${API_BASE}/notifications?userId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/notifications?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 
@@ -465,13 +479,13 @@ export interface ReferralRow {
   isConverted: boolean | null; rewarded: boolean | null; createdAt: string | null;
 }
 export async function fetchMyReferrals(userId: number): Promise<ReferralRow[]> {
-  const res = await fetch(`${API_BASE}/referrals?referrerId=${userId}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/referrals?referrerId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
 export async function claimReferral(userId: number, code: string):
   Promise<{ ok: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/referrals/claim`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: await authHeaders(),
     body: JSON.stringify({ userId, code }),
   });
   return jsonOrThrow(res);
@@ -558,7 +572,7 @@ export async function deleteCouponAssignment(
 /** Customer: unused coupons gifted to me. */
 export async function fetchMyGiftedCoupons(userId: number): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE}/coupon-assignments?userId=${userId}&mine=1`, { cache: 'no-store' });
+    const res = await fetch(`${API_BASE}/coupon-assignments?userId=${userId}&mine=1`, { cache: 'no-store', headers: await authHeaders() });
     if (!res.ok) return [];
     return await res.json();
   } catch {
