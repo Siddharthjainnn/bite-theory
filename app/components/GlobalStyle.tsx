@@ -646,6 +646,38 @@ a{text-decoration:none;color:inherit}
   background:${C.greenSoft};border-radius:14px;padding:10px 14px}
 .pd-sticky-incart span{font-weight:750;color:${C.greenDeep};font-size:14px}
 
+/* ── Cart: premium layer ── */
+.cart-item{border:1px solid rgba(13,59,46,.05);border-radius:18px;
+  box-shadow:0 4px 14px rgba(13,59,46,.06);transition:box-shadow .2s}
+.cart-item-img{width:74px;height:74px;border-radius:15px;
+  box-shadow:inset 0 0 0 1px rgba(13,59,46,.05)}
+.cart-item-name{font-weight:800;letter-spacing:-.2px}
+
+/* free-delivery progress */
+.cart-fd{background:#fff;border:1px solid rgba(13,59,46,.06);border-radius:16px;
+  padding:12px 14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(13,59,46,.06)}
+.cart-fd-top{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-size:12px;font-weight:750;color:${C.ink};margin-bottom:9px}
+.cart-fd-top span:last-child{font-size:16px;flex-shrink:0}
+.cart-fd-track{height:8px;border-radius:20px;background:${C.greenSoft};overflow:hidden}
+.cart-fd-fill{height:100%;border-radius:20px;
+  background:linear-gradient(90deg,var(--bt-orange),var(--bt-green));
+  transition:width .5s cubic-bezier(.4,0,.2,1)}
+.cart-fd.done .cart-fd-top{color:${C.greenDeep}}
+.cart-fd.done .cart-fd-fill{background:linear-gradient(90deg,var(--bt-green),var(--bt-green-deep))}
+
+/* bill + coupon depth */
+.bill{border:1px solid rgba(13,59,46,.06);box-shadow:0 6px 18px rgba(13,59,46,.07);border-radius:20px}
+.bill-total{letter-spacing:-.3px}
+.coupon{border-radius:14px;box-shadow:0 3px 10px rgba(245,158,11,.12)}
+
+/* checkout bar */
+.checkout-bar{box-shadow:0 -6px 20px rgba(13,59,46,.08);
+  padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+.checkout-btn{box-shadow:0 8px 20px rgba(76,175,80,.4),inset 0 1px 0 rgba(255,255,255,.22);
+  border-radius:14px;font-weight:800;transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
+.checkout-total b{letter-spacing:-.5px}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

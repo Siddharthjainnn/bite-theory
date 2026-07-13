@@ -131,6 +131,26 @@ export default function CartPage() {
                 Clear cart
               </button>
             </div>
+
+            {/* free-delivery progress — nudges basket size */}
+            {settings.freeDeliveryAbove > 0 && (
+              <div className={`cart-fd ${freeDelivery ? 'done' : ''}`}>
+                <div className="cart-fd-top">
+                  <span>
+                    {freeDelivery
+                      ? '🎉 You’ve unlocked free delivery!'
+                      : `Add ${money(Math.max(0, settings.freeDeliveryAbove - subtotal))} more for FREE delivery`}
+                  </span>
+                  <span aria-hidden>🛵</span>
+                </div>
+                <div className="cart-fd-track">
+                  <div
+                    className="cart-fd-fill"
+                    style={{ width: `${Math.min(100, Math.round((subtotal / settings.freeDeliveryAbove) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            )}
             {lines.map(({ p, qty }) => (
               <div key={p.id} className="cart-item">
                 <div className="cart-item-img">
