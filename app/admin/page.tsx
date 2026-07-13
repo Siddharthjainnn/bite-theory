@@ -11,7 +11,7 @@
  * Every module = real list + create + edit + delete against /<route> on your API.
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo} from 'react';
 
 import StoreSettingsPanel from '../components/StoreSettingsPanel';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
@@ -712,6 +712,42 @@ const NAV: NavGroup[] = [
 const ALL_KEYS = NAV.flatMap(g => g.items.map(i => i.key));
 type PageKey = typeof ALL_KEYS[number];
 
+/* ============ role-based section access (P1) ============
+   Which sidebar sections each role may see. super_admin sees everything.
+   Keys must match the NAV item keys above. Edit freely to taste.
+   NOTE: this hides UI only. Real backend enforcement kicks in once the
+   browser master key is retired (see the write-guard JWT change). */
+const ROLE_SECTIONS: Record<string, PageKey[]> = {
+  kitchen_manager: [
+    'dashboard', 'orders', 'order_items',
+    'products', 'categories', 'inventory', 'thali',
+  ],
+  delivery_manager: [
+    'dashboard', 'orders', 'order_items', 'delivery_partners',
+  ],
+  customer_support: [
+    'dashboard', 'orders', 'users', 'reviews', 'addresses',
+    'favorites', 'support_tickets', 'notifications',
+  ],
+  marketing_manager: [
+    'dashboard', 'coupons', 'coupon_assign', 'campaigns',
+    'banners', 'referrals', 'loyalty_points',
+  ],
+  finance_manager: [
+    'dashboard', 'payments', 'wallet_transactions', 'orders',
+  ],
+};
+
+/** Sections visible to a role. Empty/unknown role or super_admin → all. */
+function allowedKeys(role?: string): Set<PageKey> {
+  const r = (role || '').toLowerCase();
+  if (!r || r === 'super_admin') return new Set(ALL_KEYS as PageKey[]);
+  const list = ROLE_SECTIONS[r];
+  // Unknown role → be safe, show only the dashboard.
+  return new Set((list && list.length ? list : ['dashboard']) as PageKey[]);
+}
+
+
 /* ============ small UI ============ */
 function Toast({ msg }: { msg: string }) {
   if (!msg) return null;
@@ -820,25 +856,37 @@ function BarChart({ data, color = C.green, height = 140 }: { data: { label: stri
 }
 
 /* ============ main ============ */
-function AdminDashboard({ onLogout }: { onLogout: () => void }) {
+function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: string }) {
   /* #9: on refresh the admin used to bounce back to Dashboard because the
      current page lived only in React state. Persist it in the URL hash
      (e.g. #orders) so a refresh — or a shared link — reopens the same page. */
+  const allowed = useMemo(() => allowedKeys(role), [role]);
+  // Sidebar with sections this role can't see removed entirely.
+  const visibleNav = useMemo(
+    () => NAV
+      .map(g => ({ ...g, items: g.items.filter(i => allowed.has(i.key as PageKey)) }))
+      .filter(g => g.items.length),
+    [allowed],
+  );
+
   const [page, _setPage] = useState<PageKey>('dashboard');
   useEffect(() => {
     const fromHash = (typeof window !== 'undefined' ? window.location.hash.replace('#', '') : '') as PageKey;
     const valid = NAV.flatMap(g => g.items).some(i => i.key === fromHash);
-    if (valid && fromHash !== page) _setPage(fromHash);
+    // only honour the hash if this role is allowed to see that section
+    if (valid && allowed.has(fromHash) && fromHash !== page) _setPage(fromHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const setPage = useCallback((p: PageKey) => {
+    if (!allowed.has(p)) return; // role can't access this section
     _setPage(p);
     if (typeof window !== 'undefined') window.history.replaceState(null, '', `#${p}`);
-  }, []);
+  }, [allowed]);
   const [toast, setToast] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const showToast = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(''), 2400); }, []);
-  const currentItem = NAV.flatMap(g => g.items).find(i => i.key === page);
+  const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
+  const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
   const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
@@ -876,7 +924,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <div><b style={{ color: '#fff', fontSize: 15 }}>Bites Theory</b><span style={{ display: 'block', fontSize: 10, color: '#8fb3a3', letterSpacing: 1 }}>ADMIN CONSOLE</span></div>
             <button onClick={() => setDrawerOpen(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#cfe3d8', fontSize: 20, cursor: 'pointer', display: drawerOpen ? 'block' : 'none' }}>×</button>
           </div>
-          {NAV.map(group => (
+          {visibleNav.map(group => (
             <div key={group.title} style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6f9484', margin: '14px 10px 5px', fontWeight: 700 }}>{group.title}</div>
               {group.items.map(item => (
@@ -902,16 +950,16 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             </div>
           </header>
           <div className="bt-content">
-            {page === 'dashboard' && <Dashboard showToast={showToast} />}
-            {page === 'products' && <Products showToast={showToast} />}
-            {page === 'categories' && <Categories showToast={showToast} />}
-            {page === 'orders' && <Orders showToast={showToast} />}
-            {page === 'order_items' && <OrderItemsPage showToast={showToast} />}
-            {page === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
-            {page === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
-            {page === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
-            {page === 'thali' && <ThaliAdminPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
-            {!DEDICATED.includes(page) && MODULES[page] && <GenericModule config={MODULES[page]} showToast={showToast} />}
+            {effectivePage === 'dashboard' && <Dashboard showToast={showToast} />}
+            {effectivePage === 'products' && <Products showToast={showToast} />}
+            {effectivePage === 'categories' && <Categories showToast={showToast} />}
+            {effectivePage === 'orders' && <Orders showToast={showToast} />}
+            {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
+            {effectivePage === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
+            {effectivePage === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
+            {effectivePage === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
+            {effectivePage === 'thali' && <ThaliAdminPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
+            {!DEDICATED.includes(effectivePage) && MODULES[effectivePage] && <GenericModule config={MODULES[effectivePage]} showToast={showToast} />}
           </div>
         </div>
       </div>
@@ -2231,7 +2279,7 @@ export default function AdminPage() {
   }
 
   if (!checked) return null;
-  if (session) return <AdminDashboard onLogout={logout} />;
+  if (session) return <AdminDashboard onLogout={logout} role={session.role} />;
 
   const inp: React.CSSProperties = {
     width: '100%', padding: '11px 13px', borderRadius: 10, fontSize: 14,
