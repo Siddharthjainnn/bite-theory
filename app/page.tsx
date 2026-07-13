@@ -29,6 +29,7 @@ import StoreClosedBanner from './components/StoreClosedBanner';
 import DesktopLanding from './components/DesktopLanding';
 import DesktopApp from './components/DesktopApp';
 import RecommendedRow from './components/RecommendedRow';
+import TodaysSpecialModal from './components/TodaysSpecialModal';
 import { useDesktopLanding } from './lib/useDesktopLanding';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
@@ -58,6 +59,7 @@ export default function HomePage() {
   const [vegOnly, setVegOnly] = useState(true); // pure-veg app: veg stays ON by default
   const [banners, setBanners] = useState<Banner[]>([]);
   const [bannerIdx, setBannerIdx] = useState(0);
+  const [specialOpen, setSpecialOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // intro
@@ -87,6 +89,13 @@ export default function HomePage() {
       if (sessionStorage.getItem('bt_special_closed') === '1')
         setAgentClosed(true);
     } catch {}
+  }, []);
+
+  // bottom-nav "Special" tab opens the Today's Special popup
+  useEffect(() => {
+    const openIt = () => setSpecialOpen(true);
+    window.addEventListener('bt:open-special', openIt);
+    return () => window.removeEventListener('bt:open-special', openIt);
   }, []);
 
   // banners: load once, auto-advance
@@ -369,47 +378,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* TODAY'S SPECIAL — admin toggles products on/off dynamically */}
-      {specials.length > 0 && (
-        <>
-          <div className="bt-special-head">
-            <span className="zap">⚡</span> Today&apos;s Special
-            <span style={{ fontSize: 10.5, fontWeight: 800, color: C.orangeDeep, background: C.orangeSoft, padding: '3px 8px', borderRadius: 999, marginLeft: 2 }}>
-              LIMITED TIME
-            </span>
-          </div>
-          <div className="bt-special-row">
-            {specials.map((p) => (
-              <div key={p.id} className="bt-sp-card">
-                <Link href={`/product/${p.id}`} className="bt-sp-img" style={{ display: 'block' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {p.image
-                    ? <img src={p.image} alt={p.name} />
-                    : <div className="food-emoji">🍛</div>}
-                  <span className="bt-sp-tag">{p.specialTag || "TODAY'S SPECIAL"}</span>
-                </Link>
-                <div className="bt-sp-body">
-                  <div className="bt-sp-name">{p.name}</div>
-                  <div className="bt-sp-price">
-                    <b>{money(effectivePrice(p))}</b>
-                    {hasOffer(p) && <s>{money(p.price)}</s>}
-                  </div>
-                  {(cart[p.id] || 0) > 0 ? (
-                    <div className="bt-qty bt-sp-qty">
-                      <button onClick={() => sub(p.id)} aria-label={`Remove one ${p.name}`}>−</button>
-                      <span>{cart[p.id]}</span>
-                      <button onClick={() => add(p.id)} aria-label={`Add one ${p.name}`}>+</button>
-                    </div>
-                  ) : (
-                    <button className="bt-sp-add" onClick={() => add(p.id)}>ADD +</button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
       {/* recommended for you */}
       {activeCat === 'all' && recommended.length > 0 && (
         <RecommendedRow products={recommended} />
@@ -581,6 +549,12 @@ export default function HomePage() {
       </section>
 
       <div style={{ height: 16 }} />
+      <TodaysSpecialModal
+        open={specialOpen}
+        onClose={() => setSpecialOpen(false)}
+        specials={specials}
+      />
+
     </AppShell>
   );
 }

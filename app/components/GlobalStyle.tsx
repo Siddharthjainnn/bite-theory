@@ -710,6 +710,51 @@ a{text-decoration:none;color:inherit}
 .bt-nav-badge{animation:badgePop .3s cubic-bezier(.34,1.56,.64,1)}
 @keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
 
+/* ── Today's Special: bottom-sheet popup ── */
+.tsm-scrim{position:fixed;inset:0;z-index:80;background:rgba(4,22,15,.5);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:tsmFade .22s ease both}
+@keyframes tsmFade{from{opacity:0}to{opacity:1}}
+.tsm-sheet{width:100%;max-width:480px;background:var(--bt-app-bg,#fbfcfb);
+  border-radius:26px 26px 0 0;padding:8px 0 calc(18px + env(safe-area-inset-bottom));
+  max-height:82vh;overflow-y:auto;scrollbar-width:none;
+  box-shadow:0 -12px 40px rgba(4,22,15,.3);
+  animation:tsmUp .34s cubic-bezier(.34,1.4,.64,1) both}
+.tsm-sheet::-webkit-scrollbar{display:none}
+@keyframes tsmUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.tsm-grab{width:40px;height:4px;border-radius:99px;background:rgba(13,59,46,.18);
+  margin:8px auto 4px}
+.tsm-head{display:flex;align-items:center;gap:9px;padding:8px 18px 12px;position:relative}
+.tsm-title{display:flex;align-items:center;gap:7px;font-size:18px;font-weight:850;
+  letter-spacing:-.3px;color:${C.ink}}
+.tsm-title .zap{font-size:19px;animation:pulseZap 1.6s infinite}
+.tsm-limited{font-size:10px;font-weight:850;color:var(--bt-orange-deep);
+  background:${C.orangeSoft};padding:3px 9px;border-radius:999px}
+.tsm-close{margin-left:auto;width:30px;height:30px;border-radius:50%;border:none;
+  background:#fff;box-shadow:0 2px 8px rgba(13,59,46,.12);cursor:pointer;
+  font-size:13px;color:${C.muted}}
+.tsm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;padding:4px 16px 8px}
+@media(min-width:520px){.tsm-grid{grid-template-columns:repeat(3,1fr)}}
+.tsm-grid .bt-sp-card{flex:none;width:100%}
+.tsm-empty{padding:40px 20px;text-align:center;color:${C.muted};font-size:13px}
+
+/* ── Bottom nav "Special" button (gold pill accent, like a spotlight tab) ── */
+.bt-nav-special .bt-nav-ic{
+  animation:specGlow 2.2s ease-in-out infinite}
+.bt-nav-special{color:var(--bt-orange-deep)!important;position:relative}
+.bt-nav-special::before{content:"";position:absolute;top:5px;left:50%;transform:translateX(-50%);
+  width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle, rgba(245,158,11,.22), transparent 70%);
+  animation:specPulse 2.2s ease-in-out infinite}
+@keyframes specGlow{0%,100%{transform:scale(1)}50%{transform:scale(1.16) rotate(-6deg)}}
+@keyframes specPulse{0%,100%{opacity:.5;transform:translateX(-50%) scale(.85)}50%{opacity:1;transform:translateX(-50%) scale(1.1)}}
+
+/* ── Banner: gentle entrance ── */
+.bt-banner{animation:bannerIn .5s cubic-bezier(.4,0,.2,1) both}
+@keyframes bannerIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+.bt-banner-dots i{transition:width .3s,background .3s}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
