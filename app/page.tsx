@@ -34,7 +34,7 @@ type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
 export default function HomePage() {
   const { products, categories, loading, error } = useCatalog();
   const { status: storeStatus } = useStoreSettings();
-  const { add, addThali, cart } = useCart();
+  const { add, addThali, cart, sub } = useCart();
   const featuredCoupon = useFeaturedCoupon();
 
   // Desktop-only marketing landing gate. On mobile this is always false, so
@@ -351,9 +351,15 @@ export default function HomePage() {
                     <b>{money(effectivePrice(p))}</b>
                     {hasOffer(p) && <s>{money(p.price)}</s>}
                   </div>
-                  <button className="bt-sp-add" onClick={() => add(p.id)}>
-                    {(cart[p.id] || 0) > 0 ? `ADDED · ${cart[p.id]}` : 'ADD +'}
-                  </button>
+                  {(cart[p.id] || 0) > 0 ? (
+                    <div className="bt-qty bt-sp-qty">
+                      <button onClick={() => sub(p.id)} aria-label={`Remove one ${p.name}`}>−</button>
+                      <span>{cart[p.id]}</span>
+                      <button onClick={() => add(p.id)} aria-label={`Add one ${p.name}`}>+</button>
+                    </div>
+                  ) : (
+                    <button className="bt-sp-add" onClick={() => add(p.id)}>ADD +</button>
+                  )}
                 </div>
               </div>
             ))}

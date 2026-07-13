@@ -19,7 +19,7 @@ import StoreClosedBanner from '../components/StoreClosedBanner';
 
 export default function CartPage() {
   const { products, loading } = useCatalog();
-  const { cart, add, sub, remove } = useCart();
+  const { cart, add, sub, remove, clear } = useCart();
   const featuredCoupon = useFeaturedCoupon();
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -121,6 +121,16 @@ export default function CartPage() {
           </div>
         ) : (
           <>
+            <div className="cart-listhead">
+              <span>{lines.reduce((a, l) => a + l.qty, 0)} item(s) in cart</span>
+              <button
+                type="button"
+                className="cart-clear"
+                onClick={() => { if (confirm('Remove all items from your cart?')) clear(); }}
+              >
+                Clear cart
+              </button>
+            </div>
             {lines.map(({ p, qty }) => (
               <div key={p.id} className="cart-item">
                 <div className="cart-item-img">
