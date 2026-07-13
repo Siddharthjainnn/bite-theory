@@ -546,6 +546,58 @@ a{text-decoration:none;color:inherit}
   .promo-flat{font-size:28px}
 }
 
+/* ── Recommended for you (wide photo cards, Bite Theory brand) ── */
+.rec-wrap{padding:6px 0 2px}
+.rec-head{display:flex;align-items:baseline;gap:9px;padding:6px 12px 10px}
+.rec-title{font-size:17px;font-weight:850;letter-spacing:-.3px;margin:0;color:${C.ink}}
+.rec-sub{font-size:11px;color:${C.muted};font-weight:600}
+
+.rec-row{display:flex;gap:13px;overflow-x:auto;padding:2px 12px 6px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory}
+.rec-row::-webkit-scrollbar{display:none}
+
+.rec-card{flex:0 0 158px;scroll-snap-align:start;background:#fff;border-radius:18px;
+  overflow:hidden;border:1px solid rgba(13,59,46,.05);
+  box-shadow:0 6px 18px rgba(13,59,46,.08);
+  transition:transform .2s,box-shadow .2s}
+.rec-card:active{transform:scale(.98)}
+@media(min-width:1024px){.rec-card{flex:0 0 188px}}
+
+.rec-img{position:relative;display:block;width:100%;aspect-ratio:4/3;
+  background:radial-gradient(120% 120% at 50% 10%, #fff, ${C.greenSoft} 92%);
+  overflow:hidden}
+.rec-img img{width:100%;height:100%;object-fit:cover}
+.rec-img .food-emoji{width:100%;height:100%;display:flex;align-items:center;
+  justify-content:center;font-size:44px}
+.rec-img .veg-dot{position:absolute;top:7px;right:7px}
+
+.rec-ribbon{position:absolute;bottom:0;left:0;
+  background:linear-gradient(135deg,var(--bt-green),var(--bt-green-deep));color:#fff;
+  font-size:10px;font-weight:850;letter-spacing:.2px;padding:4px 10px 4px 8px;
+  border-top-right-radius:12px;box-shadow:0 -1px 6px rgba(0,0,0,.15)}
+.rec-ribbon--gold{background:linear-gradient(135deg,var(--bt-orange),#f7a73a)}
+
+.rec-rating{position:absolute;top:7px;left:7px;background:rgba(13,59,46,.86);
+  color:#fff;font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:8px;
+  backdrop-filter:blur(2px)}
+
+.rec-body{padding:9px 11px 11px}
+.rec-name{display:block;font-size:13.5px;font-weight:750;color:${C.ink};line-height:1.25;
+  margin-bottom:8px;min-height:34px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rec-foot{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.rec-price b{font-size:14.5px;font-weight:850;color:${C.ink}}
+.rec-price s{font-size:10.5px;color:#9aa8a0;margin-left:4px}
+
+.rec-add{background:linear-gradient(135deg,var(--bt-green),var(--bt-green-deep));color:#fff;
+  border:none;font-size:11.5px;font-weight:800;letter-spacing:.4px;padding:7px 14px;
+  border-radius:10px;cursor:pointer;flex-shrink:0;
+  box-shadow:0 3px 10px rgba(76,175,80,.32);transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
+.rec-add:active{transform:scale(.9)}
+.rec-qty{padding:5px 9px;gap:8px}
+.rec-sold{font-size:10px;font-weight:800;color:#c62828;background:#fdecec;
+  padding:4px 9px;border-radius:16px}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

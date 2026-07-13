@@ -28,6 +28,7 @@ import { useFeaturedCoupon } from './lib/useFeaturedCoupon';
 import StoreClosedBanner from './components/StoreClosedBanner';
 import DesktopLanding from './components/DesktopLanding';
 import DesktopApp from './components/DesktopApp';
+import RecommendedRow from './components/RecommendedRow';
 import { useDesktopLanding } from './lib/useDesktopLanding';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
@@ -173,6 +174,14 @@ export default function HomePage() {
     else arr.sort((a, b) => b.rating - a.rating);
     return arr;
   }, [products, activeCat, sort, vegOnly]);
+
+  const recommended = useMemo(
+    () => products
+      .filter((p) => (!vegOnly || p.isVeg) && !p.isTodaysSpecial && p.stockStatus !== 'out_of_stock')
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 10),
+    [products, vegOnly],
+  );
 
   const specials = useMemo(
     () => products.filter((p) => p.isTodaysSpecial && (!vegOnly || p.isVeg)),
@@ -387,6 +396,11 @@ export default function HomePage() {
             ))}
           </div>
         </>
+      )}
+
+      {/* recommended for you */}
+      {activeCat === 'all' && recommended.length > 0 && (
+        <RecommendedRow products={recommended} />
       )}
 
       {/* categories */}
