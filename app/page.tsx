@@ -1,4 +1,5 @@
 'use client';
+import { useRouter } from 'next/navigation';
 
 // session is per-user, so never statically pre-render this page
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,7 @@ import { useDesktopLanding } from './lib/useDesktopLanding';
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
 
 export default function HomePage() {
+  const router = useRouter();
   const { products, categories, loading, error } = useCatalog();
   const { status: storeStatus } = useStoreSettings();
   const { add, addThali, cart, sub } = useCart();
@@ -405,6 +407,18 @@ export default function HomePage() {
                   <span className="bt-cat-lbl">{c.name}</span>
                 </button>
               ))}
+          {!loading && categories.length > 0 && (
+            <button
+              className="bt-cat"
+              onClick={() => router.push('/cuisines')}
+              aria-label="See all cuisines"
+            >
+              <span className="bt-cat-ic" style={{ background: C.greenSoft }}>
+                <span style={{ fontSize: 20 }}>🍽️</span>
+              </span>
+              <span className="bt-cat-lbl" style={{ color: C.green, fontWeight: 700 }}>See all</span>
+            </button>
+          )}
         </div>
       </section>
 

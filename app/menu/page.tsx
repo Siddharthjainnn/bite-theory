@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AppShell from '../components/AppShell';
 import AppHeader from '../components/AppHeader';
@@ -15,6 +15,7 @@ function MenuInner() {
   const { products, categories, loading, error } = useCatalog();
   const params = useSearchParams();
   const initialQ = params.get('q') || '';
+  const initialCat = params.get('cat');
 
   const [active, setActive] = useState<number | null>(null);
   const [q, setQ] = useState(initialQ);
@@ -42,6 +43,17 @@ function MenuInner() {
     }
     return map;
   }, [filtered, categories]);
+
+  // deep-link: /menu?cat=ID scrolls to that category once rendered
+  useEffect(() => {
+    if (!initialCat || loading) return;
+    const id = Number(initialCat);
+    const t = setTimeout(() => {
+      setActive(id);
+      document.getElementById('cat-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [initialCat, loading]);
 
   function jump(c: Category) {
     setActive(c.id);

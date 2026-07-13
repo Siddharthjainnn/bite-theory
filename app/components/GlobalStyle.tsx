@@ -450,6 +450,43 @@ a{text-decoration:none;color:inherit}
 @keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
 @keyframes sheetup{from{transform:translateY(26px);opacity:.4}to{transform:translateY(0);opacity:1}}
 
+/* ── Cuisines & dishes grid (photo tiles, Bite Theory brand) ── */
+.cz-wrap{padding:12px 12px 4px}
+.cz-search{display:flex;align-items:center;gap:9px;background:#fff;
+  border:1px solid ${C.line};border-radius:14px;padding:11px 14px;
+  box-shadow:0 2px 8px rgba(13,59,46,.06);margin-bottom:16px}
+.cz-search span{font-size:14px;opacity:.6}
+.cz-search input{flex:1;border:none;outline:none;font-size:14px;color:${C.ink};background:none}
+.cz-search input::placeholder{color:#9aa8a0}
+.cz-clear{border:none;background:${C.bg};color:${C.muted};width:22px;height:22px;
+  border-radius:50%;cursor:pointer;font-size:11px;line-height:1;flex-shrink:0}
+
+.cz-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px 8px;padding:2px 2px 8px}
+@media(min-width:1024px){.cz-grid{grid-template-columns:repeat(6,1fr);gap:22px 12px}}
+
+.cz-tile{background:none;border:none;cursor:pointer;padding:0;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  animation:czIn .42s cubic-bezier(.4,0,.2,1) both}
+@keyframes czIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+.cz-photo{position:relative;width:100%;aspect-ratio:1/1;border-radius:18px;overflow:hidden;
+  background:radial-gradient(120% 120% at 50% 15%, #fff, ${C.greenSoft} 90%);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 16px rgba(13,59,46,.10),0 1px 3px rgba(13,59,46,.06);
+  border:1px solid rgba(13,59,46,.05);
+  transition:transform .26s cubic-bezier(.34,1.56,.64,1),box-shadow .26s}
+.cz-tile:active .cz-photo{transform:scale(.93)}
+.cz-tile:hover .cz-photo{transform:translateY(-2px);
+  box-shadow:0 10px 24px rgba(13,59,46,.14),0 2px 6px rgba(13,59,46,.06)}
+.cz-photo img{width:100%;height:100%;object-fit:cover}
+.cz-photo .food-emoji{font-size:34px}
+.cz-photo .veg-dot{position:absolute;top:6px;left:6px}
+
+.cz-name{font-size:12px;font-weight:700;color:${C.ink};margin-top:7px;line-height:1.2;
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.cz-count{font-size:9.5px;font-weight:600;color:var(--bt-orange-deep);
+  background:${C.orangeSoft};padding:1px 7px;border-radius:20px}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
