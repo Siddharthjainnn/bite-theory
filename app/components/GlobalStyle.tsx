@@ -487,6 +487,65 @@ a{text-decoration:none;color:inherit}
 .cz-count{font-size:9.5px;font-weight:600;color:var(--bt-orange-deep);
   background:${C.orangeSoft};padding:1px 7px;border-radius:20px}
 
+/* ── Promo hero (coupon-driven, Bite Theory green/gold energy) ── */
+.bt-hero--promo{
+  background:
+    radial-gradient(140% 120% at 15% -20%, #1a5240 0%, var(--bt-panel) 40%, var(--bt-deep) 100%),
+    var(--bt-deep);
+  text-align:left;position:relative;overflow:hidden;
+  padding:22px 20px 20px}
+.bt-hero--promo::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    conic-gradient(from 210deg at 78% 30%,
+      transparent 0deg, rgba(245,158,11,.16) 22deg, transparent 44deg,
+      rgba(76,175,80,.14) 90deg, transparent 130deg,
+      rgba(245,158,11,.12) 200deg, transparent 250deg)}
+.bt-hero--promo>*{position:relative;z-index:1}
+
+.bt-hero--promo .bt-veg-badge{
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,216,77,.4);
+  color:var(--bt-yellow);font-weight:800;letter-spacing:.4px}
+
+.promo-offer{display:flex;flex-direction:column;margin:12px 0 4px;line-height:.94}
+.promo-flat{font-size:22px;font-weight:900;font-style:italic;letter-spacing:-.5px;
+  color:var(--bt-yellow);text-shadow:0 2px 0 rgba(0,0,0,.25);transform:skewX(-6deg);width:max-content}
+.promo-big{font-size:34px;font-weight:900;font-style:italic;letter-spacing:-1px;
+  color:#fff;text-shadow:0 3px 0 rgba(0,0,0,.28);transform:skewX(-6deg);
+  background:linear-gradient(180deg,#fff 55%,#ffe9b0);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;padding-right:4px;width:max-content}
+
+.promo-sub{color:#dff5e6;font-size:12px;margin:8px 0 14px}
+.promo-sub b{color:var(--bt-yellow);letter-spacing:.5px;background:rgba(245,158,11,.16);
+  padding:1px 7px;border-radius:6px}
+
+.promo-cta{display:inline-flex;align-items:center;gap:7px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,var(--bt-green),var(--bt-green-deep));color:#fff;
+  font-size:14px;font-weight:800;letter-spacing:.3px;padding:11px 22px;border-radius:13px;
+  box-shadow:0 8px 20px rgba(76,175,80,.4),inset 0 1px 0 rgba(255,255,255,.25);
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s}
+.promo-cta:hover{box-shadow:0 10px 26px rgba(76,175,80,.5)}
+.promo-cta:active{transform:scale(.95)}
+.promo-cta span{transition:transform .18s}
+.promo-cta:hover span{transform:translateX(3px)}
+
+/* floating accents */
+.promo-spark,.promo-ticket{position:absolute;z-index:1;pointer-events:none;opacity:.9}
+.promo-spark{color:var(--bt-yellow);font-size:14px;animation:twinkle 2.4s ease-in-out infinite}
+.promo-spark.s1{top:16px;right:60px}
+.promo-spark.s2{bottom:44px;right:24px;font-size:10px;animation-delay:.8s}
+.promo-ticket{font-size:26px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
+.promo-ticket.t1{top:14px;right:16px;transform:rotate(18deg);animation:floaty 3.4s ease-in-out infinite}
+.promo-ticket.t2{bottom:16px;right:74px;font-size:20px;transform:rotate(-12deg);
+  animation:floaty 3.4s ease-in-out infinite;animation-delay:.6s;opacity:.75}
+@keyframes twinkle{0%,100%{opacity:.4;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes floaty{0%,100%{transform:translateY(0) rotate(18deg)}50%{transform:translateY(-7px) rotate(18deg)}}
+
+@media(min-width:1024px){
+  .promo-big{font-size:44px}
+  .promo-flat{font-size:28px}
+}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

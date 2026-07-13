@@ -286,16 +286,36 @@ export default function HomePage() {
         </>
       }
     >
-      {/* hero */}
-      <section className="bt-hero">
-        <span className="bt-veg-badge">100% PURE VEG</span>
-        <h1 className="bt-hero-title">
-          Smart Food.
-          <br />
-          Better Living.
-        </h1>
-        <p className="bt-hero-sub">Good food. Right price. Under ₹99 combos.</p>
-      </section>
+      {/* hero — promo when a real coupon is live, else brand message */}
+      {featuredCoupon ? (
+        <section className="bt-hero bt-hero--promo">
+          <span className="promo-spark s1" aria-hidden>✦</span>
+          <span className="promo-spark s2" aria-hidden>✦</span>
+          <span className="promo-ticket t1" aria-hidden>🎟️</span>
+          <span className="promo-ticket t2" aria-hidden>🎟️</span>
+          <span className="bt-veg-badge">100% PURE VEG · LIMITED TIME</span>
+          <div className="promo-offer">
+            <span className="promo-flat">FLAT</span>
+            <span className="promo-big">{featuredCoupon.label}</span>
+          </div>
+          <p className="promo-sub">
+            Use code <b>{featuredCoupon.code}</b> · healthy meals, honest prices
+          </p>
+          <button className="promo-cta" onClick={() => router.push('/menu')}>
+            Order now <span aria-hidden>→</span>
+          </button>
+        </section>
+      ) : (
+        <section className="bt-hero">
+          <span className="bt-veg-badge">100% PURE VEG</span>
+          <h1 className="bt-hero-title">
+            Smart Food.
+            <br />
+            Better Living.
+          </h1>
+          <p className="bt-hero-sub">Good food. Right price. Under ₹99 combos.</p>
+        </section>
+      )}
 
       {!storeStatus.open && (
         <section style={{ padding: '0 16px' }}>
