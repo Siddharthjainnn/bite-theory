@@ -684,6 +684,32 @@ a{text-decoration:none;color:inherit}
   box-shadow:0 0 0 3px rgba(76,175,80,.16)!important}
 .checkout-btn:disabled{opacity:.6;cursor:not-allowed}
 
+/* ── Bottom nav: premium floating pill (frosted, spring active) ── */
+.bt-nav{
+  background:rgba(255,255,255,.82);
+  backdrop-filter:blur(16px) saturate(1.4);
+  -webkit-backdrop-filter:blur(16px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.6);
+  box-shadow:0 12px 34px rgba(4,22,15,.22),0 2px 8px rgba(4,22,15,.1),
+    inset 0 1px 0 rgba(255,255,255,.7);
+  animation:navRise .5s cubic-bezier(.4,0,.2,1) both}
+@keyframes navRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+.bt-nav-i{transition:background .22s,color .22s,transform .18s cubic-bezier(.34,1.56,.64,1)}
+.bt-nav-i:active{transform:scale(.9)}
+.bt-nav-i.on{background:linear-gradient(160deg,${C.greenSoft},#dff0e2)}
+.bt-nav-i.on .bt-nav-ic{animation:navPop .42s cubic-bezier(.34,1.56,.64,1)}
+@keyframes navPop{0%{transform:scale(1)}45%{transform:scale(1.28) translateY(-3px)}100%{transform:scale(1.14) translateY(-1px)}}
+
+/* little active dot under the label */
+.bt-nav-i.on::after{content:"";position:absolute;bottom:3px;left:50%;
+  width:5px;height:5px;border-radius:50%;background:var(--bt-green);
+  transform:translateX(-50%);animation:navDot .3s ease both}
+@keyframes navDot{from{opacity:0;transform:translateX(-50%) scale(0)}to{opacity:1;transform:translateX(-50%) scale(1)}}
+
+.bt-nav-badge{animation:badgePop .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
