@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import NotificationBell from './NotificationBell';
 import { useMenu } from './MenuProvider';
@@ -74,6 +74,26 @@ export default function AppHeader({
     const term = q.trim();
     router.push(term ? `/menu?q=${encodeURIComponent(term)}` : '/menu');
   }
+
+  // Swiggy-style rotating search placeholder (cycles healthy-food prompts)
+  const SEARCH_HINTS = [
+    'thali', 'high-protein meals', 'paneer bowls', 'healthy snacks',
+    'khichdi', 'salads', 'under \u20b999 combos', 'fresh juices',
+  ];
+  const [hintIdx, setHintIdx] = useState(0);
+  const [hintShow, setHintShow] = useState(true);
+  useEffect(() => {
+    if (q) return; // don't rotate while the user is typing
+    const t = setInterval(() => {
+      setHintShow(false);
+      setTimeout(() => {
+        setHintIdx((i) => (i + 1) % SEARCH_HINTS.length);
+        setHintShow(true);
+      }, 260);
+    }, 2600);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
 
   const avatarInitial = initials(user?.name);
 
@@ -160,16 +180,26 @@ export default function AppHeader({
             >
               🔍
             </button>
-            <input
-              className="bt-search-input"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') runSearch();
-              }}
-              placeholder="Search thali, healthy meals, snacks…"
-              inputMode="search"
-            />
+            <div className="bt-search-field">
+              <input
+                className="bt-search-input"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') runSearch();
+                }}
+                inputMode="search"
+                aria-label="Search dishes"
+              />
+              {!q && (
+                <span className="bt-search-hint" aria-hidden>
+                  Search{' '}
+                  <span className={`bt-search-word ${hintShow ? 'in' : 'out'}`}>
+                    “{SEARCH_HINTS[hintIdx]}”
+                  </span>
+                </span>
+              )}
+            </div>
             {q && (
               <button
                 className="bt-search-clear"
@@ -200,6 +230,14 @@ export default function AppHeader({
 .bt-search-input{flex:1;border:none;outline:none;background:none;padding:12px 2px;
   font-size:14px;color:#0D3B2E}
 .bt-search-input::placeholder{color:#9fb0a8}
+.bt-search-field{position:relative;flex:1;display:flex;align-items:center}
+.bt-search-field .bt-search-input{width:100%}
+.bt-search-hint{position:absolute;left:2px;top:50%;transform:translateY(-50%);
+  pointer-events:none;color:#9fb0a8;font-size:14px;display:flex;gap:4px;white-space:nowrap;overflow:hidden}
+.bt-search-word{color:#5a6f66;font-weight:600;display:inline-block;
+  transition:opacity .26s ease,transform .26s ease}
+.bt-search-word.in{opacity:1;transform:translateY(0)}
+.bt-search-word.out{opacity:0;transform:translateY(-8px)}
 .bt-search-clear{background:none;border:none;color:#9fb0a8;font-size:13px;cursor:pointer;padding:4px}
         `}</style>
       </header>
