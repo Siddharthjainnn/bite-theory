@@ -36,7 +36,7 @@ function CompleteProfileInner() {
     }
     setSaving(true);
     try {
-      const res = await fetch('/account/profile', {
+      const res = await fetch('/account/profile/api', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mobile: digits }),

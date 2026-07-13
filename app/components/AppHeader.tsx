@@ -215,8 +215,8 @@ export default function AppHeader({
         <style>{`
 .bt-logo{height:34px;width:auto;display:block}
 .bt-acct-wrap{position:relative}
-.bt-acct-scrim{position:fixed;inset:0;z-index:30}
-.bt-acct-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:31;background:#fff;
+.bt-acct-scrim{position:fixed;inset:0;z-index:60}
+.bt-acct-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:61;background:#fff;
   border:1px solid #e4ebe6;border-radius:14px;box-shadow:0 10px 30px rgba(13,59,46,.16);
   padding:8px;min-width:180px;display:flex;flex-direction:column;gap:2px}
 .bt-acct-name{font-size:12px;font-weight:800;color:#0D3B2E;padding:6px 10px 8px;border-bottom:1px solid #eef3f0;margin-bottom:4px}

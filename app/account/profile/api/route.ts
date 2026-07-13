@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../../lib/auth';
-import { query } from '../../lib/db';
+import { authOptions } from '../../../lib/auth';
+import { query } from '../../../lib/db';
 
 /** PATCH /account/profile — update mobile / name for the current user. */
 export async function PATCH(req: Request) {

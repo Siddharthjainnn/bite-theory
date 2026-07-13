@@ -122,17 +122,12 @@ export default function HomePage() {
     if (hit) setActiveCat(hit.id);
   }, [goal, categories]);
 
-  // pop the special after a moment
+  // Today's Special is now opened ON DEMAND from the bottom-nav "Special"
+  // button (see TodaysSpecialModal) — no auto-pop, which was cluttering the
+  // home screen and reading as intrusive. The agent stays available but is
+  // not force-shown.
   useEffect(() => {
-    if (loading || !products.length || agentClosed) return;
-    const t = setTimeout(() => {
-      const flagged = products.filter((p) => p.isTodaysSpecial);
-      const withOffer = products
-        .filter((p) => p.offerPrice > 0 && p.offerPrice < p.price)
-        .sort((a, b) => b.price - b.offerPrice - (a.price - a.offerPrice));
-      setAgentProduct(flagged[0] || withOffer[0] || products[0]);
-    }, 2800);
-    return () => clearTimeout(t);
+    // intentionally left as a no-op: auto-pop removed.
   }, [loading, products, agentClosed]);
 
   function finishIntro(g: Goal | null) {
