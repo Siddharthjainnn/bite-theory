@@ -59,12 +59,29 @@ function getAdminKey(): string {
     return raw ? (JSON.parse(raw).adminKey || '') : '';
   } catch { return ''; }
 }
-// Getter-based so every spread/read picks up the live key after login.
+// Per-admin JWT (P1). Sent as Authorization: Bearer on every admin call.
+function getAdminToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
+    return raw ? (JSON.parse(raw).token || '') : '';
+  } catch { return ''; }
+}
+// Getter-based so every spread/read picks up the live credentials after login.
+// We send BOTH the JWT (Bearer) and the legacy key so the switch is seamless:
+// new role-guarded routes read the Bearer token; older key-guarded routes still
+// accept x-admin-key until every route is migrated.
 const WRITE_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
   get 'x-admin-key'() { return getAdminKey(); },
+  get Authorization() { return getAdminToken() ? `Bearer ${getAdminToken()}` : ''; },
 } as any;
-const ADMIN_KEY_HEADER = () => ({ 'x-admin-key': getAdminKey() });
+const ADMIN_KEY_HEADER = () => {
+  const h: Record<string, string> = { 'x-admin-key': getAdminKey() };
+  const t = getAdminToken();
+  if (t) h.Authorization = `Bearer ${t}`;
+  return h;
+};
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 type RiderOption = {
@@ -2160,7 +2177,7 @@ function Row3({ children }: { children: React.ReactNode }) { return <div style={
 
 /* ============ login gate ============ */
 export default function AdminPage() {
-  const [session, setSession] = useState<{ adminKey: string; name?: string } | null>(null);
+  const [session, setSession] = useState<{ adminKey: string; token?: string; name?: string; role?: string } | null>(null);
   const [checked, setChecked] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -2172,7 +2189,7 @@ export default function AdminPage() {
       const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
       if (raw) {
         const s = JSON.parse(raw);
-        if (s?.adminKey) setSession(s);
+        if (s?.token || s?.adminKey) setSession(s);
       }
     } catch {}
     setChecked(true);
@@ -2192,7 +2209,13 @@ export default function AdminPage() {
         setErr(data?.message || 'Invalid email or password');
         return;
       }
-      const s = { adminKey: data.adminKey, name: data.admin?.name, email: data.admin?.email };
+      const s = {
+        adminKey: data.adminKey,
+        token: data.token,                 // ← per-admin JWT
+        name: data.admin?.name,
+        email: data.admin?.email,
+        role: data.admin?.role,
+      };
       sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(s));
       setSession(s);
     } catch {

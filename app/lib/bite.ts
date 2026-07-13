@@ -582,7 +582,7 @@ export async function fetchMyGiftedCoupons(userId: number): Promise<any[]> {
 
 /* ───────────── admin auth ───────────── */
 export async function adminLogin(email: string, password: string):
-  Promise<{ ok: boolean; adminKey: string; admin: { id: number; name: string; email: string } }> {
+  Promise<{ ok: boolean; adminKey: string; token?: string; admin: { id: number; name: string; email: string; role?: string; roleId?: number | null } }> {
   const res = await fetch(`${API_BASE}/admin-users/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
