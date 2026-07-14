@@ -361,18 +361,36 @@ export default function HomePage() {
       {banners.length > 0 && (
         <section className="bt-banners">
           <div className="bt-banner-track" id="btbanners">
-            {banners.map((b) => (
-              <a
-                key={b.id}
-                className="bt-banner"
-                href={b.linkUrl || '#'}
-                onClick={(e) => { if (!b.linkUrl) e.preventDefault(); }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                {b.imageUrl && <img src={b.imageUrl} alt={b.title} />}
-                {b.title && <span className="bt-banner-title">{b.title}</span>}
-              </a>
-            ))}
+            {banners.map((b) => {
+              // media-aware: .mp4/.webm/.mov (incl. Cloudinary /video/ URLs)
+              // play as silent looping video; GIF/PNG/JPG/WebP render as image.
+              const url = b.imageUrl || '';
+              const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(url) || /\/video\/upload\//.test(url);
+              return (
+                <a
+                  key={b.id}
+                  className="bt-banner"
+                  href={b.linkUrl || '#'}
+                  onClick={(e) => { if (!b.linkUrl) e.preventDefault(); }}
+                >
+                  {url && (isVideo ? (
+                    <video
+                      src={url}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={url} alt={b.title} />
+                  ))}
+                  {b.title && <span className="bt-banner-title">{b.title}</span>}
+                </a>
+              );
+            })}
           </div>
           {banners.length > 1 && (
             <div className="bt-banner-dots">
