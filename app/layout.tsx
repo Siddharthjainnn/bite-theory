@@ -15,6 +15,12 @@ const SITE_STATE = 'Madhya Pradesh';
 // Neighbourhoods you actually deliver to — used as areaServed for local reach.
 const AREAS_SERVED = ['Vijay Nagar', 'Sukhliya', 'Rajwada', 'Palasia', 'Bhawarkuan', 'Dewas Naka'];
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#0D3B2E',
+};
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {

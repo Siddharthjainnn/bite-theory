@@ -989,6 +989,33 @@ a{text-decoration:none;color:inherit}
   .pbd-art{font-size:100px;right:36px}
 }
 
+/* ══ MOBILE ZOOM FIX + compact bars ══
+   iOS force-zooms the page when focusing any input with font-size < 16px —
+   and never zooms back out. That was the "everything looks huge" bug.
+   16px on form controls kills the auto-zoom at the source. */
+@media(max-width:768px){
+  input,select,textarea{font-size:16px!important}
+}
+
+/* CartBar: slimmer + dismiss button */
+.bt-cartbar{position:relative;padding:10px 16px;border-radius:16px;
+  box-shadow:0 8px 22px rgba(76,175,80,.32)}
+.bt-cartbar-t{font-size:15.5px}
+.bt-cartbar-btn{padding:9px 18px;font-size:12.5px}
+.bt-cartbar-x{position:absolute;top:-8px;right:-4px;width:24px;height:24px;
+  border-radius:50%;border:none;cursor:pointer;font-size:10px;line-height:1;
+  background:#fff;color:#5a6f66;box-shadow:0 3px 10px rgba(4,22,15,.25);
+  display:flex;align-items:center;justify-content:center;z-index:2}
+
+/* Special FAB: cleaner, smaller, crisp ring instead of the blurry halo blob */
+.bt-nav-special{transform:translateY(-12px)}
+.bt-nav-special .bt-nav-ic{width:46px;height:46px;font-size:21px;
+  border:3px solid var(--bt-app-bg,#fbfcfb);
+  box-shadow:0 6px 16px rgba(245,158,11,.45)}
+.bt-nav-special::before{width:56px;height:56px;top:-5px;box-shadow:none}
+.bt-nav-special::after{display:none}
+.bt-nav-special span:last-child{margin-top:2px;font-size:10px}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

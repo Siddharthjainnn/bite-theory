@@ -237,6 +237,7 @@ export default function AppHeader({
 .bt-search-field .bt-search-input{width:100%}
 .bt-search-hint{position:absolute;left:2px;top:50%;transform:translateY(-50%);
   pointer-events:none;color:#9fb0a8;font-size:14px;display:flex;gap:4px;white-space:nowrap;overflow:hidden}
+@media(max-width:768px){.bt-search-hint{font-size:16px}}
 .bt-search-word{color:#5a6f66;font-weight:600;display:inline-block;
   transition:opacity .26s ease,transform .26s ease}
 .bt-search-word.in{opacity:1;transform:translateY(0)}
