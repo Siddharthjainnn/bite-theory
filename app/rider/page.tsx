@@ -27,11 +27,33 @@ interface RiderEarnings {
     orderValue?: number; walletUsed?: number; paymentMethod?: string; cashToCollect?: number }[];
 }
 
+/** Rider session token, minted by POST /delivery-partners/login. */
+function riderToken(): string {
+  try {
+    const raw = localStorage.getItem(LS_RIDER);
+    return raw ? (JSON.parse(raw)?.token || '') : '';
+  } catch { return ''; }
+}
+
 async function api(path: string, init?: RequestInit) {
+  const token = riderToken();
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' }, cache: 'no-store', ...init,
+    cache: 'no-store',
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      /* P0-1/P0-3: the backend now derives the rider id from THIS token, not
+         from an id in the body or the URL. */
+      ...(token ? { 'x-rider-token': token } : {}),
+      ...(init?.headers || {}),
+    },
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    // token expired or revoked — force a clean re-login
+    localStorage.removeItem(LS_RIDER);
+    throw new Error('Your shift session expired. Please sign in again.');
+  }
   if (!res.ok) throw new Error(Array.isArray(data?.message) ? data.message[0] : data?.message || 'Request failed');
   return data;
 }
@@ -148,9 +170,10 @@ export default function RiderPage() {
   }
   async function setStatus(id: number, status: string, note?: string) {
     if (!rider) return;
-    /* C1: prove which rider is acting so the backend can confirm this rider
-       is actually assigned to the order before allowing the change. */
-    const body: Record<string, unknown> = { status, note, deliveryPartnerId: rider.id };
+    /* P0-1: identity now travels in the signed x-rider-token header (see api()).
+       deliveryPartnerId is NOT a credential — it's a sequential id the customer
+       can already see on their tracking page. */
+    const body: Record<string, unknown> = { status, note };
     if (status === 'delivered') {
       /* §4.5 handoff proof: customer reads the 4-digit OTP from their tracking page */
       const otp = window.prompt('Ask the customer for their 4-digit delivery OTP:');
