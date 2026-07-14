@@ -22,6 +22,7 @@ interface RiderEarnings {
   today: { amount: number; deliveries: number };
   week: { amount: number; deliveries: number };
   cashInHand: number; codCollected: number; codDeposited: number;
+  cashCap?: number; cashCapReached?: boolean; cashHeadroom?: number;
   history: { orderId: number; orderNumber?: string; baseFare: number;
     distancePay: number; tip: number; total: number; createdAt: string;
     orderValue?: number; walletUsed?: number; paymentMethod?: string; cashToCollect?: number }[];
@@ -58,8 +59,15 @@ async function api(path: string, init?: RequestInit) {
   return data;
 }
 
+type QrState = {
+  orderId: number; qrId: string; imageUrl: string; amount: number; closeBy: string;
+} | null;
+
 export default function RiderPage() {
   const [rider, setRider] = useState<Rider | null>(null);
+  const [qr, setQr] = useState<QrState>(null);
+  const [qrPaid, setQrPaid] = useState(false);
+  const [qrBusy, setQrBusy] = useState(false);
   const [mobile, setMobile] = useState('');
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
@@ -168,6 +176,39 @@ export default function RiderPage() {
       await refresh(rider);
     } catch (e: any) { setErr(e.message); await refresh(rider); } finally { setBusy(false); }
   }
+  /* ── Doorstep UPI QR ───────────────────────────────────────────────────
+     Rider taps "Pay online". We mint a fixed-amount, single-use QR server-side
+     and poll until the money lands. The rider never handles cash, so their
+     cash-in-hand never moves. */
+  async function showQr(id: number) {
+    setQrBusy(true); setErr(''); setQrPaid(false);
+    try {
+      const r = await api(`/orders/${id}/collect/qr`, { method: 'POST' });
+      setQr({ orderId: id, qrId: r.qrId, imageUrl: r.imageUrl, amount: r.amount, closeBy: r.closeBy });
+    } catch (e: any) { setErr(e.message); } finally { setQrBusy(false); }
+  }
+
+  async function cancelQr() {
+    if (!qr) return;
+    setQrBusy(true);
+    try { await api(`/orders/${qr.orderId}/collect/cancel`, { method: 'POST' }); }
+    catch { /* closing is best-effort */ }
+    finally { setQr(null); setQrPaid(false); setQrBusy(false); }
+  }
+
+  /* Poll while the QR is on screen. The backend also asks Razorpay directly if
+     the webhook is slow — a rider can't stand at a door waiting on our queue. */
+  useEffect(() => {
+    if (!qr || qrPaid) return;
+    const t = setInterval(async () => {
+      try {
+        const s = await api(`/orders/${qr.orderId}/collect/status`);
+        if (s?.paid) { setQrPaid(true); clearInterval(t); }
+      } catch { /* keep polling */ }
+    }, 3000);
+    return () => clearInterval(t);
+  }, [qr, qrPaid]);
+
   async function setStatus(id: number, status: string, note?: string) {
     if (!rider) return;
     /* P0-1: identity now travels in the signed x-rider-token header (see api()).
@@ -281,12 +322,49 @@ export default function RiderPage() {
               <div style={{ fontWeight: 800, fontSize: 18 }}>{money(earnings.week.amount)}</div>
             </div>
           </div>
-          <div style={{ background: '#fff8e6', border: '1px solid #f3e3b3', borderRadius: 12, padding: 10, fontSize: 12.5 }}>
-            💵 <b>COD cash in hand: {money(earnings.cashInHand)}</b>
-            <div style={{ color: C.muted, marginTop: 2 }}>
-              Collected {money(earnings.codCollected)} · Deposited {money(earnings.codDeposited)} — deposit at the kitchen.
-            </div>
-          </div>
+          {(() => {
+            const cap = Number(earnings.cashCap ?? 0);
+            const blockedNow = !!earnings.cashCapReached;
+            const near = cap > 0 && !blockedNow && earnings.cashInHand >= cap * 0.7;
+            /* Show the wall BEFORE the rider hits it. Being refused an order
+               mid-shift with no warning is how you lose good riders. */
+            const skin = blockedNow
+              ? { bg: '#fdecea', bd: '#f5c6c2', tint: '#a32d2d' }
+              : near
+                ? { bg: '#fff8e6', bd: '#f3e3b3', tint: '#854f0b' }
+                : { bg: '#fff8e6', bd: '#f3e3b3', tint: C.ink };
+            return (
+              <div style={{ background: skin.bg, border: `1px solid ${skin.bd}`, borderRadius: 12, padding: 10, fontSize: 12.5 }}>
+                <div style={{ color: skin.tint }}>
+                  💵 <b>COD cash in hand: {money(earnings.cashInHand)}</b>
+                  {cap > 0 && <span style={{ color: C.muted }}> / {money(cap)} limit</span>}
+                </div>
+                {cap > 0 && (
+                  <div style={{ height: 5, background: '#00000012', borderRadius: 3, margin: '7px 0 5px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(100, (earnings.cashInHand / cap) * 100)}%`,
+                      background: blockedNow ? '#a32d2d' : near ? '#ba7517' : C.green,
+                    }} />
+                  </div>
+                )}
+                {blockedNow ? (
+                  <div style={{ color: '#a32d2d', fontWeight: 700, marginTop: 2 }}>
+                    Cash limit reached — no new cash orders until you deposit.
+                    You can still take prepaid orders.
+                  </div>
+                ) : near ? (
+                  <div style={{ color: '#854f0b', marginTop: 2 }}>
+                    {money(Number(earnings.cashHeadroom ?? 0))} left before cash orders pause. Deposit soon.
+                  </div>
+                ) : (
+                  <div style={{ color: C.muted, marginTop: 2 }}>
+                    Collected {money(earnings.codCollected)} · Deposited {money(earnings.codDeposited)} — deposit at the kitchen.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {showHistory && (
             <div style={{ marginTop: 10 }}>
               {earnings.history.length === 0 && (
@@ -364,6 +442,13 @@ export default function RiderPage() {
                 📍 Arriving soon
               </button>
             )}
+            {(o.status === 'out_for_delivery' || o.status === 'arriving_soon')
+              && Number((o as any).cashToCollect ?? 0) > 0 && (
+              <button style={btn('#0d47a1')} disabled={busy || qrBusy}
+                onClick={() => showQr(o.id)}>
+                📱 Pay online (UPI QR)
+              </button>
+            )}
             {(o.status === 'out_for_delivery' || o.status === 'arriving_soon') && (
               <button style={btn(C.green)} disabled={busy}
                 onClick={() => setStatus(o.id, 'delivered', 'Delivered to customer')}>
@@ -421,6 +506,60 @@ export default function RiderPage() {
             </div>
           </div>
         ))
+      )}
+      {/* ── Doorstep UPI QR ── */}
+      {qr && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 20, padding: 22, width: '100%',
+            maxWidth: 340, textAlign: 'center',
+          }}>
+            {qrPaid ? (
+              <>
+                <div style={{ fontSize: 56 }}>✅</div>
+                <h3 style={{ margin: '10px 0 4px', color: C.greenDeep }}>Payment received</h3>
+                <p style={{ color: C.muted, fontSize: 14, margin: '0 0 18px' }}>
+                  ₹{qr.amount} paid online. <b>Do not collect cash.</b>
+                </p>
+                <button
+                  style={{ ...btn(C.green), width: '100%' }}
+                  disabled={busy}
+                  onClick={async () => {
+                    const id = qr.orderId;
+                    setQr(null); setQrPaid(false);
+                    await setStatus(id, 'delivered', 'Delivered — paid by UPI QR');
+                  }}>
+                  ✅ Mark delivered
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 style={{ margin: '0 0 2px', color: C.ink }}>Scan to pay</h3>
+                <div style={{ fontSize: 30, fontWeight: 800, color: C.ink, margin: '2px 0 10px' }}>
+                  ₹{qr.amount}
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qr.imageUrl} alt="UPI QR code" width={220} height={220}
+                  style={{ width: 220, height: 220, objectFit: 'contain' }} />
+                <p style={{ color: C.muted, fontSize: 13, margin: '10px 0 4px' }}>
+                  Customer scans with any UPI app. This screen updates by itself.
+                </p>
+                <p style={{ color: C.muted, fontSize: 12, margin: '0 0 16px' }}>
+                  Amount is locked — they cannot pay more or less.
+                </p>
+                <button
+                  style={{ ...btn('#b0bec5'), width: '100%' }}
+                  disabled={qrBusy}
+                  onClick={cancelQr}>
+                  Cancel — take cash instead
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
