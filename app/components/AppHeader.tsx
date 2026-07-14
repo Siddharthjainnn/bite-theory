@@ -134,16 +134,6 @@ export default function AppHeader({
           {/* RIGHT: Ask Bhaiya + notifications + avatar */}
           <div className="bt-head-actions">
             <NotificationBell />
-            {onAskBhaiya && (
-              <button
-                className="bt-bhaiya-btn"
-                aria-label="Ask Bhaiya for a recommendation"
-                onClick={onAskBhaiya}
-              >
-                🧪 <span className="bt-bhaiya-label">Ask Bhaiya</span>
-              </button>
-            )}
-
             {/* #2 + #8: avatar shows the user's real initial and opens an
                 account popover distinct from the hamburger's nav drawer. */}
             <div className="bt-acct-wrap">
@@ -200,6 +190,15 @@ export default function AppHeader({
                 </span>
               )}
             </div>
+            {onAskBhaiya && !q && (
+              <button
+                className="bt-search-bhaiya"
+                aria-label="Ask Bhaiya for a recommendation"
+                onClick={onAskBhaiya}
+              >
+                ✨ Bhaiya
+              </button>
+            )}
             {q && (
               <button
                 className="bt-search-clear"
@@ -238,6 +237,13 @@ export default function AppHeader({
 .bt-search-hint{position:absolute;left:2px;top:50%;transform:translateY(-50%);
   pointer-events:none;color:#9fb0a8;font-size:14px;display:flex;gap:4px;white-space:nowrap;overflow:hidden}
 @media(max-width:768px){.bt-search-hint{font-size:16px}}
+.bt-search-bhaiya{flex-shrink:0;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#f7a73a,#F59E0B);color:#fff;
+  font-size:11px;font-weight:850;letter-spacing:.2px;
+  padding:7px 12px;border-radius:18px;
+  box-shadow:0 3px 10px rgba(245,158,11,.35);
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
+.bt-search-bhaiya:active{transform:scale(.92)}
 .bt-search-word{color:#5a6f66;font-weight:600;display:inline-block;
   transition:opacity .26s ease,transform .26s ease}
 .bt-search-word.in{opacity:1;transform:translateY(0)}

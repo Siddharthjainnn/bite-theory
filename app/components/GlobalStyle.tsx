@@ -1056,6 +1056,29 @@ a{text-decoration:none;color:inherit}
   .bt-special-fab{width:50px;height:50px;right:5px}
 }
 
+/* ══ Header v3: Blinkit-clean lockup ══ */
+/* small round logo mark instead of the boxy white rectangle */
+.bt-logo{height:32px;width:32px;object-fit:cover;border-radius:50%;
+  border:2px solid rgba(255,255,255,.35);box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.brandmark{width:32px;height:32px;border-radius:50%;font-size:15px}
+/* brand name: bold, ONE line always */
+.bt-brand-name{font-size:17.5px;font-weight:900;letter-spacing:-.2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44vw}
+.bt-loc{font-size:11px;color:rgba(255,255,255,.68);margin-top:1px}
+/* row: breathing room, everything vertically centered */
+.bt-head{padding:12px 14px 14px}
+.bt-head-row{align-items:center;gap:8px}
+.bt-head-actions{gap:6px}
+.bt-icon-btn{width:38px;height:38px;font-size:16px}
+.bt-avatar-btn{width:38px;height:38px;font-size:14px}
+/* retire old pill styles (element removed from row) */
+.bt-bhaiya-btn{display:none}
+@media(max-width:400px){
+  .bt-brand-name{font-size:16px;max-width:40vw}
+  .bt-logo,.brandmark{height:29px;width:29px}
+  .bt-icon-btn,.bt-avatar-btn{width:35px;height:35px}
+}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
