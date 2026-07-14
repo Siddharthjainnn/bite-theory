@@ -30,6 +30,7 @@ import DesktopLanding from './components/DesktopLanding';
 import DesktopApp from './components/DesktopApp';
 import RecommendedRow from './components/RecommendedRow';
 import TodaysSpecialModal from './components/TodaysSpecialModal';
+import PromoBannerDeck from './components/PromoBannerDeck';
 import { useDesktopLanding } from './lib/useDesktopLanding';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
@@ -311,8 +312,11 @@ export default function HomePage() {
         </>
       }
     >
-      {/* hero — promo when a real coupon is live, else brand message */}
-      {featuredCoupon ? (
+      {/* hero — promo when a real coupon is live, else brand message.
+          When the animated banner deck is on screen (no admin banners), the
+          deck already carries the coupon — so the hero stays on-brand to
+          avoid saying the same offer twice. */}
+      {featuredCoupon && banners.length > 0 ? (
         <section className="bt-hero bt-hero--promo">
           <span className="promo-spark s1" aria-hidden>✦</span>
           <span className="promo-spark s2" aria-hidden>✦</span>
@@ -346,6 +350,11 @@ export default function HomePage() {
         <section style={{ padding: '0 16px' }}>
           <StoreClosedBanner status={storeStatus} />
         </section>
+      )}
+
+      {/* animated promo deck — shows until real banners are uploaded */}
+      {banners.length === 0 && !loading && (
+        <PromoBannerDeck coupon={featuredCoupon} />
       )}
 
       {/* banners (admin-managed) */}

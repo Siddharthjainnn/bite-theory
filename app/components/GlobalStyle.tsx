@@ -911,6 +911,84 @@ a{text-decoration:none;color:inherit}
 .ot-step-active{animation:otRing 1.8s ease-out infinite}
 @keyframes otRing{0%{box-shadow:0 0 0 0 rgba(76,175,80,.45)}70%{box-shadow:0 0 0 9px rgba(76,175,80,0)}100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}}
 
+/* ── PromoBannerDeck: code-built animated banners (no images needed) ── */
+.pbd-wrap{padding:14px 14px 0}
+.pbd{position:relative;overflow:hidden;border-radius:20px;cursor:pointer;
+  min-height:150px;display:flex;align-items:center;padding:18px 18px;
+  box-shadow:0 10px 26px rgba(4,22,15,.2);
+  animation:pbdIn .5s cubic-bezier(.34,1.3,.64,1) both}
+@keyframes pbdIn{from{opacity:0;transform:translateX(26px) scale(.97)}to{opacity:1;transform:none}}
+.pbd--gold{background:
+  radial-gradient(130% 160% at 85% -20%, #f7a73a 0%, var(--bt-orange) 34%, #c47607 100%)}
+.pbd--green{background:
+  radial-gradient(130% 160% at 85% -20%, #59c65e 0%, var(--bt-green) 38%, var(--bt-green-deep) 100%)}
+.pbd--dark{background:
+  radial-gradient(130% 160% at 85% -20%, #1a5f47 0%, #124a37 40%, var(--bt-deep) 100%)}
+
+/* rotating starburst rays */
+.pbd-rays{position:absolute;inset:-40%;pointer-events:none;opacity:.5;
+  background:conic-gradient(from 0deg,
+    transparent 0 14deg, rgba(255,255,255,.10) 14deg 26deg,
+    transparent 26deg 44deg, rgba(255,255,255,.10) 44deg 56deg,
+    transparent 56deg 74deg, rgba(255,255,255,.10) 74deg 86deg,
+    transparent 86deg 104deg, rgba(255,255,255,.10) 104deg 116deg,
+    transparent 116deg 134deg, rgba(255,255,255,.10) 134deg 146deg,
+    transparent 146deg 164deg, rgba(255,255,255,.10) 164deg 176deg,
+    transparent 176deg 194deg, rgba(255,255,255,.10) 194deg 206deg,
+    transparent 206deg 224deg, rgba(255,255,255,.10) 224deg 236deg,
+    transparent 236deg 254deg, rgba(255,255,255,.10) 254deg 266deg,
+    transparent 266deg 284deg, rgba(255,255,255,.10) 284deg 296deg,
+    transparent 296deg 314deg, rgba(255,255,255,.10) 314deg 326deg,
+    transparent 326deg 344deg, rgba(255,255,255,.10) 344deg 356deg, transparent 356deg);
+  animation:pbdSpin 24s linear infinite}
+@keyframes pbdSpin{to{transform:rotate(360deg)}}
+
+/* moving light sheen */
+.pbd-sheen{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 32%,rgba(255,255,255,.18) 48%,transparent 62%);
+  transform:translateX(-130%);animation:pbdSheen 3.4s ease-in-out infinite}
+@keyframes pbdSheen{0%,100%{transform:translateX(-130%)}55%,72%{transform:translateX(130%)}}
+
+/* floating tickets/sparks */
+.pbd-tkt{position:absolute;pointer-events:none;
+  filter:drop-shadow(0 4px 8px rgba(0,0,0,.25))}
+.pbd-tkt.t1{top:12px;right:88px;font-size:22px;transform:rotate(16deg);
+  animation:pbdFloat 3.2s ease-in-out infinite}
+.pbd-tkt.t2{bottom:16px;right:36px;font-size:13px;color:#fff;opacity:.9;
+  animation:pbdTwinkle 2.2s ease-in-out infinite}
+.pbd-tkt.t3{bottom:12px;left:46%;font-size:17px;transform:rotate(-14deg);opacity:.8;
+  animation:pbdFloat 3.2s ease-in-out infinite;animation-delay:.7s}
+@keyframes pbdFloat{0%,100%{translate:0 0}50%{translate:0 -7px}}
+@keyframes pbdTwinkle{0%,100%{opacity:.4;scale:.85}50%{opacity:1;scale:1.15}}
+
+.pbd-body{position:relative;z-index:1;display:flex;flex-direction:column;gap:3px;max-width:72%}
+.pbd-eyebrow{font-size:10px;font-weight:850;letter-spacing:.6px;color:rgba(255,255,255,.92);
+  background:rgba(0,0,0,.18);padding:3px 10px;border-radius:999px;width:max-content;
+  border:1px solid rgba(255,255,255,.25)}
+.pbd-big{font-size:24px;font-weight:900;font-style:italic;letter-spacing:-.8px;line-height:1.04;
+  color:#fff;text-shadow:0 3px 0 rgba(0,0,0,.22);transform:skewX(-5deg);margin-top:6px;
+  animation:pbdPop .55s cubic-bezier(.34,1.5,.64,1) both;animation-delay:.12s}
+@keyframes pbdPop{from{opacity:0;transform:skewX(-5deg) translateY(10px) scale(.94)}to{opacity:1;transform:skewX(-5deg)}}
+.pbd-sub{font-size:12px;color:rgba(255,255,255,.94);margin-top:2px}
+.pbd-sub b{color:#fff;background:rgba(0,0,0,.2);padding:1px 7px;border-radius:6px;letter-spacing:.5px}
+.pbd-cta{display:inline-flex;align-items:center;gap:6px;margin-top:10px;width:max-content;
+  background:#fff;color:#1a2b23;font-size:12.5px;font-weight:850;padding:8px 16px;border-radius:20px;
+  box-shadow:0 5px 14px rgba(0,0,0,.25)}
+.pbd-cta i{font-style:normal;transition:transform .18s}
+.pbd:active .pbd-cta i{transform:translateX(3px)}
+.pbd:active{transform:scale(.985)}
+
+.pbd-art{position:absolute;right:10px;bottom:-6px;font-size:74px;z-index:1;
+  filter:drop-shadow(0 8px 14px rgba(0,0,0,.3));
+  animation:pbdArt 3s ease-in-out infinite}
+@keyframes pbdArt{0%,100%{transform:rotate(-4deg) translateY(0)}50%{transform:rotate(3deg) translateY(-6px)}}
+
+@media(min-width:1024px){
+  .pbd{min-height:190px}
+  .pbd-big{font-size:32px}
+  .pbd-art{font-size:100px;right:36px}
+}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
