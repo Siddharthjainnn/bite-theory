@@ -47,8 +47,9 @@ export default function FavoritesPage() {
   }
 
   const card: React.CSSProperties = {
-    background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 12,
+    background: '#fff', border: '1px solid rgba(13,59,46,.06)', borderRadius: 18, padding: 13,
     marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center',
+    boxShadow: '0 5px 16px rgba(13,59,46,.06)',
   };
 
   return (

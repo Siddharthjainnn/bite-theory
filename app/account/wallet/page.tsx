@@ -58,7 +58,8 @@ export default function WalletPage() {
   }, [userId]);
 
   const card: React.CSSProperties = {
-    background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 14,
+    background: '#fff', border: '1px solid rgba(13,59,46,.06)', borderRadius: 18, padding: 15,
+    boxShadow: '0 5px 16px rgba(13,59,46,.06)',
   };
 
   return (
@@ -66,9 +67,16 @@ export default function WalletPage() {
       <div style={{ padding: '14px 14px 28px' }}>
         {/* balance card */}
         <div style={{
-          background: `linear-gradient(135deg, ${C.dark}, ${C.darkSoft})`,
-          borderRadius: 18, padding: '20px 18px', color: '#fff', marginBottom: 14,
+          background: `linear-gradient(150deg, #124a37, ${C.dark})`,
+          borderRadius: 22, padding: '22px 18px', color: '#fff', marginBottom: 14,
+          position: 'relative', overflow: 'hidden',
+          boxShadow: '0 10px 28px rgba(13,59,46,.25)',
         }}>
+          <div style={{
+            position: 'absolute', top: -40, right: -30, width: 150, height: 150,
+            borderRadius: '50%', pointerEvents: 'none',
+            background: 'radial-gradient(circle, rgba(76,175,80,.35), transparent 70%)',
+          }} />
           <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 700, letterSpacing: 0.4 }}>WALLET BALANCE</div>
           <div style={{ fontSize: 34, fontWeight: 800, margin: '6px 0 14px' }}>
             {loading ? '…' : money(summary?.balance || 0)}

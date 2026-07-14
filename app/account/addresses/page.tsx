@@ -90,8 +90,8 @@ export default function SavedAddressesPage() {
   }
 
   const card: React.CSSProperties = {
-    background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16,
-    padding: 14, marginBottom: 12,
+    background: '#fff', border: '1px solid rgba(13,59,46,.06)', borderRadius: 18,
+    padding: 15, marginBottom: 12, boxShadow: '0 5px 16px rgba(13,59,46,.06)',
   };
   const input: React.CSSProperties = {
     width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,

@@ -71,7 +71,8 @@ export default function SupportPage() {
   }
 
   const card: React.CSSProperties = {
-    background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 14,
+    background: '#fff', border: '1px solid rgba(13,59,46,.06)', borderRadius: 18, padding: 16, marginBottom: 14,
+    boxShadow: '0 5px 16px rgba(13,59,46,.06)',
   };
   const input: React.CSSProperties = {
     width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,
