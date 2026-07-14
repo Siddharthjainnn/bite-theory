@@ -1016,6 +1016,46 @@ a{text-decoration:none;color:inherit}
 .bt-nav-special::after{display:none}
 .bt-nav-special span:last-child{margin-top:2px;font-size:10px}
 
+/* ══ Special FAB → Zomato-style circle docked at the RIGHT of the nav pill ══ */
+/* retire the old centered-FAB styles */
+.bt-nav-special{display:none}
+.bt-nav{align-items:center;position:relative;padding-right:66px}
+.bt-special-fab{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:56px;height:56px;border-radius:50%;border:3px solid #fff;cursor:pointer;
+  background:linear-gradient(150deg,#f7a73a,var(--bt-orange) 55%,#d98607);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  box-shadow:0 8px 20px rgba(245,158,11,.45),0 2px 6px rgba(4,22,15,.15);
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1)}
+.bt-special-fab:active{transform:translateY(-50%) scale(.9)}
+.bt-special-fab-ic{font-size:19px;line-height:1;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));
+  animation:fabZap 2.4s ease-in-out infinite}
+@keyframes fabZap{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+.bt-special-fab-lbl{font-size:8.5px;font-weight:850;color:#fff;letter-spacing:.3px;
+  text-transform:uppercase;margin-top:1px;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+
+/* ══ Compact pass for small phones (≤400px) — tames the "everything big" feel ══ */
+@media(max-width:400px){
+  .bt-hero{padding:16px 15px;margin:12px 10px 2px}
+  .bt-hero-title{font-size:20px}
+  .promo-flat{font-size:18px}
+  .promo-big{font-size:27px}
+  .pbd{min-height:132px;padding:15px}
+  .pbd-big{font-size:20px}
+  .pbd-art{font-size:60px}
+  .bt-sec-title,.rec-title{font-size:15.5px}
+  .rec-card{flex:0 0 146px}
+  .bt-card-img{width:86px;height:86px}
+  .bt-card-name{font-size:13.5px}
+  .bt-brand-name{font-size:16.5px}
+  .bt-bhaiya-btn{height:36px;font-size:10px;padding:0 12px}
+  .bt-icon-btn,.bt-avatar-btn{width:36px;height:36px}
+  .bt-cat-ic{width:56px;height:56px}
+  .bt-nav-i{font-size:10px;padding:7px 9px}
+  .bt-nav-ic{font-size:18px}
+  .bt-special-fab{width:50px;height:50px;right:5px}
+}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
