@@ -84,8 +84,12 @@ export default function OrdersPage() {
             <div
               key={o.id}
               style={{
-                background: '#fff', border: `1px solid ${isLive ? C.green : C.line}`,
-                borderRadius: 16, padding: 14, marginBottom: 12,
+                background: '#fff',
+                border: `1px solid ${isLive ? C.green : 'rgba(13,59,46,.06)'}`,
+                borderRadius: 18, padding: 15, marginBottom: 12,
+                boxShadow: isLive
+                  ? '0 6px 18px rgba(76,175,80,.18)'
+                  : '0 4px 14px rgba(13,59,46,.05)',
               }}
             >
               <Link href={`/orders/${o.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>

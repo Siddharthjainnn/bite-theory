@@ -888,6 +888,29 @@ a{text-decoration:none;color:inherit}
 .bt-search--live{border:1.5px solid rgba(13,59,46,.08);border-radius:15px;
   box-shadow:0 4px 14px rgba(4,22,15,.12);margin-top:13px}
 
+/* ── Order tracking: live status hero + step pulse ── */
+.ot-hero{display:flex;align-items:center;gap:14px;margin-bottom:14px;
+  background:linear-gradient(150deg,#124a37,var(--bt-deep));border-radius:20px;
+  padding:16px;color:#fff;position:relative;overflow:hidden;
+  box-shadow:0 8px 22px rgba(13,59,46,.22)}
+.ot-hero::after{content:"";position:absolute;top:-40px;right:-30px;width:140px;height:140px;
+  border-radius:50%;background:radial-gradient(circle,rgba(76,175,80,.35),transparent 70%)}
+.ot-hero-emoji{font-size:38px;z-index:1;animation:otBounce 2.2s ease-in-out infinite;
+  filter:drop-shadow(0 4px 10px rgba(0,0,0,.3))}
+@keyframes otBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.ot-hero-txt{flex:1;z-index:1;min-width:0}
+.ot-hero-txt b{display:block;font-size:17px;font-weight:850;letter-spacing:-.3px}
+.ot-hero-txt span{font-size:12px;color:#cfe8d6}
+.ot-hero-live{z-index:1;font-size:10px;font-weight:850;letter-spacing:.5px;
+  color:#ff8a80;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:999px;
+  animation:otLive 1.6s ease-in-out infinite}
+@keyframes otLive{0%,100%{opacity:1}50%{opacity:.55}}
+.ot-hero--done{background:linear-gradient(150deg,var(--bt-green),var(--bt-green-deep))}
+.ot-hero--done .ot-hero-txt span{color:#eafbe9}
+
+.ot-step-active{animation:otRing 1.8s ease-out infinite}
+@keyframes otRing{0%{box-shadow:0 0 0 0 rgba(76,175,80,.45)}70%{box-shadow:0 0 0 9px rgba(76,175,80,0)}100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

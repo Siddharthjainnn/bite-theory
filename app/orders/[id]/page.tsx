@@ -348,7 +348,8 @@ export default function OrderTrackPage() {
   const delivered = order?.status === 'delivered';
 
   const card: React.CSSProperties = {
-    background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 14, marginBottom: 14,
+    background: '#fff', border: '1px solid rgba(13,59,46,.06)', borderRadius: 20,
+    padding: 16, marginBottom: 14, boxShadow: '0 6px 18px rgba(13,59,46,.06)',
   };
 
   return (
@@ -522,6 +523,24 @@ export default function OrderTrackPage() {
               </div>
             )}
 
+            {/* ── LIVE STATUS HERO — the emotional focal point while waiting ── */}
+            {!cancelled && (
+              <div className={`ot-hero ${delivered ? 'ot-hero--done' : ''}`}>
+                <span className="ot-hero-emoji">{STATUS_META[order.status]?.emoji || '🍳'}</span>
+                <div className="ot-hero-txt">
+                  <b>{STATUS_META[order.status]?.label || 'On it!'}</b>
+                  <span>
+                    {delivered
+                      ? 'Enjoy your meal! 💚'
+                      : justPlaced
+                        ? 'We’ve got your order — sit back and relax.'
+                        : 'We’ll keep this updated live.'}
+                  </span>
+                </div>
+                {!delivered && <span className="ot-hero-live">● LIVE</span>}
+              </div>
+            )}
+
             {/* ── TIMELINE ── */}
             {!cancelled && (
               <div style={card}>
@@ -532,14 +551,15 @@ export default function OrderTrackPage() {
                   return (
                     <div key={s} style={{ display: 'flex', gap: 12 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <div style={{
-                          width: 26, height: 26, borderRadius: '50%', fontSize: 13,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: done ? C.green : C.bg,
-                          color: done ? '#fff' : C.muted,
-                          border: `2px solid ${done ? C.green : C.line}`,
-                          boxShadow: active ? `0 0 0 4px ${C.greenSoft}` : 'none',
-                        }}>
+                        <div
+                          className={active ? 'ot-step-active' : undefined}
+                          style={{
+                            width: 26, height: 26, borderRadius: '50%', fontSize: 13,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: done ? C.green : C.bg,
+                            color: done ? '#fff' : C.muted,
+                            border: `2px solid ${done ? C.green : C.line}`,
+                          }}>
                           {done ? '✓' : ''}
                         </div>
                         {i < TRACK_STEPS.length - 1 && (
