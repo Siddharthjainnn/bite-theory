@@ -1079,6 +1079,20 @@ a{text-decoration:none;color:inherit}
   .bt-icon-btn,.bt-avatar-btn{width:35px;height:35px}
 }
 
+/* ══ Special FAB v3: bigger zomato-style circle, never clipped ══ */
+.bt-nav{overflow:visible}
+.bt-footer{overflow:visible}
+.bt-nav{padding-right:72px}
+.bt-special-fab{right:8px;width:62px;height:62px;
+  border:3.5px solid #fff;
+  box-shadow:0 10px 24px rgba(245,158,11,.5),0 3px 8px rgba(4,22,15,.18)}
+.bt-special-fab-ic{font-size:22px}
+.bt-special-fab-lbl{font-size:8px;letter-spacing:.4px}
+@media(max-width:400px){
+  .bt-nav{padding-right:64px}
+  .bt-special-fab{width:56px;height:56px;right:6px}
+}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

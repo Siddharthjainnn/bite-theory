@@ -95,6 +95,38 @@ export default function AppHeader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
+  // ── Voice search (Web Speech API). Supported on Android/desktop Chrome;
+  //    gracefully hidden where unsupported (e.g. iOS Safari). ──
+  const [micOk, setMicOk] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<any>(null);
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SR) setMicOk(true);
+  }, []);
+  function toggleMic() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    if (listening) { try { recRef.current?.stop(); } catch {} setListening(false); return; }
+    const rec = new SR();
+    rec.lang = 'en-IN';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (e: any) => {
+      const t = e?.results?.[0]?.[0]?.transcript || '';
+      setListening(false);
+      if (t) {
+        setQ(t);
+        router.push(`/menu?q=${encodeURIComponent(t)}`);
+      }
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    setListening(true);
+    try { rec.start(); } catch { setListening(false); }
+  }
+
   const avatarInitial = initials(user?.name);
 
   if (variant === 'home') {
@@ -133,6 +165,15 @@ export default function AppHeader({
 
           {/* RIGHT: Ask Bhaiya + notifications + avatar */}
           <div className="bt-head-actions">
+            {onAskBhaiya && (
+              <button
+                className="bt-icon-btn bt-bhaiya-mini"
+                aria-label="Ask Bhaiya for a recommendation"
+                onClick={onAskBhaiya}
+              >
+                ✨
+              </button>
+            )}
             <NotificationBell />
             {/* #2 + #8: avatar shows the user's real initial and opens an
                 account popover distinct from the hamburger's nav drawer. */}
@@ -190,13 +231,13 @@ export default function AppHeader({
                 </span>
               )}
             </div>
-            {onAskBhaiya && !q && (
+            {micOk && !q && (
               <button
-                className="bt-search-bhaiya"
-                aria-label="Ask Bhaiya for a recommendation"
-                onClick={onAskBhaiya}
+                className={`bt-search-mic ${listening ? 'on' : ''}`}
+                aria-label={listening ? 'Stop listening' : 'Voice search'}
+                onClick={toggleMic}
               >
-                ✨ Bhaiya
+                🎤
               </button>
             )}
             {q && (
@@ -237,13 +278,15 @@ export default function AppHeader({
 .bt-search-hint{position:absolute;left:2px;top:50%;transform:translateY(-50%);
   pointer-events:none;color:#9fb0a8;font-size:14px;display:flex;gap:4px;white-space:nowrap;overflow:hidden}
 @media(max-width:768px){.bt-search-hint{font-size:16px}}
-.bt-search-bhaiya{flex-shrink:0;border:none;cursor:pointer;
-  background:linear-gradient(135deg,#f7a73a,#F59E0B);color:#fff;
-  font-size:11px;font-weight:850;letter-spacing:.2px;
-  padding:7px 12px;border-radius:18px;
-  box-shadow:0 3px 10px rgba(245,158,11,.35);
-  transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
-.bt-search-bhaiya:active{transform:scale(.92)}
+.bt-search-mic{flex-shrink:0;border:none;cursor:pointer;width:34px;height:34px;
+  border-radius:50%;background:#eef4ef;font-size:15px;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1),background .2s}
+.bt-search-mic:active{transform:scale(.9)}
+.bt-search-mic.on{background:#fdecec;animation:micPulse 1.2s ease-in-out infinite}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(198,40,40,.35)}50%{box-shadow:0 0 0 8px rgba(198,40,40,0)}}
+.bt-bhaiya-mini{background:linear-gradient(135deg,rgba(247,167,58,.28),rgba(245,158,11,.18));
+  border:1px solid rgba(255,216,77,.4)}
 .bt-search-word{color:#5a6f66;font-weight:600;display:inline-block;
   transition:opacity .26s ease,transform .26s ease}
 .bt-search-word.in{opacity:1;transform:translateY(0)}
