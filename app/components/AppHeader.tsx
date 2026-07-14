@@ -127,7 +127,7 @@ export default function AppHeader({
     try { rec.start(); } catch { setListening(false); }
   }
 
-  const avatarInitial = initials(user?.name);
+  const avatarInitial = initials(user?.name || user?.email); // bug #2: fall back to email
 
   if (variant === 'home') {
     return (

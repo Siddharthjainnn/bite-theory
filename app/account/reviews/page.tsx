@@ -80,13 +80,13 @@ export default function MyReviewsPage() {
               Order something tasty, then come back and tell us how it was!
             </div>
             <button
-              onClick={() => router.push('/orders')}
+              onClick={() => router.push('/menu')}
               style={{
                 marginTop: 14, background: C.orange, color: '#fff', border: 'none',
                 borderRadius: 20, padding: '10px 22px', fontWeight: 800, fontSize: 13, cursor: 'pointer',
               }}
             >
-              View My Orders →
+              Browse Menu →
             </button>
           </div>
         ) : (

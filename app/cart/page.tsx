@@ -202,7 +202,7 @@ export default function CartPage() {
               </div>
               {savings > 0 && (
                 <div className="bill-row free">
-                  <span>Offer savings</span>
+                  <span>Item savings (offer prices)</span>
                   <span>− {money(savings)}</span>
                 </div>
               )}

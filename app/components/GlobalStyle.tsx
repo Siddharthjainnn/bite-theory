@@ -1093,6 +1093,27 @@ a{text-decoration:none;color:inherit}
   .bt-special-fab{width:56px;height:56px;right:6px}
 }
 
+/* ── bug #82: bottom nav must never scroll away.
+   100vh on mobile browsers is TALLER than the visible viewport (URL bar),
+   so the document itself scrolled and carried the nav with it.
+   100dvh tracks the real visible height. ── */
+@supports (height: 100dvh){
+  .bt-stage{height:100dvh;min-height:100dvh}
+  .bt-app{height:100dvh;max-height:100dvh}
+  @media(min-width:520px){
+    .bt-app{height:calc(100dvh - 36px);max-height:calc(100dvh - 36px)}
+  }
+  @media(min-width:1024px){
+    .bt-app{height:100dvh;max-height:100dvh}
+  }
+}
+
+/* ── bug #86: Today's Special stepper — centered, evenly spread ── */
+.tsm-grid .bt-sp-qty{width:100%;justify-content:space-between;
+  display:flex;align-items:center}
+.bt-sp-qty{display:flex;align-items:center;justify-content:center;gap:10px}
+.bt-sp-qty span{line-height:1}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

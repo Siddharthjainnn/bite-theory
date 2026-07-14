@@ -114,7 +114,7 @@ export default function ProfileDrawer({
               {user?.image ? (
                 <img className="drawer-ava" src={user.image} alt={user.name || 'You'} referrerPolicy="no-referrer" />
               ) : (
-                <span className="drawer-ava">{initials(user?.name)}</span>
+                <span className="drawer-ava">{initials(user?.name || user?.email)}</span>
               )}
               <div>
                 <div className="drawer-name">{user?.name || 'Bites Theory User'}</div>
@@ -237,25 +237,25 @@ export default function ProfileDrawer({
   width:100%;max-width:480px;background:rgba(13,59,46,.45);
   opacity:0;pointer-events:none;transition:opacity .3s;z-index:40}
 .drawer-scrim.on{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;bottom:0;right:0;left:auto;width:86%;max-width:330px;
-  background:${C.bg};z-index:41;transform:translateX(105%);
+.drawer{position:fixed;top:0;bottom:0;left:0;right:auto;width:86%;max-width:330px;
+  background:${C.bg};z-index:41;transform:translateX(-105%);
   transition:transform .34s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;
-  box-shadow:-12px 0 40px rgba(0,0,0,.3);overflow-y:auto}
+  box-shadow:12px 0 40px rgba(0,0,0,.3);overflow-y:auto}
 .drawer.on{transform:translateX(0)}
 @media(min-width:520px){
   .drawer-scrim{top:18px;bottom:18px;height:calc(100vh - 36px);border-radius:30px}
-  /* Desktop: dock the drawer to the RIGHT edge of the centered phone frame.
-     Closed = slid fully off to the right; open = flush against the frame. */
+  /* Desktop: dock the drawer to the LEFT edge of the centered phone frame
+     (bug #6 — the hamburger sits top-left, so the drawer slides in from left). */
   .drawer{top:18px;bottom:18px;height:calc(100vh - 36px);
-    right:50%;margin-right:-240px;max-width:300px;border-radius:0 30px 30px 0;
-    transform:translateX(340px)}
+    left:50%;margin-left:-240px;right:auto;margin-right:0;max-width:300px;
+    border-radius:30px 0 0 30px;transform:translateX(-340px)}
   .drawer.on{transform:translateX(0)}
 }
 @media(min-width:1024px){
   /* Full-width desktop: frame is edge-to-edge, so dock to the true right edge. */
   .drawer-scrim{left:0;transform:none;max-width:100%;top:0;bottom:0;height:100vh;border-radius:0}
-  .drawer{right:0;margin-right:0;top:0;bottom:0;height:100vh;border-radius:0;max-width:340px;
-    transform:translateX(360px)}
+  .drawer{left:0;margin-left:0;right:auto;top:0;bottom:0;height:100vh;border-radius:0;max-width:340px;
+    transform:translateX(-360px)}
   .drawer.on{transform:translateX(0)}
 }
 .drawer-head{background:linear-gradient(135deg,${C.dark},${C.darkSoft});padding:16px 18px 20px;position:relative;border-radius:0 0 22px 22px}

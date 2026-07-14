@@ -618,7 +618,13 @@ export default function OrderTrackPage() {
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 15, color: C.ink, marginTop: 6 }}>
-                  <span>Paid / To pay</span><span>{money(Number(order.total))}</span>
+                  {/* bug #21: exactly ONE payment status, from the payment method */}
+                  <span>
+                    {order.paymentMethod === 'cod'
+                      ? (order.status === 'delivered' ? 'Paid (cash)' : 'To pay')
+                      : 'Paid'}
+                  </span>
+                  <span>{money(Number(order.total))}</span>
                 </div>
               </div>
               <button
