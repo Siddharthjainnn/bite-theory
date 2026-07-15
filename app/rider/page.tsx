@@ -94,7 +94,6 @@ export default function RiderPage() {
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
-  const [available, setAvailable] = useState<ApiOrder[]>([]);
   const [mine, setMine] = useState<ApiOrder[]>([]);
   const [completed, setCompleted] = useState<ApiOrder[]>([]); // #13/#16 delivered history
   const [gpsOn, setGpsOn] = useState(false);
@@ -114,15 +113,13 @@ export default function RiderPage() {
 
   const refresh = useCallback(async (r: Rider) => {
     try {
-      const [avail, own, earn, done] = await Promise.all([
-        api('/orders/available-for-riders'),
+      const [own, earn, done] = await Promise.all([
         api(`/orders?deliveryPartnerId=${r.id}&active=true`),
         api(`/delivery-partners/${r.id}/earnings`).catch(() => null),
         /* #13/#16: the rider's delivered orders (all their orders minus the
            active ones) so they have a real completed-deliveries history. */
         api(`/orders?deliveryPartnerId=${r.id}`).catch(() => []),
       ]);
-      setAvailable(avail);
       setMine(own);
       if (earn) setEarnings(earn);
       setCompleted(
@@ -188,15 +185,7 @@ export default function RiderPage() {
   }
   function logout() {
     localStorage.removeItem(LS_RIDER);
-    setRider(null); setMine([]); setAvailable([]);
-  }
-  async function accept(id: number) {
-    if (!rider) return;
-    setBusy(true); setErr('');
-    try {
-      await api(`/orders/${id}/accept`, { method: 'POST', body: JSON.stringify({ partnerId: rider.id }) });
-      await refresh(rider);
-    } catch (e: any) { setErr(e.message); await refresh(rider); } finally { setBusy(false); }
+    setRider(null); setMine([]);
   }
   /* ── Doorstep UPI QR ───────────────────────────────────────────────────
      Rider taps "Pay online". We mint a fixed-amount, single-use QR server-side
@@ -526,27 +515,18 @@ export default function RiderPage() {
         </div>
       ))}
 
-      {/* available pool */}
-      <div style={{ margin: '14px 14px 8px', fontWeight: 800, fontSize: 14, color: C.ink }}>
-        Available orders ({available.length})
-      </div>
-      {available.length === 0 && (
-        <div style={{ ...card, color: C.muted, fontSize: 13 }}>Nothing to pick up right now. This list refreshes automatically.</div>
-      )}
-      {available.map((o) => (
-        <div key={o.id} style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <b style={{ fontSize: 14 }}>{o.orderNumber}</b>
-            <b style={{ color: C.greenDeep }}>{money(Number(o.total))}</b>
+      {mine.length === 0 && (
+        <div style={{ ...card, textAlign: 'center', padding: '22px 14px' }}>
+          <div style={{ fontSize: 26 }}>🛵</div>
+          <div style={{ fontWeight: 800, color: C.ink, marginTop: 6, fontSize: 14 }}>
+            No deliveries assigned yet
           </div>
-          <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 10 }}>
-            📍 {o.deliveryAddress || 'Address on order'} · {o.status === 'food_ready' ? '🍱 Ready now' : '👨‍🍳 Preparing'}
+          <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>
+            The kitchen assigns orders to you — they will appear here
+            automatically. Keep this screen open.
           </div>
-          <button style={btn(C.green)} disabled={busy} onClick={() => accept(o.id)}>
-            ✋ Accept this delivery
-          </button>
         </div>
-      ))}
+      )}
 
       {/* #13/#16: completed deliveries history */}
       <div style={{ margin: '18px 14px 8px', fontWeight: 800, fontSize: 14, color: C.ink }}>
