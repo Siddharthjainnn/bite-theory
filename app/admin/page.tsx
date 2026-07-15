@@ -101,10 +101,38 @@ const ORDER_FLOW = [
 ];
 
 /* ============ API layer ============ */
+
+/**
+ * Bugs #49/#50/#51/#32/#87/#27/#53 — "update/delete/create failed" with no reason.
+ *
+ * Root cause: every call threw a hard-coded `new Error('Update failed')`, which
+ * DISCARDED the backend's real message. NestJS already returns useful text
+ * (e.g. "This category has 6 product(s). Move or delete those products first",
+ * "An admin with this email already exists", or class-validator field errors),
+ * but the admin never showed it.
+ *
+ * This reads the response body and surfaces the actual reason.
+ */
+async function apiError(r: Response, fallback: string): Promise<Error> {
+  try {
+    const body = await r.json();
+    // Nest sends { message: string | string[], error, statusCode }
+    const m = body?.message ?? body?.error;
+    if (Array.isArray(m) && m.length) return new Error(m.join(' · '));
+    if (typeof m === 'string' && m.trim()) return new Error(m);
+  } catch {
+    /* non-JSON body — fall through */
+  }
+  if (r.status === 401 || r.status === 403) {
+    return new Error('Session expired or not authorised — please log in again.');
+  }
+  return new Error(`${fallback} (HTTP ${r.status})`);
+}
+
 const api = {
   async listProducts(): Promise<Product[]> {
     const r = await fetch(`${API_BASE}/products`, { headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Failed to load products');
+    if (!r.ok) throw await apiError(r, 'Failed to load products');
     const rows = await r.json();
     return rows.map((p: any) => ({
       id: Number(p.id), categoryId: Number(p.categoryId), name: p.name, slug: p.slug,
@@ -133,7 +161,7 @@ const api = {
         isSpinWheel: !!d.isSpinWheel,
       }),
     });
-    if (!r.ok) throw new Error('Create failed');
+    if (!r.ok) throw await apiError(r, 'Create failed');
     return r.json();
   },
   async updateProduct(id: number, d: Partial<Product>) {
@@ -149,16 +177,16 @@ const api = {
         isSpinWheel: !!d.isSpinWheel,
       }),
     });
-    if (!r.ok) throw new Error('Update failed');
+    if (!r.ok) throw await apiError(r, 'Update failed');
     return r.json();
   },
   async deleteProduct(id: number) {
     const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Delete failed');
+    if (!r.ok) throw await apiError(r, 'Delete failed');
   },
   async listCategories(): Promise<Category[]> {
     const r = await fetch(`${API_BASE}/categories`, { headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Failed to load categories');
+    if (!r.ok) throw await apiError(r, 'Failed to load categories');
     const rows = await r.json();
     return rows.map((c: any) => ({
       id: Number(c.id), name: c.name, slug: c.slug,
@@ -172,7 +200,7 @@ const api = {
       method: 'POST', headers: WRITE_HEADERS,
       body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
     });
-    if (!r.ok) throw new Error('Create failed');
+    if (!r.ok) throw await apiError(r, 'Create failed');
     return r.json();
   },
   async updateCategory(id: number, d: Partial<Category>) {
@@ -180,17 +208,17 @@ const api = {
       method: 'PATCH', headers: WRITE_HEADERS,
       body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
     });
-    if (!r.ok) throw new Error('Update failed');
+    if (!r.ok) throw await apiError(r, 'Update failed');
     return r.json();
   },
   async deleteCategory(id: number) {
     const r = await fetch(`${API_BASE}/categories/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Delete failed');
+    if (!r.ok) throw await apiError(r, 'Delete failed');
   },
 
   async listOrders(): Promise<Order[]> {
     const r = await fetch(`${API_BASE}/orders`, { headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Failed to load orders');
+    if (!r.ok) throw await apiError(r, 'Failed to load orders');
     const rows = await r.json();
     return rows.map((o: any) => ({
       id: Number(o.id), orderNumber: o.orderNumber, userId: Number(o.userId), addressId: Number(o.addressId),
@@ -202,7 +230,7 @@ const api = {
   },
   async getOrderHistory(orderId: number): Promise<OrderHistoryEntry[]> {
     const r = await fetch(`${API_BASE}/orders/${orderId}/history`, { headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Failed to load history');
+    if (!r.ok) throw await apiError(r, 'Failed to load history');
     return r.json();
   },
   async advanceOrderStatus(orderId: number, status: string, note?: string) {
@@ -222,7 +250,7 @@ const api = {
     const r = await fetch(`${API_BASE}/delivery-partners/for-assignment`, {
       headers: WRITE_HEADERS,
     });
-    if (!r.ok) throw new Error('Could not load riders');
+    if (!r.ok) throw await apiError(r, 'Could not load riders');
     return r.json();
   },
   /* Assign a SPECIFIC rider to an order (admin dispatch). */
@@ -242,7 +270,7 @@ const api = {
   /** Full order incl. items + prepVideoUrl (findOneFull). Admin key attached. */
   async getOrderFull(orderId: number): Promise<any> {
     const r = await fetch(`${API_BASE}/orders/${orderId}`, { headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Failed to load order');
+    if (!r.ok) throw await apiError(r, 'Failed to load order');
     return r.json();
   },
 
@@ -263,7 +291,7 @@ const api = {
   async listOrderItems(orderId?: number): Promise<OrderItem[]> {
     const url = orderId ? `${API_BASE}/order-items?orderId=${orderId}` : `${API_BASE}/order-items`;
     const r = await fetch(url);
-    if (!r.ok) throw new Error('Failed to load order items');
+    if (!r.ok) throw await apiError(r, 'Failed to load order items');
     const rows = await r.json();
     return rows.map((i: any) => ({
       id: Number(i.id), orderId: Number(i.orderId), productId: Number(i.productId),
@@ -275,7 +303,7 @@ const api = {
       method: 'POST', headers: WRITE_HEADERS,
       body: JSON.stringify({ orderId: d.orderId, productId: d.productId, productName: d.productName, unitPrice: d.unitPrice, quantity: d.quantity, lineTotal: d.lineTotal }),
     });
-    if (!r.ok) throw new Error('Create failed');
+    if (!r.ok) throw await apiError(r, 'Create failed');
     return r.json();
   },
   async updateOrderItem(id: number, d: Partial<OrderItem>) {
@@ -283,37 +311,37 @@ const api = {
       method: 'PATCH', headers: WRITE_HEADERS,
       body: JSON.stringify({ orderId: d.orderId, productId: d.productId, productName: d.productName, unitPrice: d.unitPrice, quantity: d.quantity, lineTotal: d.lineTotal }),
     });
-    if (!r.ok) throw new Error('Update failed');
+    if (!r.ok) throw await apiError(r, 'Update failed');
     return r.json();
   },
   async deleteOrderItem(id: number) {
     const r = await fetch(`${API_BASE}/order-items/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Delete failed');
+    if (!r.ok) throw await apiError(r, 'Delete failed');
   },
 
   /* ----- GENERIC CRUD (used by every remaining module) ----- */
   async genericList(route: string): Promise<any[]> {
     const r = await fetch(`${API_BASE}/${route}`, { headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Failed to load');
+    if (!r.ok) throw await apiError(r, 'Failed to load');
     return r.json();
   },
   async genericCreate(route: string, body: any) {
     const r = await fetch(`${API_BASE}/${route}`, {
       method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error('Create failed');
+    if (!r.ok) throw await apiError(r, 'Create failed');
     return r.json();
   },
   async genericUpdate(route: string, id: number, body: any) {
     const r = await fetch(`${API_BASE}/${route}/${id}`, {
       method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error('Update failed');
+    if (!r.ok) throw await apiError(r, 'Update failed');
     return r.json();
   },
   async genericDelete(route: string, id: number) {
     const r = await fetch(`${API_BASE}/${route}/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
-    if (!r.ok) throw new Error('Delete failed');
+    if (!r.ok) throw await apiError(r, 'Delete failed');
   },
 };
 

@@ -132,8 +132,59 @@ export default function StoreSettingsPanel({
   const h: React.CSSProperties = { fontWeight: 800, fontSize: 14, color: G, marginBottom: 4 };
   const sub: React.CSSProperties = { fontSize: 12, color: '#6b7d74', marginBottom: 14 };
 
+  /* ── Bugs #19/#55: a running flash deal (e.g. "50% OFF sab pe") was visible
+     to customers with NO admin control to see or stop it. The backend already
+     had POST /flash/stop — there was simply no UI. ── */
+  const [flash, setFlash] = useState<any>(null);
+  const [flashBusy, setFlashBusy] = useState(false);
+  async function loadFlash() {
+    try {
+      const r = await fetch(`${API_BASE}/flash/current`, { cache: 'no-store' });
+      setFlash(r.ok ? await r.json() : null);
+    } catch { setFlash(null); }
+  }
+  useEffect(() => { loadFlash(); }, []);
+  async function stopFlash() {
+    if (!confirm('Stop the running flash deal for all customers?')) return;
+    setFlashBusy(true);
+    try {
+      const r = await fetch(`${API_BASE}/flash/stop`, { method: 'POST', headers: adminHeaders() });
+      if (!r.ok) throw new Error();
+      await loadFlash();
+    } catch { alert('Could not stop the flash deal.'); }
+    finally { setFlashBusy(false); }
+  }
+
   return (
     <div style={{ maxWidth: 760 }}>
+      {/* running flash deal — visible + stoppable (bugs #19/#55) */}
+      {flash && flash.id && (
+        <div style={{
+          ...card, display: 'flex', alignItems: 'center', gap: 12,
+          background: '#fff7e6', border: '1px solid #ffd591',
+        }}>
+          <span style={{ fontSize: 20 }}>⚡</span>
+          <div style={{ flex: 1, fontSize: 13, color: G }}>
+            <b>Flash deal running — {Number(flash.discountPct)}% OFF everything</b>
+            <div style={{ color: '#8a6d3b', fontSize: 12, marginTop: 2 }}>
+              {flash.title ? `“${flash.title}” · ` : ''}
+              ends {new Date(flash.endsAt).toLocaleString('en-IN')}
+              {' '}— this discount applies to every customer order right now.
+            </div>
+          </div>
+          <button
+            onClick={stopFlash}
+            disabled={flashBusy}
+            style={{
+              background: '#c62828', color: '#fff', border: 'none', borderRadius: 10,
+              padding: '9px 16px', fontWeight: 800, fontSize: 12.5, cursor: 'pointer',
+              opacity: flashBusy ? .6 : 1, flex: 'none',
+            }}
+          >
+            {flashBusy ? 'Stopping…' : 'Stop deal'}
+          </button>
+        </div>
+      )}
       {/* live status strip */}
       {live && (
         <div style={{
