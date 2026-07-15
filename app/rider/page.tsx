@@ -51,9 +51,27 @@ async function api(path: string, init?: RequestInit) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) {
-    // token expired or revoked — force a clean re-login
-    localStorage.removeItem(LS_RIDER);
-    throw new Error('Your shift session expired. Please sign in again.');
+    /* BUGFIX — riders were being kicked out mid-shift.
+       Two problems with the old code:
+       1) It wiped the session on ANY 401, including a server-side config
+          problem (missing RIDER_JWT_SECRET) that re-logging-in can never fix —
+          the rider just looped: log in, get kicked, log in, get kicked.
+       2) It hid the backend's actual message.
+       Now: only clear the stored session when the token is genuinely bad, and
+       always surface the real reason. */
+    const msg = Array.isArray(data?.message) ? data.message[0] : data?.message;
+    const configProblem = /not configured|RIDER_JWT_SECRET/i.test(String(msg || ''));
+    if (!configProblem) localStorage.removeItem(LS_RIDER);
+    throw new Error(
+      msg
+        ? String(msg)
+        : 'Your shift session expired. Please sign in again.',
+    );
+  }
+  if (res.status === 503) {
+    // server not configured for rider sessions — keep the session, show why
+    const msg = Array.isArray(data?.message) ? data.message[0] : data?.message;
+    throw new Error(String(msg || 'Rider service is temporarily unavailable.'));
   }
   if (!res.ok) throw new Error(Array.isArray(data?.message) ? data.message[0] : data?.message || 'Request failed');
   return data;
