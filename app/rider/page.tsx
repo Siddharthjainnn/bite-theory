@@ -442,6 +442,33 @@ export default function RiderPage() {
               </span>
             )}
           </div>
+
+          {/* #77: a rider who can't find the door can now call the customer.
+              Contact is sent only for THIS rider's in-flight orders. */}
+          {(o as any).customerMobile && (
+            <a
+              href={`tel:${(o as any).customerMobile}`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none',
+                background: '#eef7f1', border: `1px solid ${C.line}`, borderRadius: 12,
+                padding: '10px 12px', marginBottom: 10,
+              }}
+            >
+              <span style={{ fontSize: 17 }}>📞</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>
+                  {(o as any).customerName || 'Customer'}
+                </div>
+                <div style={{ fontSize: 12, color: C.muted }}>{(o as any).customerMobile}</div>
+              </div>
+              <span style={{
+                background: C.green, color: '#fff', fontSize: 11.5, fontWeight: 800,
+                borderRadius: 14, padding: '6px 12px', flexShrink: 0,
+              }}>
+                Call
+              </span>
+            </a>
+          )}
           <div style={{ display: 'grid', gap: 8 }}>
             {o.deliveryLat != null && (
               <a

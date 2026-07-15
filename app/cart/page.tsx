@@ -35,8 +35,20 @@ export default function CartPage() {
       .filter(Boolean) as { p: Product; qty: number }[];
   }, [cart, products]);
 
-  const subtotal = lines.reduce((s, l) => s + effectivePrice(l.p) * l.qty, 0);
-  const savings = lines.reduce(
+  /* #88/#89/#90: an item can sell out AFTER it's added to the cart. Previously
+     the customer only found out when checkout failed. Surface it here and keep
+     sold-out items out of the totals. */
+  const soldOutLines = useMemo(
+    () => lines.filter((l) => l.p.stockStatus === 'out_of_stock'),
+    [lines],
+  );
+  const okLines = useMemo(
+    () => lines.filter((l) => l.p.stockStatus !== 'out_of_stock'),
+    [lines],
+  );
+
+  const subtotal = okLines.reduce((s, l) => s + effectivePrice(l.p) * l.qty, 0);
+  const savings = okLines.reduce(
     (s, l) => s + (hasOffer(l.p) ? (l.p.price - l.p.offerPrice) * l.qty : 0),
     0,
   );
@@ -69,18 +81,20 @@ export default function CartPage() {
           <div className="checkout-bar">
             <div className="checkout-total">
               <b>{money(total)}</b>
-              <span>{lines.reduce((a, l) => a + l.qty, 0)} items</span>
+              <span>{okLines.reduce((a, l) => a + l.qty, 0)} items</span>
             </div>
             <button
               className="checkout-btn"
               onClick={checkout}
-              disabled={placing}
+              disabled={placing || soldOutLines.length > 0}
             >
               {placing
                 ? 'Placing…'
-                : status !== 'authenticated'
-                  ? 'Login to Order →'
-                  : 'Place Order →'}
+                : soldOutLines.length > 0
+                  ? 'Remove sold-out items'
+                  : status !== 'authenticated'
+                    ? 'Login to Order →'
+                    : 'Place Order →'}
             </button>
           </div>
         ) : null
@@ -121,6 +135,26 @@ export default function CartPage() {
           </div>
         ) : (
           <>
+            {soldOutLines.length > 0 && (
+              <div className="cart-soldout">
+                <span aria-hidden>⚠️</span>
+                <div>
+                  <b>
+                    {soldOutLines.length === 1
+                      ? `${soldOutLines[0].p.name} just sold out`
+                      : `${soldOutLines.length} items just sold out`}
+                  </b>
+                  <span>Remove {soldOutLines.length === 1 ? 'it' : 'them'} to continue — not included in your total.</span>
+                </div>
+                <button
+                  onClick={() => soldOutLines.forEach((l) => remove(l.p.id))}
+                  className="cart-soldout-btn"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+
             <div className="cart-listhead">
               <span>{lines.reduce((a, l) => a + l.qty, 0)} item(s) in cart</span>
               <button

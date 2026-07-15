@@ -49,8 +49,11 @@ export default function TodaysSpecialModal({
           <div className="tsm-empty">No specials right now — check back soon!</div>
         ) : (
           <div className="tsm-grid">
-            {specials.map((p) => (
-              <div key={p.id} className="bt-sp-card">
+            {specials.map((p) => {
+              // #88/#89/#90: the special popup let sold-out dishes be added.
+              const soldOut = p.stockStatus === 'out_of_stock';
+              return (
+              <div key={p.id} className="bt-sp-card" style={soldOut ? { opacity: .58 } : undefined}>
                 <Link href={`/product/${p.id}`} onClick={onClose} className="bt-sp-img" style={{ display: 'block' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {p.image ? <img src={p.image} alt={p.name} /> : <div className="food-emoji">🍛</div>}
@@ -62,7 +65,9 @@ export default function TodaysSpecialModal({
                     <b>{money(effectivePrice(p))}</b>
                     {hasOffer(p) && <s>{money(p.price)}</s>}
                   </div>
-                  {(cart[p.id] || 0) > 0 ? (
+                  {soldOut ? (
+                    <span className="tsm-sold">Sold out</span>
+                  ) : (cart[p.id] || 0) > 0 ? (
                     <div className="bt-qty bt-sp-qty">
                       <button onClick={() => sub(p.id)} aria-label={`Remove one ${p.name}`}>−</button>
                       <span>{cart[p.id]}</span>
@@ -73,7 +78,8 @@ export default function TodaysSpecialModal({
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
