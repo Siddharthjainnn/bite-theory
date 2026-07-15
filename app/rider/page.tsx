@@ -68,6 +68,10 @@ export default function RiderPage() {
   const [qr, setQr] = useState<QrState>(null);
   const [qrPaid, setQrPaid] = useState(false);
   const [qrBusy, setQrBusy] = useState(false);
+  /* #54/#63: OTP entry was a raw window.prompt() — ugly, easy to mistype, no
+     feedback, and blocked by some in-app browsers. Replaced with a real modal. */
+  const [otpFor, setOtpFor] = useState<number | null>(null);
+  const [otpVal, setOtpVal] = useState('');
   const [mobile, setMobile] = useState('');
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
@@ -216,14 +220,9 @@ export default function RiderPage() {
        can already see on their tracking page. */
     const body: Record<string, unknown> = { status, note };
     if (status === 'delivered') {
-      /* §4.5 handoff proof: customer reads the 4-digit OTP from their tracking page */
-      const otp = window.prompt('Ask the customer for their 4-digit delivery OTP:');
-      if (otp == null) return; // rider cancelled
-      body.otp = otp.trim();
-      if (lastPos.current) {
-        body.riderLat = lastPos.current.lat;
-        body.riderLng = lastPos.current.lng;
-      }
+      /* #54/#63: open the OTP modal; the actual call happens in submitOtp(). */
+      setErr(''); setOtpVal(''); setOtpFor(id);
+      return;
     }
     setBusy(true); setErr('');
     try {
@@ -236,6 +235,29 @@ export default function RiderPage() {
       }
       await refresh(rider);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  }
+
+  /* #54/#63: deliver with a properly-entered OTP (4 digits, validated,
+     with inline errors instead of a native prompt). */
+  async function submitOtp() {
+    if (!rider || otpFor == null) return;
+    const otp = otpVal.trim();
+    if (!/^\d{4}$/.test(otp)) { setErr('Enter the 4-digit OTP from the customer.'); return; }
+    const body: Record<string, unknown> = { status: 'delivered', otp };
+    if (lastPos.current) {
+      body.riderLat = lastPos.current.lat;
+      body.riderLng = lastPos.current.lng;
+    }
+    setBusy(true); setErr('');
+    try {
+      await api(`/orders/${otpFor}/status`, { method: 'PATCH', body: JSON.stringify(body) });
+      const doneId = otpFor;
+      setOtpFor(null); setOtpVal('');
+      setMine((list) => list.filter((o) => o.id !== doneId));
+      await refresh(rider);
+    } catch (e: any) {
+      setErr(e.message || 'Wrong OTP — please check with the customer.');
+    } finally { setBusy(false); }
   }
 
   const page: React.CSSProperties = {
@@ -558,6 +580,73 @@ export default function RiderPage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* #54/#63: OTP entry modal — replaces the raw window.prompt() */}
+      {otpFor != null && (
+        <div
+          onClick={() => { if (!busy) { setOtpFor(null); setErr(''); } }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(4,22,15,.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 20, padding: 22, width: '100%', maxWidth: 340,
+              boxShadow: '0 20px 50px rgba(0,0,0,.35)',
+            }}
+          >
+            <div style={{ fontSize: 30, textAlign: 'center' }}>🔐</div>
+            <div style={{ fontWeight: 850, fontSize: 17, color: C.ink, textAlign: 'center', marginTop: 6 }}>
+              Delivery OTP
+            </div>
+            <div style={{ fontSize: 12.5, color: C.muted, textAlign: 'center', marginTop: 4 }}>
+              Ask the customer for the 4-digit code on their tracking screen.
+            </div>
+            <input
+              value={otpVal}
+              onChange={(e) => setOtpVal(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={(e) => { if (e.key === 'Enter' && otpVal.length === 4) submitOtp(); }}
+              inputMode="numeric"
+              autoFocus
+              placeholder="0000"
+              style={{
+                width: '100%', marginTop: 16, textAlign: 'center', letterSpacing: 10,
+                fontSize: 26, fontWeight: 850, color: C.ink, padding: '12px 0',
+                border: `2px solid ${otpVal.length === 4 ? C.green : C.line}`,
+                borderRadius: 14, outline: 'none',
+              }}
+            />
+            {err && (
+              <div style={{ color: '#c62828', fontSize: 12.5, fontWeight: 700, textAlign: 'center', marginTop: 8 }}>
+                {err}
+              </div>
+            )}
+            <button
+              onClick={submitOtp}
+              disabled={busy || otpVal.length !== 4}
+              style={{
+                ...btn(otpVal.length === 4 ? C.green : '#c5d3cb'),
+                width: '100%', marginTop: 14, fontSize: 15,
+                cursor: otpVal.length === 4 && !busy ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {busy ? 'Verifying…' : 'Confirm delivery'}
+            </button>
+            <button
+              onClick={() => { setOtpFor(null); setErr(''); }}
+              disabled={busy}
+              style={{
+                width: '100%', marginTop: 8, background: 'none', border: 'none',
+                color: C.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 8,
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
