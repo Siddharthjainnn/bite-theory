@@ -19,7 +19,7 @@ import StoreClosedBanner from '../components/StoreClosedBanner';
 
 export default function CartPage() {
   const { products, loading } = useCatalog();
-  const { cart, add, sub, remove, clear } = useCart();
+  const { cart, add, sub, remove, clear, thalis, removeThali } = useCart();
   const featuredCoupon = useFeaturedCoupon();
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -47,7 +47,11 @@ export default function CartPage() {
     [lines],
   );
 
-  const subtotal = okLines.reduce((s, l) => s + effectivePrice(l.p) * l.qty, 0);
+  /* #78: custom thalis live in a separate cart list. The cart page ignored
+     them completely — a customer built a thali, opened the cart and saw
+     nothing (checkout DID send them, so totals disagreed). Render + count. */
+  const thaliTotal = thalis.reduce((s, t) => s + Number(t.total || 0), 0);
+  const subtotal = okLines.reduce((s, l) => s + effectivePrice(l.p) * l.qty, 0) + thaliTotal;
   const savings = okLines.reduce(
     (s, l) => s + (hasOffer(l.p) ? (l.p.price - l.p.offerPrice) * l.qty : 0),
     0,
@@ -71,7 +75,7 @@ export default function CartPage() {
     router.push('/checkout');
   }
 
-  const empty = !loading && lines.length === 0;
+  const empty = !loading && lines.length === 0 && thalis.length === 0; // #78
 
   return (
     <AppShell
@@ -156,7 +160,7 @@ export default function CartPage() {
             )}
 
             <div className="cart-listhead">
-              <span>{lines.reduce((a, l) => a + l.qty, 0)} item(s) in cart</span>
+              <span>{lines.reduce((a, l) => a + l.qty, 0) + thalis.length} item(s) in cart</span>
               <button
                 type="button"
                 className="cart-clear"
@@ -185,6 +189,32 @@ export default function CartPage() {
                 </div>
               </div>
             )}
+            {/* #78: custom thalis, rendered before regular items */}
+            {thalis.map((t) => (
+              <div className="cart-item cart-thali" key={t.key}>
+                <div className="cart-item-img cart-thali-img">🍛</div>
+                <div className="cart-item-info">
+                  <div className="cart-item-name">
+                    {t.templateName || 'Custom Thali'}
+                    <span className="cart-thali-tag">CUSTOM</span>
+                  </div>
+                  <div className="cart-thali-sel">
+                    {Object.values(t.selections || {}).flat().join(' · ') || 'Your selection'}
+                  </div>
+                  <div className="cart-item-price">
+                    <b>{money(Number(t.total || 0))}</b>
+                  </div>
+                </div>
+                <button
+                  className="cart-remove"
+                  onClick={() => removeThali(t.key)}
+                  aria-label={`Remove ${t.templateName || 'custom thali'}`}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+
             {lines.map(({ p, qty }) => (
               <div key={p.id} className="cart-item">
                 <div className="cart-item-img">

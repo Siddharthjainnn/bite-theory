@@ -1128,6 +1128,15 @@ a{text-decoration:none;color:inherit}
 .tsm-sold{display:block;text-align:center;font-size:11px;font-weight:800;color:#c62828;
   background:#fdecec;padding:7px;border-radius:10px}
 
+/* ── #78: custom thali cards in the cart ── */
+.cart-thali-img{display:flex;align-items:center;justify-content:center;font-size:30px;
+  background:linear-gradient(160deg,#fff6e8,#ffe6c4)}
+.cart-thali-tag{margin-left:7px;font-size:8.5px;font-weight:900;letter-spacing:.4px;
+  background:var(--bt-orange);color:#fff;padding:2px 7px;border-radius:999px;
+  vertical-align:middle}
+.cart-thali-sel{font-size:11px;color:#7c8d84;margin:3px 0 5px;line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );
