@@ -184,6 +184,19 @@ const api = {
     const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw await apiError(r, 'Delete failed');
   },
+  async listRefunds(q = ''): Promise<any> {
+    const r = await fetch(`${API_BASE}/orders/refunds/list?q=${encodeURIComponent(q)}`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to load refunds');
+    return r.json();
+  },
+  async refundOrder(id: number, reason: string, amount?: number): Promise<any> {
+    const r = await fetch(`${API_BASE}/orders/${id}/refund`, {
+      method: 'POST', headers: WRITE_HEADERS,
+      body: JSON.stringify(amount ? { reason, amount } : { reason }),
+    });
+    if (!r.ok) throw await apiError(r, 'Refund failed');
+    return r.json();
+  },
   async listRoles(): Promise<any[]> {
     const r = await fetch(`${API_BASE}/roles`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw await apiError(r, 'Failed to load roles');
@@ -731,6 +744,7 @@ const NAV: NavGroup[] = [
   ]},
   { title: 'Finance', items: [
     { key: 'payments', label: 'Payments', icon: '💳' },
+    { key: 'refunds', label: 'Refunds', icon: '↩️' },
     { key: 'wallet_transactions', label: 'Wallet Transactions', icon: '👛' },
   ]},
   { title: 'Delivery', items: [{ key: 'delivery_partners', label: 'Delivery Partners', icon: '🛵' }] },
@@ -776,7 +790,7 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
     'banners', 'referrals', 'loyalty_points',
   ],
   finance_manager: [
-    'dashboard', 'payments', 'wallet_transactions', 'orders',
+    'dashboard', 'payments', 'refunds', 'wallet_transactions', 'orders',
   ],
 };
 
@@ -961,7 +975,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'products', 'todays_special', 'roles_access', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'products', 'todays_special', 'roles_access', 'refunds', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1027,6 +1041,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'products' && <Products showToast={showToast} />}
             {effectivePage === 'todays_special' && <TodaysSpecial showToast={showToast} />}
             {effectivePage === 'roles_access' && <RolesAccess showToast={showToast} />}
+            {effectivePage === 'refunds' && <Refunds showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
             {effectivePage === 'orders' && <Orders showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
@@ -2055,6 +2070,174 @@ function OrderItemModal({ item, orders, products, onClose, onSave }:
  * super_admin edits it here. Leaving a role untouched keeps the built-in
  * defaults, so nothing changes until someone deliberately customises it.
  */
+/**
+ * S13 — Refund management.
+ *
+ * Refunds were fully working server-side (Razorpay call, partial support,
+ * audit log, customer notification) but there was NO admin UI: issuing one
+ * meant editing the database by hand, and there was no way to see what had
+ * already been refunded. This is that missing screen.
+ */
+function Refunds({ showToast }: { showToast: (m: string) => void }) {
+  const [data, setData] = useState<any>({ refunds: [], refundable: [], summary: {} });
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [target, setTarget] = useState<any>(null);
+  const [reason, setReason] = useState('');
+  const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback((term = '') => {
+    setLoading(true);
+    api.listRefunds(term)
+      .then(setData)
+      .catch((e: any) => showToast(e.message || 'Could not load refunds'))
+      .finally(() => setLoading(false));
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  async function submit() {
+    if (!target) return;
+    if (!reason.trim()) { showToast('A reason is required — it goes in the audit log'); return; }
+    const amt = amount.trim() ? Number(amount) : undefined;
+    if (amt !== undefined && (isNaN(amt) || amt <= 0)) { showToast('Enter a valid amount'); return; }
+    if (amt !== undefined && amt > Number(target.paidAmount)) {
+      showToast(`Cannot refund more than ${money(Number(target.paidAmount))}`); return;
+    }
+    if (!confirm(
+      `Refund ${amt ? money(amt) : money(Number(target.paidAmount))} for ${target.orderNumber}?\n\n` +
+      `This sends REAL money back via Razorpay and cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      const r = await api.refundOrder(target.orderId, reason.trim(), amt);
+      showToast(`Refunded ${money(r.amount)} for ${target.orderNumber}`);
+      setTarget(null); setReason(''); setAmount('');
+      load(q);
+    } catch (e: any) { showToast(e.message || 'Refund failed'); }
+    finally { setBusy(false); }
+  }
+
+  const sum = data.summary || {};
+  const stat = (label: string, value: string, tone?: string) => (
+    <div style={{ ...cardStyle, padding: 14, flex: 1, minWidth: 150 }}>
+      <div style={{ fontSize: 11, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: tone || C.ink, marginTop: 4 }}>{value}</div>
+    </div>
+  );
+
+  return (
+    <>
+      <PageHead title="Refunds" sub="Issue and track refunds. Every refund is audited and the customer is notified automatically." />
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        {stat('Total refunded', money(Number(sum.totalRefunded || 0)))}
+        {stat('Refunds issued', String(sum.count || 0))}
+        {stat('Refundable orders', String(sum.refundableCount || 0))}
+        {stat('Failed — need action', String(sum.failedCount || 0), (sum.failedCount || 0) > 0 ? C.red : undefined)}
+      </div>
+
+      <input
+        value={q}
+        onChange={(e) => { setQ(e.target.value); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') load(q); }}
+        placeholder="Search order number, customer name or mobile — then press Enter"
+        style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, marginBottom: 16 }}
+      />
+
+      {/* refundable */}
+      <div style={{ ...cardStyle, padding: 16, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Orders you can refund</div>
+        {loading ? <div style={{ color: C.muted, fontSize: 13 }}>Loading…</div>
+          : data.refundable.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No online-paid orders available to refund.</div>
+          : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 620 }}>
+                <thead><tr><th style={th}>Order</th><th style={th}>Customer</th><th style={th}>Paid</th><th style={th}>Status</th><th style={th}></th></tr></thead>
+                <tbody>
+                  {data.refundable.map((o: any) => (
+                    <tr key={o.orderId}>
+                      <td style={td}><b>{o.orderNumber}</b></td>
+                      <td style={td}>{o.customer || '—'}<div style={{ color: C.muted, fontSize: 12 }}>{o.customerMobile || ''}</div></td>
+                      <td style={td}><b>{money(Number(o.paidAmount))}</b></td>
+                      <td style={td}><Pill kind={o.orderStatus}>{o.orderStatus}</Pill></td>
+                      <td style={td}>
+                        <button style={{ ...btnGhost, padding: '6px 12px', color: C.red, borderColor: C.red }}
+                          onClick={() => { setTarget(o); setReason(''); setAmount(''); }}>
+                          Refund
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+
+      {/* history */}
+      <div style={{ ...cardStyle, padding: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Refund history</div>
+        {loading ? <div style={{ color: C.muted, fontSize: 13 }}>Loading…</div>
+          : data.refunds.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>No refunds issued yet.</div>
+          : (
+            <div style={{ display: 'grid', gap: 9 }}>
+              {data.refunds.map((r: any) => (
+                <div key={r.id} style={{
+                  border: `1px solid ${r.failed ? '#f5c6c6' : C.line}`,
+                  background: r.failed ? '#fdecec' : '#fff',
+                  borderRadius: 12, padding: 12,
+                }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <b>{r.orderNumber || `Order #${r.orderId}`}</b>
+                    <b style={{ color: r.failed ? C.red : C.darkGreen }}>
+                      {r.failed ? '⚠️ FAILED — refund manually' : money(Number(r.amount || 0))}
+                    </b>
+                    {r.partial && !r.failed && (
+                      <span style={{ fontSize: 10, fontWeight: 800, background: C.orangeSoft, color: '#8a5a00', padding: '2px 8px', borderRadius: 20 }}>PARTIAL</span>
+                    )}
+                    <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.muted }}>
+                      {r.actor} · {new Date(r.createdAt).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>
+                    {r.customer ? `${r.customer} · ${r.customerMobile || ''} · ` : ''}{r.reason}
+                  </div>
+                  {r.error && <div style={{ fontSize: 12, color: C.red, marginTop: 4 }}>Error: {r.error}</div>}
+                  {r.razorpayRefundId && (
+                    <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>Razorpay ref: {r.razorpayRefundId}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
+
+      {target && (
+        <Modal title={`Refund ${target.orderNumber}`} onClose={() => setTarget(null)}>
+          <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>
+            Customer paid <b style={{ color: C.ink }}>{money(Number(target.paidAmount))}</b> online.
+            This sends real money back via Razorpay and cannot be undone.
+          </div>
+          <label style={{ fontSize: 12, fontWeight: 700 }}>Amount (blank = full refund)</label>
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal"
+            placeholder={`Full: ${Number(target.paidAmount)}`}
+            style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, margin: '5px 0 12px' }} />
+          <label style={{ fontSize: 12, fontWeight: 700 }}>Reason (required — goes in the audit log)</label>
+          <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
+            placeholder="e.g. Item was missing from the order"
+            style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, margin: '5px 0 0' }} />
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button style={btnGhost} onClick={() => setTarget(null)}>Cancel</button>
+            <button style={{ ...btnPrimary, background: C.red, borderColor: C.red }} disabled={busy} onClick={submit}>
+              {busy ? 'Refunding…' : 'Confirm refund'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function RolesAccess({ showToast }: { showToast: (m: string) => void }) {
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
