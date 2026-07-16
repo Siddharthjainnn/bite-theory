@@ -31,6 +31,7 @@ import DesktopApp from './components/DesktopApp';
 import RecommendedRow from './components/RecommendedRow';
 import TodaysSpecialModal from './components/TodaysSpecialModal';
 import PromoBannerDeck from './components/PromoBannerDeck';
+import LiveOrderCard from './components/LiveOrderCard';
 import { useDesktopLanding } from './lib/useDesktopLanding';
 
 type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
@@ -351,6 +352,10 @@ export default function HomePage() {
           <StoreClosedBanner status={storeStatus} />
         </section>
       )}
+
+      {/* S5: live order tracking — the most urgent thing a returning customer
+          wants. Renders nothing when there's no order in flight. */}
+      <LiveOrderCard />
 
       {/* animated promo deck — shows until real banners are uploaded */}
       {banners.length === 0 && !loading && (

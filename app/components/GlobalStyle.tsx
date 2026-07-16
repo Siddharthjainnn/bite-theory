@@ -1137,6 +1137,43 @@ a{text-decoration:none;color:inherit}
 .cart-thali-sel{font-size:11px;color:#7c8d84;margin:3px 0 5px;line-height:1.35;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
+/* ── S5: live order card on home ── */
+.loc-wrap{padding:12px 12px 0}
+.loc-card{position:relative;width:100%;border:none;cursor:pointer;text-align:left;
+  background:linear-gradient(150deg,#124a37,var(--bt-deep));border-radius:18px;
+  padding:15px 15px 13px;color:#fff;overflow:hidden;
+  box-shadow:0 8px 22px rgba(13,59,46,.22);
+  animation:locIn .45s cubic-bezier(.34,1.3,.64,1) both}
+@keyframes locIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.loc-card::after{content:"";position:absolute;top:-40px;right:-30px;width:140px;height:140px;
+  border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(76,175,80,.32),transparent 70%)}
+.loc-card--hot::after{background:radial-gradient(circle,rgba(245,158,11,.34),transparent 70%)}
+.loc-card:active{transform:scale(.99)}
+
+.loc-live{position:absolute;top:13px;right:13px;z-index:1;
+  font-size:9px;font-weight:850;letter-spacing:.5px;color:#ff8a80;
+  background:rgba(255,255,255,.12);padding:3px 8px;border-radius:999px;
+  animation:locBlink 1.6s ease-in-out infinite}
+@keyframes locBlink{0%,100%{opacity:1}50%{opacity:.5}}
+
+.loc-top{display:flex;align-items:center;gap:12px;position:relative;z-index:1}
+.loc-emoji{font-size:30px;animation:locBob 2.2s ease-in-out infinite;
+  filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
+@keyframes locBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.loc-txt{flex:1;min-width:0;padding-right:52px}
+.loc-txt b{display:block;font-size:15px;font-weight:850;letter-spacing:-.2px}
+.loc-txt span{font-size:11.5px;color:#cfe8d6}
+.loc-total{font-size:14px;font-weight:850;flex-shrink:0}
+
+.loc-track{position:relative;z-index:1;height:5px;border-radius:20px;
+  background:rgba(255,255,255,.16);margin:12px 0 10px;overflow:hidden}
+.loc-fill{height:100%;border-radius:20px;
+  background:linear-gradient(90deg,var(--bt-orange),var(--bt-green));
+  transition:width .6s cubic-bezier(.4,0,.2,1)}
+
+.loc-cta{position:relative;z-index:1;font-size:12px;font-weight:800;color:var(--bt-yellow)}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

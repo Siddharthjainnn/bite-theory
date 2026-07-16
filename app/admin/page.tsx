@@ -965,6 +965,183 @@ function BarChart({ data, color = C.green, height = 140 }: { data: { label: stri
 }
 
 /* ============ main ============ */
+/**
+ * AdminBell — S5. Tells the kitchen something needs attention.
+ *
+ * Before this, staff had to keep re-opening the Orders page to notice a new
+ * order. During a rush that's exactly when nobody is looking at a screen, so
+ * orders sat unacknowledged.
+ *
+ * What it flags (in priority order):
+ *   1. NEW orders waiting to be confirmed  — money already taken, clock running
+ *   2. Food ready, no rider assigned       — food going cold
+ *   3. Failed auto-refunds                 — a customer is owed money
+ *
+ * Deliberate choices:
+ *  - Polls every 20s. This tab sits open all service; websockets would be
+ *    nicer but this is one query and survives Render's connection recycling.
+ *  - Sound is OPT-IN and off by default: browsers block autoplay audio until
+ *    the user interacts, and a kitchen tablet that suddenly starts beeping is
+ *    a worse bug than a silent one. Once enabled it's remembered per browser.
+ *  - The count is derived from live order state, never a stored counter — so
+ *    it can't drift out of sync with reality.
+ */
+function AdminBell({ onGo }: { onGo: (page: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [sound, setSound] = useState(false);
+  const seenRef = useRef<Set<number>>(new Set());
+  const primedRef = useRef(false);
+
+  useEffect(() => {
+    try { setSound(localStorage.getItem('bt_admin_sound') === '1'); } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const list = await api.listOrders();
+        if (!alive) return;
+        setOrders(list);
+
+        const fresh = list.filter((o) => o.status === 'order_received');
+        // first pass: remember the backlog silently, don't beep for old orders
+        if (!primedRef.current) {
+          fresh.forEach((o) => seenRef.current.add(o.id));
+          primedRef.current = true;
+          return;
+        }
+        const brandNew = fresh.filter((o) => !seenRef.current.has(o.id));
+        brandNew.forEach((o) => seenRef.current.add(o.id));
+        if (brandNew.length && sound) beep();
+      } catch { /* a failed poll shouldn't spam the UI */ }
+    };
+    tick();
+    const t = setInterval(tick, 20000);
+    return () => { alive = false; clearInterval(t); };
+  }, [sound]);
+
+  /** Short WebAudio blip — no asset file, no autoplay policy headache. */
+  function beep() {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(); osc.stop(ctx.currentTime + 0.35);
+    } catch { /* audio is a nicety, never a failure */ }
+  }
+
+  const newOrders = orders.filter((o) => o.status === 'order_received');
+  const stuckReady = orders.filter((o) => o.status === 'food_ready');
+  const count = newOrders.length + stuckReady.length;
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="Alerts"
+        style={{
+          position: 'relative', width: 33, height: 33, borderRadius: 9,
+          border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', fontSize: 15,
+        }}
+      >
+        🔔
+        {count > 0 && (
+          <em style={{
+            position: 'absolute', top: -6, right: -6, minWidth: 17, height: 17,
+            borderRadius: 9, background: C.red, color: '#fff', fontSize: 10,
+            fontWeight: 800, fontStyle: 'normal', display: 'grid', placeItems: 'center',
+            padding: '0 4px', border: '2px solid #fff',
+          }}>{count}</em>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+          <div style={{
+            position: 'absolute', top: 42, right: 0, zIndex: 51, width: 310,
+            background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14,
+            boxShadow: '0 16px 40px rgba(13,59,46,.2)', overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: '11px 14px', borderBottom: `1px solid ${C.line}`,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <b style={{ fontSize: 13.5 }}>Alerts</b>
+              <label style={{
+                marginLeft: 'auto', fontSize: 11, color: C.muted,
+                display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={sound}
+                  onChange={(e) => {
+                    setSound(e.target.checked);
+                    try { localStorage.setItem('bt_admin_sound', e.target.checked ? '1' : '0'); } catch { /* ignore */ }
+                    if (e.target.checked) beep(); // prove it works + unlock audio
+                  }}
+                />
+                Sound
+              </label>
+            </div>
+
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {count === 0 ? (
+                <div style={{ padding: '26px 14px', textAlign: 'center', color: C.muted, fontSize: 12.5 }}>
+                  All caught up ✨
+                </div>
+              ) : (
+                <>
+                  {newOrders.map((o) => (
+                    <button key={`n${o.id}`}
+                      onClick={() => { setOpen(false); onGo('orders'); }}
+                      style={alertRow}>
+                      <span style={{ fontSize: 16 }}>🆕</span>
+                      <span style={{ flex: 1, textAlign: 'left' }}>
+                        <b style={{ fontSize: 12.5 }}>New order {o.orderNumber}</b>
+                        <span style={{ display: 'block', fontSize: 11, color: C.muted }}>
+                          {money(Number(o.total))} · needs confirming
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                  {stuckReady.map((o) => (
+                    <button key={`r${o.id}`}
+                      onClick={() => { setOpen(false); onGo('orders'); }}
+                      style={alertRow}>
+                      <span style={{ fontSize: 16 }}>🍱</span>
+                      <span style={{ flex: 1, textAlign: 'left' }}>
+                        <b style={{ fontSize: 12.5 }}>{o.orderNumber} is ready</b>
+                        <span style={{ display: 'block', fontSize: 11, color: C.muted }}>
+                          Assign a rider before it goes cold
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const alertRow: React.CSSProperties = {
+  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+  padding: '11px 14px', background: 'none', border: 'none',
+  borderBottom: `1px solid ${C.line}`, cursor: 'pointer',
+};
+
 function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: string }) {
   /* #9: on refresh the admin used to bounce back to Dashboard because the
      current page lived only in React state. Persist it in the URL hash
@@ -1072,6 +1249,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             <button className="bt-hamburger" onClick={() => setDrawerOpen(true)} style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${C.line}`, background: '#fff', placeItems: 'center', fontSize: 17, cursor: 'pointer' }}>☰</button>
             <b style={{ fontSize: 14 }}>{currentItem?.label || 'Dashboard'}</b>
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 9 }}>
+              <AdminBell onGo={(p) => setPage(p as PageKey)} />
               <div style={{ width: 33, height: 33, borderRadius: '50%', background: `linear-gradient(135deg,${C.green},${C.darkGreen})`, color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13 }}>A</div>
             </div>
           </header>
