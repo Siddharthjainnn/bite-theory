@@ -617,11 +617,21 @@ export default function RiderPage() {
                 <p style={{ color: C.muted, fontSize: 12, margin: '0 0 16px' }}>
                   Amount is locked — they cannot pay more or less.
                 </p>
+                {/* Bug #95 — this used a flat grey (#b0bec5) that read as a
+                    DISABLED button, so riders thought they couldn't fall back
+                    to cash. It's a real, enabled action: give it a solid
+                    outlined treatment instead. */}
                 <button
-                  style={{ ...btn('#b0bec5'), width: '100%' }}
+                  style={{
+                    width: '100%', padding: '13px 16px', borderRadius: 12,
+                    border: `2px solid ${C.ink}`, background: '#fff', color: C.ink,
+                    fontWeight: 800, fontSize: 13.5,
+                    cursor: qrBusy ? 'wait' : 'pointer',
+                    opacity: qrBusy ? 0.6 : 1,
+                  }}
                   disabled={qrBusy}
                   onClick={cancelQr}>
-                  Cancel — take cash instead
+                  💵 Cancel — take cash instead
                 </button>
               </>
             )}

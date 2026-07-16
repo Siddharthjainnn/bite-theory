@@ -18,6 +18,14 @@ const AREAS_SERVED = ['Vijay Nagar', 'Sukhliya', 'Rajwada', 'Palasia', 'Bhawarku
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
+  /* Bug #94 — the app could be pinch-zoomed, breaking the fixed nav and the
+     phone-frame layout. maximumScale + userScalable lock it to a native-app
+     feel. NOTE: iOS Safari deliberately IGNORES this (an accessibility
+     decision by Apple — users must always be able to zoom). What actually
+     stopped the iOS auto-zoom is the 16px input rule in GlobalStyle; this
+     covers Android/desktop. */
+  maximumScale: 1,
+  userScalable: false,
   themeColor: '#0D3B2E',
 };
 
