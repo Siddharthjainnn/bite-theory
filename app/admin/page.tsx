@@ -698,6 +698,7 @@ const NAV: NavGroup[] = [
   ]},
   { title: 'Catalog', items: [
     { key: 'products', label: 'Products', icon: '🍱' },
+    { key: 'todays_special', label: "Today's Special", icon: '⚡' },
     { key: 'categories', label: 'Categories', icon: '🗂️' },
     { key: 'inventory', label: 'Inventory', icon: '📦' },
     { key: 'thali', label: 'Thali Builder', icon: '🍛' },
@@ -748,7 +749,7 @@ type PageKey = typeof ALL_KEYS[number];
 const ROLE_SECTIONS: Record<string, PageKey[]> = {
   kitchen_manager: [
     'dashboard', 'orders', 'order_items',
-    'products', 'categories', 'inventory', 'thali',
+    'products', 'todays_special', 'categories', 'inventory', 'thali',
   ],
   delivery_manager: [
     'dashboard', 'orders', 'order_items', 'delivery_partners',
@@ -916,7 +917,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'products', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'products', 'todays_special', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -980,6 +981,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
           <div className="bt-content">
             {effectivePage === 'dashboard' && <Dashboard showToast={showToast} />}
             {effectivePage === 'products' && <Products showToast={showToast} />}
+            {effectivePage === 'todays_special' && <TodaysSpecial showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
             {effectivePage === 'orders' && <Orders showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
@@ -1991,6 +1993,197 @@ function OrderItemModal({ item, orders, products, onClose, onSave }:
 }
 
 /* ============ PRODUCTS (live) ============ */
+/**
+ * Today's Special — dedicated module.
+ *
+ * The flag itself lives on the product (isTodaysSpecial), so there is ONE
+ * source of truth and nothing to keep in sync. This screen is a focused view
+ * of that flag: see the current line-up at a glance, edit each dish's tag, add
+ * or remove in one tap. The ⚡ toggle in Products still works for quick edits —
+ * both routes drive the same field.
+ */
+function TodaysSpecial({ showToast }: { showToast: (m: string) => void }) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [q, setQ] = useState('');
+  const [tagEdit, setTagEdit] = useState<{ id: number; value: string } | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([api.listProducts(), api.listCategories().catch(() => [])])
+      .then(([p, c]) => { setProducts(p); setCats(c as Category[]); })
+      .catch((e: any) => showToast(e.message || 'Could not load'))
+      .finally(() => setLoading(false));
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  const catName = (id: number) => cats.find(c => c.id === id)?.name || '—';
+  const specials = products.filter(p => p.isTodaysSpecial);
+  const candidates = products.filter(p =>
+    !p.isTodaysSpecial &&
+    p.status === 'active' &&
+    (q.trim() === '' || p.name.toLowerCase().includes(q.trim().toLowerCase())));
+
+  async function setSpecial(p: Product, next: boolean, tag?: string) {
+    setBusy(p.id);
+    try {
+      await api.updateProduct(p.id, {
+        ...p,
+        isTodaysSpecial: next,
+        ...(tag !== undefined ? { specialTag: tag } : {}),
+      });
+      showToast(next ? `${p.name} is now a Today's Special` : `${p.name} removed`);
+      load();
+    } catch (e: any) { showToast(e.message || 'Could not update'); }
+    finally { setBusy(null); }
+  }
+
+  async function clearAll() {
+    if (!specials.length) return;
+    if (!confirm(`Remove all ${specials.length} dishes from Today's Special?`)) return;
+    setBusy(-1);
+    try {
+      for (const p of specials) {
+        await api.updateProduct(p.id, { ...p, isTodaysSpecial: false });
+      }
+      showToast("Today's Special cleared");
+      load();
+    } catch (e: any) { showToast(e.message || 'Could not clear'); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <>
+      <PageHead
+        title="Today's Special"
+        sub="The dishes customers see behind the ⚡ Special button. Changes are live immediately."
+        action={specials.length > 0
+          ? <button style={{ ...btnGhost, color: C.red }} disabled={busy === -1} onClick={clearAll}>
+              {busy === -1 ? 'Clearing…' : 'Clear all'}
+            </button>
+          : undefined}
+      />
+
+      {/* current line-up */}
+      <div style={{ ...cardStyle, padding: 16, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>⚡ Live now</span>
+          <span style={{ fontSize: 11, fontWeight: 800, background: '#fff6e8', color: '#8a5a00', padding: '2px 9px', borderRadius: 20 }}>
+            {specials.length}
+          </span>
+        </div>
+
+        {loading ? (
+          <div style={{ color: C.muted, fontSize: 13 }}>Loading…</div>
+        ) : specials.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13, padding: '18px 0', textAlign: 'center' }}>
+            No specials right now — customers see an empty popup. Add dishes below.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {specials.map(p => (
+              <div key={p.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: 11,
+                border: `1px solid ${C.line}`, borderRadius: 12, background: '#fffdf8',
+              }}>
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: C.greenSoft, display: 'grid', placeItems: 'center', fontSize: 18, overflow: 'hidden', flexShrink: 0 }}>
+                  {p.image && p.image.startsWith('http')
+                    ? <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : (p.image || '🍱')}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b>{p.name}</b>
+                  <div style={{ color: C.muted, fontSize: 12 }}>
+                    {catName(p.categoryId)} · {money(p.offerPrice > 0 ? p.offerPrice : p.price)}
+                    {p.offerPrice > 0 && <s style={{ marginLeft: 5 }}>{money(p.price)}</s>}
+                  </div>
+                </div>
+
+                {/* per-dish badge text shown on the customer card */}
+                {tagEdit?.id === p.id ? (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      autoFocus
+                      value={tagEdit.value}
+                      onChange={(e) => setTagEdit({ id: p.id, value: e.target.value })}
+                      placeholder="TODAY'S SPECIAL"
+                      style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: '6px 9px', fontSize: 12, width: 150 }}
+                    />
+                    <button style={{ ...btnPrimary, padding: '6px 12px' }}
+                      onClick={() => { setSpecial(p, true, tagEdit.value.trim()); setTagEdit(null); }}>
+                      Save
+                    </button>
+                    <button style={{ ...btnGhost, padding: '6px 10px' }} onClick={() => setTagEdit(null)}>✕</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setTagEdit({ id: p.id, value: p.specialTag || '' })}
+                    title="Edit the badge shown on the customer's card"
+                    style={{ ...btnGhost, padding: '6px 11px', fontSize: 11, whiteSpace: 'nowrap' }}
+                  >
+                    🏷️ {p.specialTag || "TODAY'S SPECIAL"}
+                  </button>
+                )}
+
+                <button
+                  disabled={busy === p.id}
+                  onClick={() => setSpecial(p, false)}
+                  style={{ ...btnGhost, padding: '6px 11px', color: C.red, fontSize: 12, whiteSpace: 'nowrap' }}
+                >
+                  {busy === p.id ? '…' : 'Remove'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* add more */}
+      <div style={{ ...cardStyle, padding: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Add a dish</div>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search your menu…"
+          style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, marginBottom: 12 }}
+        />
+        {loading ? (
+          <div style={{ color: C.muted, fontSize: 13 }}>Loading…</div>
+        ) : candidates.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13 }}>
+            {q ? `No active dish matches “${q}”.` : 'Every active dish is already a special.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 8, maxHeight: 380, overflowY: 'auto' }}>
+            {candidates.map(p => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 10px', border: `1px solid ${C.line}`, borderRadius: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: C.greenSoft, display: 'grid', placeItems: 'center', fontSize: 15, overflow: 'hidden', flexShrink: 0 }}>
+                  {p.image && p.image.startsWith('http')
+                    ? <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : (p.image || '🍱')}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ fontSize: 13 }}>{p.name}</b>
+                  <div style={{ color: C.muted, fontSize: 11.5 }}>{catName(p.categoryId)} · {money(p.offerPrice > 0 ? p.offerPrice : p.price)}</div>
+                </div>
+                <button
+                  disabled={busy === p.id}
+                  onClick={() => setSpecial(p, true)}
+                  style={{ ...btnPrimary, padding: '7px 14px', fontSize: 12, whiteSpace: 'nowrap' }}
+                >
+                  {busy === p.id ? '…' : '⚡ Add'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function Products({ showToast }: { showToast: (m: string) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
