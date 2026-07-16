@@ -1174,6 +1174,15 @@ a{text-decoration:none;color:inherit}
 
 .loc-cta{position:relative;z-index:1;font-size:12px;font-weight:800;color:var(--bt-yellow)}
 
+/* ── admin new-order alert popup ── */
+@keyframes adminAlertPop{from{opacity:0;transform:scale(.9) translateY(10px)}to{opacity:1;transform:none}}
+@keyframes adminAlertRing{
+  0%,100%{transform:rotate(0)}
+  10%,30%{transform:rotate(-14deg)}
+  20%,40%{transform:rotate(14deg)}
+  50%{transform:rotate(0)}
+}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

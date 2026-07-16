@@ -1007,6 +1007,23 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
   const soundRef = useRef(false);
   useEffect(() => { soundRef.current = sound; }, [sound]);
 
+  /* ── Ring until acknowledged ──────────────────────────────────────────
+     A fixed-length alarm is the wrong shape for this: too short and it's
+     missed, too long and it's still blaring after staff have already seen the
+     order — which is how people end up muting alerts entirely and then miss
+     everything.
+
+     Instead the alert PERSISTS while the order genuinely needs attention, and
+     stops the moment it doesn't:
+       • rings every 3s while any order sits in `order_received`
+       • a blocking popup shows the order with Confirm / Cancel in it
+       • the instant the status changes (by anyone, on any device) the poller
+         sees it and the ringing stops — no manual "silence" needed
+     So the alarm ends because the JOB got done, not because a timer expired. */
+  const [alertOrder, setAlertOrder] = useState<Order | null>(null);
+  const [acting, setActing] = useState(false);
+  const ringingRef = useRef<number | null>(null);
+
   useEffect(() => {
     let alive = true;
 
@@ -1017,26 +1034,30 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
         setOrders(list);
 
         const fresh = list.filter((o) => o.status === 'order_received');
+
         // first pass: remember the backlog silently, don't alert for old orders
         if (!primedRef.current) {
           fresh.forEach((o) => seenRef.current.add(o.id));
           primedRef.current = true;
           return;
         }
+
         const brandNew = fresh.filter((o) => !seenRef.current.has(o.id));
-        if (!brandNew.length) return;
         brandNew.forEach((o) => seenRef.current.add(o.id));
 
-        /* Alert once PER ORDER, not once per poll — three orders landing
-           together used to produce a single beep, so the kitchen would ack one
-           and miss two. Stagger them so they're audibly distinct. */
-        if (soundRef.current) {
-          brandNew.forEach((_, i) => setTimeout(() => chime(), i * 700));
-        }
-        /* A kitchen tablet is rarely on this tab. The title is the one thing
-           visible from across the room on a background tab. */
+        /* Show the popup for the OLDEST unhandled new order — the one that has
+           been waiting longest, not the newest. */
+        const needsAck = fresh[fresh.length - 1] || null;
+        setAlertOrder((cur) => {
+          // keep showing the same order unless it's been handled elsewhere
+          if (cur && fresh.some((o) => o.id === cur.id)) return cur;
+          return needsAck;
+        });
+
         if (typeof document !== 'undefined') {
-          document.title = `(${brandNew.length}) New order — Bites Theory Admin`;
+          document.title = fresh.length
+            ? `(${fresh.length}) New order — Bites Theory Admin`
+            : 'Bites Theory Admin';
         }
       } catch { /* a failed poll shouldn't spam the UI */ }
     };
@@ -1055,6 +1076,39 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
+
+  /* The ringer. Driven purely by "is there an unacknowledged order?", so it
+     starts and stops as a consequence of real state — there is no separate
+     "stop the sound" call that could get out of sync with reality. */
+  useEffect(() => {
+    const shouldRing = !!alertOrder && sound;
+    if (!shouldRing) {
+      if (ringingRef.current) { clearInterval(ringingRef.current); ringingRef.current = null; }
+      return;
+    }
+    chime();                                   // ring immediately
+    ringingRef.current = window.setInterval(chime, 3000);
+    return () => {
+      if (ringingRef.current) { clearInterval(ringingRef.current); ringingRef.current = null; }
+    };
+  }, [alertOrder, sound]);
+
+  /** Confirm or cancel straight from the popup — the fastest possible ack. */
+  async function actOnAlert(status: 'order_confirmed' | 'cancelled') {
+    if (!alertOrder) return;
+    setActing(true);
+    try {
+      await api.advanceOrderStatus(alertOrder.id, status,
+        status === 'cancelled' ? 'Cancelled by kitchen' : 'Confirmed by kitchen');
+      /* Clear locally right away so the ringing stops on THIS click rather than
+         waiting up to 10s for the next poll to notice. */
+      setAlertOrder(null);
+      setOrders((prev) => prev.map((o) => (o.id === alertOrder.id ? { ...o, status } as Order : o)));
+      if (typeof document !== 'undefined') document.title = 'Bites Theory Admin';
+    } catch (e: any) {
+      alert(e?.message || 'Could not update the order — please open Orders and try there.');
+    } finally { setActing(false); }
+  }
 
   /* Clear the title alert once someone actually looks at the bell. */
   useEffect(() => {
@@ -1106,6 +1160,80 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
 
   return (
     <div style={{ position: 'relative' }}>
+      {/* ── New-order popup: rings until confirmed or cancelled ──
+          Deliberately NOT dismissible by clicking the backdrop. A new order is
+          money already taken with a clock running — it needs a decision, not a
+          swipe-away. The only exits are Confirm, Cancel, or "Open Orders" for
+          the cases that need a closer look. */}
+      {alertOrder && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(4,22,15,.62)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: 18,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 380,
+            padding: 22, textAlign: 'center',
+            boxShadow: '0 24px 60px rgba(0,0,0,.4)',
+            animation: 'adminAlertPop .3s cubic-bezier(.34,1.5,.64,1)',
+          }}>
+            <div style={{ fontSize: 40, animation: 'adminAlertRing 1s ease-in-out infinite' }}>🔔</div>
+            <div style={{ fontWeight: 850, fontSize: 19, color: C.ink, marginTop: 6 }}>
+              New order!
+            </div>
+            <div style={{ fontSize: 13, color: C.muted, marginTop: 3 }}>
+              {alertOrder.orderNumber} · <b style={{ color: C.ink }}>{money(Number(alertOrder.total))}</b>
+            </div>
+
+            {newOrders.length > 1 && (
+              <div style={{
+                marginTop: 10, fontSize: 11.5, fontWeight: 800, color: '#8a5a00',
+                background: C.orangeSoft, borderRadius: 20, padding: '4px 12px',
+                display: 'inline-block',
+              }}>
+                +{newOrders.length - 1} more waiting
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button
+                onClick={() => actOnAlert('cancelled')}
+                disabled={acting}
+                style={{
+                  flex: 1, background: '#fff', border: `2px solid ${C.red}`, color: C.red,
+                  borderRadius: 12, padding: '12px', fontWeight: 800, fontSize: 13.5,
+                  cursor: acting ? 'wait' : 'pointer',
+                }}
+              >
+                Cancel order
+              </button>
+              <button
+                onClick={() => actOnAlert('order_confirmed')}
+                disabled={acting}
+                style={{
+                  flex: 2, background: C.green, border: 'none', color: '#fff',
+                  borderRadius: 12, padding: '12px', fontWeight: 800, fontSize: 14,
+                  cursor: acting ? 'wait' : 'pointer',
+                  boxShadow: '0 6px 16px rgba(76,175,80,.4)',
+                }}
+              >
+                {acting ? 'Saving…' : '✓ Confirm & start cooking'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => { setAlertOrder(null); onGo('orders'); }}
+              style={{
+                marginTop: 10, background: 'none', border: 'none', color: C.muted,
+                fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 6,
+              }}
+            >
+              Open Orders instead →
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => setOpen((v) => !v)}
         title="Alerts"
