@@ -94,8 +94,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (hydrated) save(LS_THALI, thalis);
   }, [thalis, hydrated]);
 
+  /* Suggestion #11 — there was no ceiling on quantity, so a stuck tap (or a
+     curious user) could put 200 thalis in the cart and the kitchen would only
+     find out at checkout. 20 per dish is far above any real household order
+     while still catching runaway input. The server enforces this too — the
+     client cap is only for feedback. */
+  const MAX_QTY = 20;
   const add = (id: number) =>
-    setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
+    setCart((c) => ({ ...c, [id]: Math.min((c[id] || 0) + 1, MAX_QTY) }));
 
   const sub = (id: number) =>
     setCart((c) => {
