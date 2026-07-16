@@ -860,7 +860,11 @@ function Toast({ msg }: { msg: string }) {
 }
 function Pill({ kind, children }: { kind: 'active' | 'inactive' | 'low' | 'out'; children: React.ReactNode }) {
   const map: Record<string, [string, string]> = { active: [C.greenSoft, '#2e7d32'], inactive: ['#f0f0f0', '#888'], low: [C.orangeSoft, '#b76e00'], out: ['#fdecec', C.red] };
-  const [bg, col] = map[kind];
+  /* Defensive: an unknown kind used to make map[kind] undefined, and
+     destructuring undefined throws — which unmounts the whole admin tree and
+     shows a blank "page couldn't load". A wrong colour is always better than a
+     dead page. (Use orderStatusPill() for order statuses.) */
+  const [bg, col] = map[kind] || ['#f0f0f0', '#888'];
   return <span style={{ background: bg, color: col, padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{children}</span>;
 }
 function badgeFor(val: any) {
@@ -2427,7 +2431,7 @@ function Refunds({ showToast }: { showToast: (m: string) => void }) {
                       <td style={td}><b>{o.orderNumber}</b></td>
                       <td style={td}>{o.customer || '—'}<div style={{ color: C.muted, fontSize: 12 }}>{o.customerMobile || ''}</div></td>
                       <td style={td}><b>{money(Number(o.paidAmount))}</b></td>
-                      <td style={td}><Pill kind={o.orderStatus}>{o.orderStatus}</Pill></td>
+                      <td style={td}>{orderStatusPill(o.orderStatus)}</td>
                       <td style={td}>
                         <button style={{ ...btnGhost, padding: '6px 12px', color: C.red, borderColor: C.red }}
                           onClick={() => { setTarget(o); setReason(''); setAmount(''); }}>
