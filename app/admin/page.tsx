@@ -978,8 +978,10 @@ function BarChart({ data, color = C.green, height = 140 }: { data: { label: stri
  *   3. Failed auto-refunds                 — a customer is owed money
  *
  * Deliberate choices:
- *  - Polls every 20s. This tab sits open all service; websockets would be
- *    nicer but this is one query and survives Render's connection recycling.
+ *  - Polls every 10s, plus an immediate re-check when the tab regains focus
+ *    (browsers throttle timers to ~60s in background tabs, and a kitchen
+ *    tablet is rarely on this tab). Websockets would be nicer, but this is one
+ *    query and survives Render's connection recycling.
  *  - Sound is OPT-IN and off by default: browsers block autoplay audio until
  *    the user interacts, and a kitchen tablet that suddenly starts beeping is
  *    a worse bug than a silent one. Once enabled it's remembered per browser.
@@ -997,8 +999,17 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
     try { setSound(localStorage.getItem('bt_admin_sound') === '1'); } catch { /* ignore */ }
   }, []);
 
+  /* `sound` is read through a ref, not the closure. Putting it in the effect
+     deps meant the whole poller tore down and re-primed every time the toggle
+     changed — and the beep read a stale `sound` from the closure it was
+     created in. A ref keeps one long-lived poller that always sees the current
+     value. */
+  const soundRef = useRef(false);
+  useEffect(() => { soundRef.current = sound; }, [sound]);
+
   useEffect(() => {
     let alive = true;
+
     const tick = async () => {
       try {
         const list = await api.listOrders();
@@ -1006,35 +1017,86 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
         setOrders(list);
 
         const fresh = list.filter((o) => o.status === 'order_received');
-        // first pass: remember the backlog silently, don't beep for old orders
+        // first pass: remember the backlog silently, don't alert for old orders
         if (!primedRef.current) {
           fresh.forEach((o) => seenRef.current.add(o.id));
           primedRef.current = true;
           return;
         }
         const brandNew = fresh.filter((o) => !seenRef.current.has(o.id));
+        if (!brandNew.length) return;
         brandNew.forEach((o) => seenRef.current.add(o.id));
-        if (brandNew.length && sound) beep();
+
+        /* Alert once PER ORDER, not once per poll — three orders landing
+           together used to produce a single beep, so the kitchen would ack one
+           and miss two. Stagger them so they're audibly distinct. */
+        if (soundRef.current) {
+          brandNew.forEach((_, i) => setTimeout(() => chime(), i * 700));
+        }
+        /* A kitchen tablet is rarely on this tab. The title is the one thing
+           visible from across the room on a background tab. */
+        if (typeof document !== 'undefined') {
+          document.title = `(${brandNew.length}) New order — Bites Theory Admin`;
+        }
       } catch { /* a failed poll shouldn't spam the UI */ }
     };
-    tick();
-    const t = setInterval(tick, 20000);
-    return () => { alive = false; clearInterval(t); };
-  }, [sound]);
 
-  /** Short WebAudio blip — no asset file, no autoplay policy headache. */
-  function beep() {
+    tick();
+    /* 10s, not 20s: a new order is money on the clock. Browsers throttle
+       setInterval to ~60s in BACKGROUND tabs, so we also re-check the moment
+       the tab becomes visible again — otherwise a tablet left on another tab
+       would learn about orders a minute late. */
+    const t = setInterval(tick, 10000);
+    const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  /* Clear the title alert once someone actually looks at the bell. */
+  useEffect(() => {
+    if (open && typeof document !== 'undefined') document.title = 'Bites Theory Admin';
+  }, [open]);
+
+  /**
+   * New-order chime. WebAudio, so there's no asset to host and nothing to
+   * preload.
+   *
+   * Design notes for a KITCHEN, not a laptop:
+   *  - Three rising notes, not one blip. A single short beep is easily lost
+   *    under an exhaust fan; a rising pattern reads as "attention" and is
+   *    recognisable even when half-heard.
+   *  - One shared AudioContext, created lazily on first use. Creating a new
+   *    context per beep leaks them, and browsers cap how many you can have —
+   *    after ~30 orders the beeps would simply stop.
+   *  - resume() on every play: browsers suspend the context when the tab goes
+   *    to the background, and a suspended context plays silence with no error.
+   */
+  const audioRef = useRef<any>(null);
+  function chime() {
     try {
       const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return;
-      const ctx = new Ctx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-      osc.start(); osc.stop(ctx.currentTime + 0.35);
+      if (!audioRef.current) audioRef.current = new Ctx();
+      const ctx = audioRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      // rising 3-note motif: G5 → B5 → D6
+      [784, 988, 1175].forEach((freq, i) => {
+        const t0 = ctx.currentTime + i * 0.14;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t0);
+        osc.connect(gain); gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.28, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.30);
+        osc.start(t0); osc.stop(t0 + 0.32);
+      });
     } catch { /* audio is a nicety, never a failure */ }
   }
 
@@ -1086,7 +1148,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
                   onChange={(e) => {
                     setSound(e.target.checked);
                     try { localStorage.setItem('bt_admin_sound', e.target.checked ? '1' : '0'); } catch { /* ignore */ }
-                    if (e.target.checked) beep(); // prove it works + unlock audio
+                    if (e.target.checked) chime(); // proves it works AND unlocks audio for later
                   }}
                 />
                 Sound
