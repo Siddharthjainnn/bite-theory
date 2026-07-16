@@ -52,6 +52,36 @@ export default function StoreSettingsPanel({
   const [live, setLive] = useState<{ open: boolean; message: string } | null>(null);
   const [newHoliday, setNewHoliday] = useState({ date: '', note: '' });
 
+  /* ── Bugs #19/#55: a running flash deal (e.g. "50% OFF sab pe") was visible
+     to customers with NO admin control to see or stop it. The backend already
+     had POST /flash/stop — there was simply no UI.
+
+     NOTE: these hooks MUST live above the `if (!s) return …` guard below.
+     They were originally added underneath it, so on the first render (settings
+     still loading) they never ran, and once settings arrived React saw MORE
+     hooks than the previous render and crashed the whole page with
+     "Rendered more hooks than during the previous render." — that was the
+     admin Store Settings white screen. */
+  const [flash, setFlash] = useState<any>(null);
+  const [flashBusy, setFlashBusy] = useState(false);
+  async function loadFlash() {
+    try {
+      const r = await fetch(`${API_BASE}/flash/current`, { cache: 'no-store' });
+      setFlash(r.ok ? await r.json() : null);
+    } catch { setFlash(null); }
+  }
+  useEffect(() => { loadFlash(); }, []);
+  async function stopFlash() {
+    if (!confirm('Stop the running flash deal for all customers?')) return;
+    setFlashBusy(true);
+    try {
+      const r = await fetch(`${API_BASE}/flash/stop`, { method: 'POST', headers: adminHeaders() });
+      if (!r.ok) throw new Error();
+      await loadFlash();
+    } catch { alert('Could not stop the flash deal.'); }
+    finally { setFlashBusy(false); }
+  }
+
   async function load() {
     const [a, b] = await Promise.all([
       fetch(`${API_BASE}/settings`, { cache: 'no-store' }),
@@ -131,29 +161,6 @@ export default function StoreSettingsPanel({
   };
   const h: React.CSSProperties = { fontWeight: 800, fontSize: 14, color: G, marginBottom: 4 };
   const sub: React.CSSProperties = { fontSize: 12, color: '#6b7d74', marginBottom: 14 };
-
-  /* ── Bugs #19/#55: a running flash deal (e.g. "50% OFF sab pe") was visible
-     to customers with NO admin control to see or stop it. The backend already
-     had POST /flash/stop — there was simply no UI. ── */
-  const [flash, setFlash] = useState<any>(null);
-  const [flashBusy, setFlashBusy] = useState(false);
-  async function loadFlash() {
-    try {
-      const r = await fetch(`${API_BASE}/flash/current`, { cache: 'no-store' });
-      setFlash(r.ok ? await r.json() : null);
-    } catch { setFlash(null); }
-  }
-  useEffect(() => { loadFlash(); }, []);
-  async function stopFlash() {
-    if (!confirm('Stop the running flash deal for all customers?')) return;
-    setFlashBusy(true);
-    try {
-      const r = await fetch(`${API_BASE}/flash/stop`, { method: 'POST', headers: adminHeaders() });
-      if (!r.ok) throw new Error();
-      await loadFlash();
-    } catch { alert('Could not stop the flash deal.'); }
-    finally { setFlashBusy(false); }
-  }
 
   return (
     <div style={{ maxWidth: 760 }}>
