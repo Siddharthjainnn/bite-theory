@@ -184,6 +184,40 @@ const api = {
     const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw await apiError(r, 'Delete failed');
   },
+  async faqAll(): Promise<any> {
+    const r = await fetch(`${API_BASE}/faq/admin/all`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to load help centre');
+    return r.json();
+  },
+  async faqProblems(): Promise<any[]> {
+    const r = await fetch(`${API_BASE}/faq/admin/problems`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) return [];
+    return r.json();
+  },
+  async faqSaveArticle(id: number | null, body: any): Promise<any> {
+    const r = await fetch(`${API_BASE}/faq/articles${id ? '/' + id : ''}`, {
+      method: id ? 'PATCH' : 'POST', headers: WRITE_HEADERS, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw await apiError(r, 'Failed to save article');
+    return r.json();
+  },
+  async faqDeleteArticle(id: number): Promise<any> {
+    const r = await fetch(`${API_BASE}/faq/articles/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to delete article');
+    return r.json();
+  },
+  async faqSaveCategory(id: number | null, body: any): Promise<any> {
+    const r = await fetch(`${API_BASE}/faq/categories${id ? '/' + id : ''}`, {
+      method: id ? 'PATCH' : 'POST', headers: WRITE_HEADERS, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw await apiError(r, 'Failed to save category');
+    return r.json();
+  },
+  async faqDeleteCategory(id: number): Promise<any> {
+    const r = await fetch(`${API_BASE}/faq/categories/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to delete category');
+    return r.json();
+  },
   async listRefunds(q = ''): Promise<any> {
     const r = await fetch(`${API_BASE}/orders/refunds/list?q=${encodeURIComponent(q)}`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw await apiError(r, 'Failed to load refunds');
@@ -750,6 +784,7 @@ const NAV: NavGroup[] = [
   { title: 'Delivery', items: [{ key: 'delivery_partners', label: 'Delivery Partners', icon: '🛵' }] },
   { title: 'Support', items: [
     { key: 'support_tickets', label: 'Support Tickets', icon: '🎧' },
+    { key: 'help_centre', label: 'Help Centre', icon: '❓' },
     { key: 'notifications', label: 'Notifications', icon: '🔔' },
   ]},
   { title: 'Access Control', items: [
@@ -783,7 +818,7 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
   ],
   customer_support: [
     'dashboard', 'orders', 'users', 'reviews', 'addresses',
-    'favorites', 'support_tickets', 'notifications',
+    'favorites', 'support_tickets', 'help_centre', 'notifications',
   ],
   marketing_manager: [
     'dashboard', 'coupons', 'coupon_assign', 'campaigns',
@@ -975,7 +1010,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'products', 'todays_special', 'roles_access', 'refunds', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1042,6 +1077,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'todays_special' && <TodaysSpecial showToast={showToast} />}
             {effectivePage === 'roles_access' && <RolesAccess showToast={showToast} />}
             {effectivePage === 'refunds' && <Refunds showToast={showToast} />}
+            {effectivePage === 'help_centre' && <HelpCentre showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
             {effectivePage === 'orders' && <Orders showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
@@ -2078,6 +2114,238 @@ function OrderItemModal({ item, orders, products, onClose, onSave }:
  * meant editing the database by hand, and there was no way to see what had
  * already been refunded. This is that missing screen.
  */
+/**
+ * Help Centre — admin-managed FAQ.
+ *
+ * The FAQ used to be a hard-coded array inside the support page: every wording
+ * change needed a developer and a deploy, and there was no way to know which
+ * answers were actually failing customers. Now it's data — categories,
+ * articles, ordering, and a "worst answers" report driven by real 👍/👎 votes.
+ */
+function HelpCentre({ showToast }: { showToast: (m: string) => void }) {
+  const [data, setData] = useState<{ categories: any[]; articles: any[] }>({ categories: [], articles: [] });
+  const [problems, setProblems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editArt, setEditArt] = useState<any>(null);
+  const [editCat, setEditCat] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([api.faqAll(), api.faqProblems().catch(() => [])])
+      .then(([d, p]) => { setData(d); setProblems(p as any[]); })
+      .catch((e: any) => showToast(e.message || 'Could not load help centre'))
+      .finally(() => setLoading(false));
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  async function saveArticle() {
+    if (!editArt?.question?.trim() || !editArt?.answer?.trim()) {
+      showToast('Question and answer are required'); return;
+    }
+    if (!editArt.categoryId) { showToast('Pick a category'); return; }
+    setBusy(true);
+    try {
+      await api.faqSaveArticle(editArt.id || null, {
+        categoryId: Number(editArt.categoryId),
+        question: editArt.question.trim(),
+        answer: editArt.answer.trim(),
+        actionLabel: editArt.actionLabel?.trim() || undefined,
+        actionUrl: editArt.actionUrl?.trim() || undefined,
+        keywords: editArt.keywords?.trim() || undefined,
+        sortOrder: Number(editArt.sortOrder) || 0,
+        isActive: editArt.isActive !== false,
+      });
+      showToast(editArt.id ? 'Article updated' : 'Article added');
+      setEditArt(null); load();
+    } catch (e: any) { showToast(e.message || 'Save failed'); }
+    finally { setBusy(false); }
+  }
+
+  async function saveCat() {
+    if (!editCat?.name?.trim()) { showToast('Name is required'); return; }
+    setBusy(true);
+    try {
+      await api.faqSaveCategory(editCat.id || null, {
+        name: editCat.name.trim(),
+        icon: editCat.icon?.trim() || undefined,
+        description: editCat.description?.trim() || undefined,
+        sortOrder: Number(editCat.sortOrder) || 0,
+        isActive: editCat.isActive !== false,
+      });
+      showToast(editCat.id ? 'Category updated' : 'Category added');
+      setEditCat(null); load();
+    } catch (e: any) { showToast(e.message || 'Save failed'); }
+    finally { setBusy(false); }
+  }
+
+  async function delArticle(a: any) {
+    if (!confirm(`Delete "${a.question}"?`)) return;
+    try { await api.faqDeleteArticle(a.id); showToast('Article deleted'); load(); }
+    catch (e: any) { showToast(e.message || 'Delete failed'); }
+  }
+  async function delCat(c: any) {
+    if (!confirm(`Delete category "${c.name}"?`)) return;
+    try { await api.faqDeleteCategory(c.id); showToast('Category deleted'); load(); }
+    catch (e: any) { showToast(e.message || 'Delete failed'); }
+  }
+
+  const catName = (id: number) => data.categories.find((c) => c.id === id)?.name || '—';
+
+  return (
+    <>
+      <PageHead
+        title="Help Centre"
+        sub="What customers see under Support. Changes are live immediately — no deploy needed."
+        action={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={btnGhost} onClick={() => setEditCat({ isActive: true, sortOrder: 0 })}>+ Category</button>
+            <button style={btnPrimary} onClick={() => setEditArt({ isActive: true, sortOrder: 0, categoryId: data.categories[0]?.id })}>+ Article</button>
+          </div>
+        }
+      />
+
+      {/* worst answers — the whole point of collecting votes */}
+      {problems.length > 0 && (
+        <div style={{ ...cardStyle, padding: 16, marginBottom: 16, background: '#fff6ec', border: '1px solid #ffd8a8' }}>
+          <div style={{ fontWeight: 800, fontSize: 13.5, color: '#8a5a00', marginBottom: 8 }}>
+            ⚠️ Answers customers said did NOT help
+          </div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {problems.slice(0, 5).map((p) => (
+              <div key={p.id} style={{ fontSize: 12.5, color: '#8a5a00', display: 'flex', gap: 8 }}>
+                <b style={{ minWidth: 62 }}>👎 {p.notHelpful} / 👍 {p.helpful}</b>
+                <span style={{ flex: 1 }}>{p.question}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#a97b32', marginTop: 8 }}>
+            These are your weakest answers — rewriting them cuts support tickets.
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ ...cardStyle, padding: 18, color: C.muted, fontSize: 13 }}>Loading…</div>
+      ) : data.categories.map((c) => {
+        const arts = data.articles.filter((a) => a.categoryId === c.id);
+        return (
+          <div key={c.id} style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+              <span style={{ fontSize: 17 }}>{c.icon}</span>
+              <b style={{ fontSize: 14.5 }}>{c.name}</b>
+              <span style={{ fontSize: 11.5, color: C.muted }}>({arts.length})</span>
+              {!c.isActive && <Pill kind="inactive">Hidden</Pill>}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                <button style={{ ...btnGhost, padding: '5px 11px', fontSize: 12 }} onClick={() => setEditCat(c)}>Edit</button>
+                <button style={{ ...btnGhost, padding: '5px 11px', fontSize: 12, color: C.red }} onClick={() => delCat(c)}>Delete</button>
+              </div>
+            </div>
+            {arts.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: C.muted }}>No articles yet.</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 7 }}>
+                {arts.map((a) => (
+                  <div key={a.id} style={{
+                    border: `1px solid ${C.line}`, borderRadius: 10, padding: 11,
+                    opacity: a.isActive ? 1 : .55,
+                  }}>
+                    <div style={{ display: 'flex', gap: 9, alignItems: 'baseline' }}>
+                      <b style={{ flex: 1, fontSize: 13 }}>{a.question}</b>
+                      <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>
+                        👁 {a.viewCount} · 👍 {a.helpfulYes} · 👎 {a.helpfulNo}
+                      </span>
+                      <button style={{ ...btnGhost, padding: '4px 10px', fontSize: 11.5 }} onClick={() => setEditArt(a)}>Edit</button>
+                      <button style={{ ...btnGhost, padding: '4px 10px', fontSize: 11.5, color: C.red }} onClick={() => delArticle(a)}>✕</button>
+                    </div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+                      {String(a.answer).slice(0, 120)}{String(a.answer).length > 120 ? '…' : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {editArt && (
+        <Modal title={editArt.id ? 'Edit article' : 'New article'} onClose={() => setEditArt(null)}>
+          <label style={fLbl}>Category</label>
+          <select value={editArt.categoryId || ''} onChange={(e) => setEditArt({ ...editArt, categoryId: e.target.value })} style={fInp}>
+            {data.categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </select>
+          <label style={fLbl}>Question</label>
+          <input value={editArt.question || ''} onChange={(e) => setEditArt({ ...editArt, question: e.target.value })} style={fInp} placeholder="Where is my order?" />
+          <label style={fLbl}>Answer</label>
+          <textarea rows={5} value={editArt.answer || ''} onChange={(e) => setEditArt({ ...editArt, answer: e.target.value })} style={fInp} placeholder="Write it the way you'd say it on the phone." />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl}>Button label (optional)</label>
+              <input value={editArt.actionLabel || ''} onChange={(e) => setEditArt({ ...editArt, actionLabel: e.target.value })} style={fInp} placeholder="Track my order" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl}>Button link</label>
+              <input value={editArt.actionUrl || ''} onChange={(e) => setEditArt({ ...editArt, actionUrl: e.target.value })} style={fInp} placeholder="/orders" />
+            </div>
+          </div>
+          <label style={fLbl}>Search keywords (optional)</label>
+          <input value={editArt.keywords || ''} onChange={(e) => setEditArt({ ...editArt, keywords: e.target.value })} style={fInp} placeholder="late, delay, where, tracking" />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl}>Sort order</label>
+              <input value={editArt.sortOrder ?? 0} onChange={(e) => setEditArt({ ...editArt, sortOrder: e.target.value })} style={fInp} inputMode="numeric" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl}>Visible to customers</label>
+              <select value={editArt.isActive === false ? 'no' : 'yes'} onChange={(e) => setEditArt({ ...editArt, isActive: e.target.value === 'yes' })} style={fInp}>
+                <option value="yes">Yes</option><option value="no">No — hidden</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+            <button style={btnGhost} onClick={() => setEditArt(null)}>Cancel</button>
+            <button style={btnPrimary} disabled={busy} onClick={saveArticle}>{busy ? 'Saving…' : 'Save'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {editCat && (
+        <Modal title={editCat.id ? 'Edit category' : 'New category'} onClose={() => setEditCat(null)}>
+          <label style={fLbl}>Name</label>
+          <input value={editCat.name || ''} onChange={(e) => setEditCat({ ...editCat, name: e.target.value })} style={fInp} placeholder="Orders & Delivery" />
+          <label style={fLbl}>Icon (emoji)</label>
+          <input value={editCat.icon || ''} onChange={(e) => setEditCat({ ...editCat, icon: e.target.value })} style={fInp} placeholder="📦" />
+          <label style={fLbl}>Description</label>
+          <input value={editCat.description || ''} onChange={(e) => setEditCat({ ...editCat, description: e.target.value })} style={fInp} placeholder="Tracking, ETA and delivery issues" />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl}>Sort order</label>
+              <input value={editCat.sortOrder ?? 0} onChange={(e) => setEditCat({ ...editCat, sortOrder: e.target.value })} style={fInp} inputMode="numeric" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl}>Visible</label>
+              <select value={editCat.isActive === false ? 'no' : 'yes'} onChange={(e) => setEditCat({ ...editCat, isActive: e.target.value === 'yes' })} style={fInp}>
+                <option value="yes">Yes</option><option value="no">No — hidden</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+            <button style={btnGhost} onClick={() => setEditCat(null)}>Cancel</button>
+            <button style={btnPrimary} disabled={busy} onClick={saveCat}>{busy ? 'Saving…' : 'Save'}</button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+const fLbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4, marginTop: 10 };
+const fInp: React.CSSProperties = {
+  width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,
+  padding: '10px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit',
+};
+
 function Refunds({ showToast }: { showToast: (m: string) => void }) {
   const [data, setData] = useState<any>({ refunds: [], refundable: [], summary: {} });
   const [loading, setLoading] = useState(true);

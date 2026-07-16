@@ -11,7 +11,7 @@ import { useSession } from 'next-auth/react';
 import AppShell from '../../components/AppShell';
 import AppHeader from '../../components/AppHeader';
 import {
-  C, SupportTicket, createSupportTicket, fetchMySupportTickets, fetchStoreSettings } from '../../lib/bite';
+  C, SupportTicket, createSupportTicket, fetchMySupportTickets, fetchStoreSettings, fetchFaq, trackFaqView, sendFaqFeedback, FaqCategory } from '../../lib/bite';
 
 function fmtDate(s?: string | null) {
   if (!s) return '';
@@ -25,49 +25,10 @@ function statusColor(s?: string) {
   return '#6b7280';
 }
 
-/** Self-help content. Ordered by how often a customer actually hits each one. */
-const FAQS: { icon: string; q: string; a: string }[] = [
-  {
-    icon: '📍',
-    q: 'Where is my order?',
-    a: 'Open Orders and tap your live order — you will see the current status, a live map once the rider picks it up, and an ETA. If it has been stuck on one status for more than 20 minutes, call us.',
-  },
-  {
-    icon: '🔢',
-    q: 'The rider is asking for an OTP — where is it?',
-    a: 'It is on your order tracking screen: open Orders → tap the live order. Share the 4-digit code with the rider only when you have received your food.',
-  },
-  {
-    icon: '💸',
-    q: 'I paid but the order did not go through',
-    a: 'If money left your account and no order appeared, it is almost always auto-reversed by your bank in 5–7 working days. Check Orders first — if the order IS there, you are fine. If not, raise a ticket with the amount and time and we will trace it.',
-  },
-  {
-    icon: '↩️',
-    q: 'When will my refund arrive?',
-    a: 'Cancelled or refunded orders are sent back to your original payment method the same day. Banks usually take 5–7 working days to show it. Wallet refunds are instant.',
-  },
-  {
-    icon: '🎟️',
-    q: 'My coupon is not applying',
-    a: 'Check three things: the order meets the minimum value, the coupon has not expired, and you have not already used it. The cart shows the exact reason under the coupon box when it is rejected.',
-  },
-  {
-    icon: '🍱',
-    q: 'Something was missing or wrong in my order',
-    a: 'Raise a ticket below with your order number and what was wrong — a photo helps. We review these fast and refund where it is our mistake.',
-  },
-  {
-    icon: '🚪',
-    q: 'The kitchen is closed / I cannot place an order',
-    a: 'We cook to order, so ordering is only open during kitchen hours — the home screen shows the next opening time. You may also be outside our delivery radius; the app tells you at checkout.',
-  },
-  {
-    icon: '💳',
-    q: 'How do I use my wallet balance?',
-    a: 'At checkout, turn on "Use wallet balance". It applies automatically to that order. Wallet money comes from refunds, referrals and rewards.',
-  },
-];
+const voteBtn: React.CSSProperties = {
+  background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16,
+  padding: '5px 11px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', color: C.ink,
+};
 
 export default function SupportPage() {
   const router = useRouter();
@@ -81,17 +42,33 @@ export default function SupportPage() {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-  /* Support contact + FAQ. The page previously said "Call / WhatsApp us — see
-     the Help section", but no Help section existed and no number was shown, so
-     a stuck customer had no way through. Number comes from Store Settings so
-     the kitchen can change it without a deploy. */
+  /* Help centre — now loaded from the API and managed in Admin → Help Centre.
+     It used to be a hard-coded array in this file, so every wording tweak
+     needed a developer + a deploy, and nobody could see which answers were
+     failing customers. */
+  const [faq, setFaq] = useState<FaqCategory[]>([]);
+  const [faqQ, setFaqQ] = useState('');
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [voted, setVoted] = useState<Record<number, boolean>>({});
   const [phone, setPhone] = useState('');
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  useEffect(() => { fetchFaq().then(setFaq); }, []);
   useEffect(() => {
-    fetchStoreSettings()
-      .then((st) => setPhone(st?.invoiceConfig?.phone || ''))
-      .catch(() => setPhone(''));
+    fetchStoreSettings().then((st) => setPhone(st?.invoiceConfig?.phone || '')).catch(() => {});
   }, []);
+  useEffect(() => {
+    const t = setTimeout(() => { fetchFaq(faqQ).then(setFaq); }, 250);
+    return () => clearTimeout(t);
+  }, [faqQ]);
+
+  function toggleArticle(id: number) {
+    const next = openId === id ? null : id;
+    setOpenId(next);
+    if (next) trackFaqView(id);
+  }
+  function vote(id: number, helpful: boolean) {
+    setVoted((v) => ({ ...v, [id]: helpful }));
+    sendFaqFeedback(id, helpful);
+  }
   const [sent, setSent] = useState(false);
 
   useEffect(() => {
@@ -170,74 +147,112 @@ export default function SupportPage() {
             {sending ? 'Sending…' : 'Submit ticket'}
           </button>
           <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, textAlign: 'center' }}>
-            Most issues are answered below — a ticket is for anything they don&apos;t cover.
+            Most issues are answered below — raise a ticket for anything they don&apos;t cover.
           </div>
         </div>
 
-        {/* ── Self-help: solve it now, before raising a ticket ── */}
+        {/* ── Help centre (admin-managed) ── */}
         <div style={{ fontWeight: 800, fontSize: 14, color: C.ink, margin: '4px 4px 10px' }}>
-          Common questions
+          Help centre
         </div>
-        <div style={{ ...card, padding: 4, marginBottom: 14 }}>
-          {FAQS.map((f, i) => (
-            <div key={i} style={{ borderBottom: i < FAQS.length - 1 ? `1px solid ${C.line}` : 'none' }}>
-              <button
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                  background: 'none', border: 'none', padding: '13px 12px',
-                  cursor: 'pointer', textAlign: 'left',
-                }}
-              >
-                <span style={{ fontSize: 15 }}>{f.icon}</span>
-                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: C.ink }}>{f.q}</span>
-                <span style={{ color: C.muted, fontSize: 12, transform: openFaq === i ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }}>›</span>
-              </button>
-              {openFaq === i && (
-                <div style={{ padding: '0 12px 14px 40px', fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                  {f.a}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        <input
+          value={faqQ}
+          onChange={(e) => setFaqQ(e.target.value)}
+          placeholder="Search help — e.g. refund, OTP, coupon"
+          style={{
+            width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,
+            padding: '11px 12px', fontSize: 14, marginBottom: 12, outline: 'none',
+          }}
+        />
 
-        {/* ── Still stuck? Call / WhatsApp ── */}
+        {faq.length === 0 ? (
+          <div style={{ ...card, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+            {faqQ ? `No help articles match “${faqQ}”. Raise a ticket above and we'll help.` : 'Loading help…'}
+          </div>
+        ) : faq.map((cat) => (
+          <div key={cat.id} style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '0 4px 7px' }}>
+              <span style={{ fontSize: 15 }}>{cat.icon}</span>
+              <span style={{ fontWeight: 800, fontSize: 13, color: C.ink }}>{cat.name}</span>
+              <span style={{ fontSize: 11, color: C.muted }}>({cat.articles.length})</span>
+            </div>
+            <div style={{ ...card, padding: 4 }}>
+              {cat.articles.map((a, i) => (
+                <div key={a.id} style={{ borderBottom: i < cat.articles.length - 1 ? `1px solid ${C.line}` : 'none' }}>
+                  <button
+                    onClick={() => toggleArticle(a.id)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                      background: 'none', border: 'none', padding: '13px 12px',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontSize: 13.5, fontWeight: 650, color: C.ink }}>{a.question}</span>
+                    <span style={{
+                      color: C.muted, fontSize: 13,
+                      transform: openId === a.id ? 'rotate(90deg)' : 'none', transition: 'transform .2s',
+                    }}>›</span>
+                  </button>
+
+                  {openId === a.id && (
+                    <div style={{ padding: '0 12px 13px' }}>
+                      <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.65 }}>{a.answer}</div>
+
+                      {a.actionUrl && a.actionLabel && (
+                        <button
+                          onClick={() => router.push(a.actionUrl as string)}
+                          style={{
+                            marginTop: 10, background: C.greenSoft, color: C.greenDeep,
+                            border: 'none', borderRadius: 9, padding: '8px 14px',
+                            fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
+                          }}
+                        >
+                          {a.actionLabel} →
+                        </button>
+                      )}
+
+                      {/* was this helpful — drives the admin's "worst answers" report */}
+                      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {voted[a.id] === undefined ? (
+                          <>
+                            <span style={{ fontSize: 11.5, color: C.muted }}>Did this help?</span>
+                            <button onClick={() => vote(a.id, true)} style={voteBtn}>👍 Yes</button>
+                            <button onClick={() => vote(a.id, false)} style={voteBtn}>👎 No</button>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: C.green, fontWeight: 700 }}>
+                            {voted[a.id] ? 'Thanks for the feedback!' : 'Thanks — we\'ll improve this answer.'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* ── Still stuck? ── */}
         {phone && (
           <div style={{
             ...card, marginBottom: 14, background: C.greenSoft,
             border: `1px solid ${C.green}`, textAlign: 'center', padding: 16,
           }}>
             <div style={{ fontSize: 22 }}>📞</div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: C.ink, marginTop: 4 }}>
-              Still stuck? Talk to us
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: C.ink, marginTop: 4 }}>Still stuck? Talk to us</div>
             <div style={{ fontSize: 12.5, color: C.muted, margin: '4px 0 12px' }}>
               Urgent problem with a live order? Calling is fastest.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <a
-                href={`tel:${phone.replace(/\s/g, '')}`}
-                style={{
-                  flex: 1, maxWidth: 160, textDecoration: 'none', background: C.green,
-                  color: '#fff', borderRadius: 10, padding: '11px 14px',
-                  fontWeight: 800, fontSize: 13.5,
-                }}
-              >
-                Call us
-              </a>
-              <a
-                href={`https://wa.me/${phone.replace(/[^0-9]/g, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  flex: 1, maxWidth: 160, textDecoration: 'none', background: '#25D366',
-                  color: '#fff', borderRadius: 10, padding: '11px 14px',
-                  fontWeight: 800, fontSize: 13.5,
-                }}
-              >
-                WhatsApp
-              </a>
+              <a href={`tel:${phone.replace(/\s/g, '')}`} style={{
+                flex: 1, maxWidth: 160, textDecoration: 'none', background: C.green,
+                color: '#fff', borderRadius: 10, padding: '11px 14px', fontWeight: 800, fontSize: 13.5,
+              }}>Call us</a>
+              <a href={`https://wa.me/${phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" style={{
+                flex: 1, maxWidth: 160, textDecoration: 'none', background: '#25D366',
+                color: '#fff', borderRadius: 10, padding: '11px 14px', fontWeight: 800, fontSize: 13.5,
+              }}>WhatsApp</a>
             </div>
             <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10 }}>{phone}</div>
           </div>

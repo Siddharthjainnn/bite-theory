@@ -522,6 +522,41 @@ export async function fetchStoreSettings(): Promise<any> {
   return jsonOrThrow(res);
 }
 
+/* ───────────── help centre (FAQ) ───────────── */
+export interface FaqArticle {
+  id: number; question: string; answer: string;
+  actionLabel?: string | null; actionUrl?: string | null;
+}
+export interface FaqCategory {
+  id: number; name: string; slug: string; icon?: string;
+  description?: string; articles: FaqArticle[];
+}
+
+/** Whole help centre, admin-managed. Optional search term. */
+export async function fetchFaq(q = ''): Promise<FaqCategory[]> {
+  try {
+    const res = await fetch(`${API_BASE}/faq?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
+}
+
+/** Fire-and-forget: tells the admin which answers people actually open. */
+export function trackFaqView(id: number): void {
+  fetch(`${API_BASE}/faq/${id}/view`, { method: 'POST' }).catch(() => {});
+}
+
+/** "Was this helpful?" — signed-in votes are deduped server-side. */
+export async function sendFaqFeedback(id: number, helpful: boolean, comment?: string) {
+  try {
+    await fetch(`${API_BASE}/faq/${id}/feedback`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ helpful, comment }),
+    });
+  } catch { /* feedback must never block the user */ }
+}
+
 /* ───────────── prep video (admin) ───────────── */
 export async function setOrderPrepVideo(
   orderId: number | string, prepVideoUrl: string | null,
