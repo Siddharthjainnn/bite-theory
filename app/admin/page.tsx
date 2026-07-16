@@ -1498,7 +1498,7 @@ function Orders({ showToast }: { showToast: (m: string) => void }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 600 }}>
           <thead><tr><th style={th}>Order #</th><th style={th}>Customer</th><th style={th}>Total</th><th style={th}>Status</th><th style={th}>Placed</th><th style={th}></th></tr></thead>
           <tbody>
-            {loading ? <tr><td style={td} colSpan={6}>Loading…</td></tr>
+            {loading ? <tr><td style={td} colSpan={7}>Loading…</td></tr>
               : filtered.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No orders yet. Orders placed by customers will appear here.</td></tr>
               : filtered.map(o => (
                 <tr key={o.id}>
@@ -2021,16 +2021,27 @@ function Products({ showToast }: { showToast: (m: string) => void }) {
     catch (e: any) { showToast(e.message || 'Delete failed'); }
   }
 
+  /* Suggestion #10 — removing a dish from Today's Special meant opening the
+     product modal and hunting for a checkbox. One tap from the list instead. */
+  async function toggleSpecial(p: Product) {
+    const next = !p.isTodaysSpecial;
+    try {
+      await api.updateProduct(p.id, { ...p, isTodaysSpecial: next });
+      showToast(next ? `${p.name} added to Today's Special` : `${p.name} removed from Today's Special`);
+      load();
+    } catch (e: any) { showToast(e.message || 'Could not update'); }
+  }
+
   return (
     <>
       <PageHead title="Products" sub="Manage your menu — pricing, nutrition, media & status."
         action={<button style={btnPrimary} onClick={() => setEditing({ status: 'active', categoryId: cats[0]?.id })}>＋ Add Product</button>} />
       <div style={{ ...cardStyle, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
-          <thead><tr><th style={th}>Product</th><th style={th}>Category</th><th style={th}>Nutrition</th><th style={th}>Price</th><th style={th}>Status</th><th style={th}></th></tr></thead>
+          <thead><tr><th style={th}>Product</th><th style={th}>Category</th><th style={th}>Nutrition</th><th style={th}>Price</th><th style={th}>Special</th><th style={th}>Status</th><th style={th}></th></tr></thead>
           <tbody>
             {loading ? <tr><td style={td} colSpan={6}>Loading…</td></tr>
-              : products.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No products yet. Click "Add Product".</td></tr>
+              : products.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={7}>No products yet. Click "Add Product".</td></tr>
               : products.map(p => {
                 const off = p.offerPrice > 0;
                 return (
@@ -2050,6 +2061,21 @@ function Products({ showToast }: { showToast: (m: string) => void }) {
                       </div>
                     </td>
                     <td style={td}><b>{money(off ? p.offerPrice : p.price)}</b>{off && <s style={{ color: C.muted, marginLeft: 5, fontSize: 12 }}>{money(p.price)}</s>}</td>
+                    <td style={td}>
+                      <button
+                        onClick={() => toggleSpecial(p)}
+                        title={p.isTodaysSpecial ? "Remove from Today's Special" : "Add to Today's Special"}
+                        style={{
+                          border: `1px solid ${p.isTodaysSpecial ? C.orange : C.line}`,
+                          background: p.isTodaysSpecial ? '#fff6e8' : '#fff',
+                          color: p.isTodaysSpecial ? '#8a5a00' : C.muted,
+                          borderRadius: 16, padding: '5px 10px', cursor: 'pointer',
+                          fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {p.isTodaysSpecial ? '⚡ On' : '＋ Add'}
+                      </button>
+                    </td>
                     <td style={td}><Pill kind={p.status}>{p.status === 'active' ? 'Active' : 'Inactive'}</Pill></td>
                     <td style={td}>
                       <div style={{ display: 'flex', gap: 6 }}>
