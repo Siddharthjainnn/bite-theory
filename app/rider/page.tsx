@@ -561,8 +561,11 @@ export default function RiderPage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
         }}>
           <div style={{
-            background: '#fff', borderRadius: 20, padding: 22, width: '100%',
-            maxWidth: 340, textAlign: 'center',
+            background: '#fff', borderRadius: 20, padding: 20, width: '100%',
+            maxWidth: 360, textAlign: 'center',
+            /* the Razorpay poster is tall — keep the sheet scrollable on small
+               phones so the Cancel button is always reachable */
+            maxHeight: '92vh', overflowY: 'auto',
           }}>
             {qrPaid ? (
               <>
@@ -588,9 +591,26 @@ export default function RiderPage() {
                 <div style={{ fontSize: 30, fontWeight: 800, color: C.ink, margin: '2px 0 10px' }}>
                   ₹{qr.amount}
                 </div>
+                {/* BUGFIX — the QR rendered tiny. Razorpay returns a TALL PORTRAIT
+                   poster (branding + code + app logos), but this forced it into a
+                   220x220 square with objectFit:contain, so the whole poster was
+                   letterboxed and the actual scannable code shrank to ~90px —
+                   hard to scan in poor light. Let it keep its natural aspect
+                   ratio and fill the sheet width instead. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qr.imageUrl} alt="UPI QR code" width={220} height={220}
-                  style={{ width: 220, height: 220, objectFit: 'contain' }} />
+                <img
+                  src={qr.imageUrl}
+                  alt="UPI QR code"
+                  style={{
+                    width: '100%',
+                    maxWidth: 280,
+                    height: 'auto',
+                    display: 'block',
+                    margin: '0 auto',
+                    borderRadius: 12,
+                    background: '#fff',
+                  }}
+                />
                 <p style={{ color: C.muted, fontSize: 13, margin: '10px 0 4px' }}>
                   Customer scans with any UPI app. This screen updates by itself.
                 </p>
