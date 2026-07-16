@@ -52,6 +52,13 @@ export default function OrderTrackPage() {
       discount: Number(order.discount),
       deliveryCharge: Number(order.deliveryCharge),
       tax: Number((order as any).tax || 0),
+      /* GST snapshot from the order itself — never recomputed from today's
+         settings, so a reprint of last year's invoice still shows last year's
+         tax. */
+      invoiceNo: (order as any).invoiceNo || null,
+      taxRate: Number((order as any).taxRate || 0),
+      cgst: Number((order as any).cgst || 0),
+      sgst: Number((order as any).sgst || 0),
       walletUsed: Number(order.walletUsed),
       tip: Number((order as any).tip || 0),
       total: Number(order.total),

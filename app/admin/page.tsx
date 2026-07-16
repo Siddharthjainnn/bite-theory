@@ -1584,6 +1584,88 @@ function Orders({ showToast }: { showToast: (m: string) => void }) {
   }, [showToast]);
   useEffect(() => { load(); }, [load]);
 
+  /* ── Auto-print chef tickets (Store Settings → autoPrintOnReady) ──
+     This switch existed in the admin for a while but NOTHING read it, so
+     turning it on did nothing and the kitchen kept clicking print all night.
+
+     Design decisions that matter here:
+      * Print exactly ONCE per order. A duplicate ticket = a duplicate dish, so
+        printed ids are remembered in sessionStorage — survives a refresh, and
+        clears when the shift/tab ends.
+      * On the FIRST poll we only record what's already ready without printing.
+        Otherwise opening the admin at 9pm would spit out every ticket from the
+        whole day.
+      * Polling (not websockets) because this screen is already list-based and
+        a kitchen tab sits open all service. */
+  const [autoPrint, setAutoPrint] = useState(false);
+  const [invoiceCfg, setInvoiceCfg] = useState<InvoiceConfigT | null>(null);
+  const printedRef = useRef<Set<number>>(new Set());
+  const primedRef = useRef(false);
+
+  useEffect(() => {
+    fetchStoreSettings()
+      .then((st) => {
+        setInvoiceCfg(st?.invoiceConfig || null);
+        setAutoPrint(Boolean(st?.invoiceConfig?.autoPrintOnReady));
+      })
+      .catch(() => {});
+    try {
+      const raw = sessionStorage.getItem('bt_printed_tickets');
+      if (raw) printedRef.current = new Set(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (!autoPrint) return;
+    let alive = true;
+
+    const tick = async () => {
+      try {
+        const list = await api.listOrders();
+        if (!alive) return;
+        setOrders(list);
+        const ready = list.filter((o) => o.status === 'food_ready');
+
+        // first pass: remember, don't print the backlog
+        if (!primedRef.current) {
+          ready.forEach((o) => printedRef.current.add(o.id));
+          primedRef.current = true;
+          return;
+        }
+
+        for (const o of ready) {
+          if (printedRef.current.has(o.id)) continue;
+          printedRef.current.add(o.id);
+          try {
+            sessionStorage.setItem('bt_printed_tickets',
+              JSON.stringify([...printedRef.current]));
+          } catch { /* ignore */ }
+          try {
+            const fullOrder = await api.getOrderFull(o.id);
+            printHtml(chefTicket({
+              orderNumber: fullOrder.orderNumber,
+              placedAt: fullOrder.placedAt,
+              items: (fullOrder.items || []).map((it: any) => ({
+                productName: it.productName, quantity: it.quantity,
+                unitPrice: Number(it.unitPrice), lineTotal: Number(it.lineTotal),
+              })),
+              subtotal: Number(fullOrder.subtotal), total: Number(fullOrder.total),
+              deliveryAddress: fullOrder.deliveryAddress,
+              status: fullOrder.status,
+              cookingNote: fullOrder.cookingNote,
+            } as InvoiceOrder, invoiceCfg));
+          } catch {
+            showToast(`Auto-print failed for ${o.orderNumber} — print it manually`);
+          }
+        }
+      } catch { /* a failed poll is not worth a toast every 15s */ }
+    };
+
+    tick();
+    const t = setInterval(tick, 15000);
+    return () => { alive = false; clearInterval(t); };
+  }, [autoPrint, invoiceCfg, showToast]);
+
   let filtered = orders;
   if (filter === 'active') filtered = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
   if (filter === 'delivered') filtered = orders.filter(o => o.status === 'delivered');

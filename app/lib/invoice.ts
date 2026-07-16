@@ -26,6 +26,9 @@ export interface InvoiceOrder {
   items: InvoiceItem[];
   subtotal: number; discount?: number; deliveryCharge?: number;
   tax?: number; walletUsed?: number; tip?: number; total: number;
+  /* GST (snapshotted per order at checkout, never recomputed) */
+  invoiceNo?: string | null;
+  taxRate?: number; cgst?: number; sgst?: number;
   deliveryAddress?: string | null;
   customerName?: string | null;
   customerMobile?: string | null;
@@ -115,6 +118,9 @@ export function customerInvoice(order: InvoiceOrder, rawCfg?: Partial<InvoiceCon
     </div>
     <hr class="rule-solid">
     ${cfg.headerNote ? `<div class="note">${esc(cfg.headerNote)}</div>` : ''}
+    ${order.invoiceNo
+      ? `<div class="meta"><b>Tax Invoice:</b> ${esc(order.invoiceNo)}</div>`
+      : ''}
     <div class="meta"><b>Order:</b> ${esc(order.orderNumber)}</div>
     ${when ? `<div class="meta"><b>Date:</b> ${esc(when)}</div>` : ''}
     ${cfg.showPaymentMethod && order.paymentMethod ? `<div class="meta"><b>Payment:</b> ${esc((order.paymentMethod || '').toUpperCase())}</div>` : ''}
@@ -152,7 +158,12 @@ export function customerInvoice(order: InvoiceOrder, rawCfg?: Partial<InvoiceCon
     ${totalRow('Item total', money(order.subtotal))}
     ${Number(order.discount) > 0 ? totalRow('Discount', '- ' + money(Number(order.discount))) : ''}
     ${totalRow('Delivery', Number(order.deliveryCharge) === 0 ? 'FREE' : money(Number(order.deliveryCharge || 0)))}
-    ${cfg.showTaxBreakup && Number(order.tax) > 0 ? totalRow('Taxes', money(Number(order.tax))) : ''}
+    ${cfg.showTaxBreakup && Number(order.tax) > 0
+      ? (Number(order.cgst) > 0 || Number(order.sgst) > 0
+          ? totalRow(`CGST @ ${Number(order.taxRate || 0) / 2}%`, money(Number(order.cgst || 0)))
+            + totalRow(`SGST @ ${Number(order.taxRate || 0) / 2}%`, money(Number(order.sgst || 0)))
+          : totalRow('Taxes', money(Number(order.tax))))
+      : ''}
     ${Number(order.tip) > 0 ? totalRow('Rider tip', money(Number(order.tip))) : ''}
     ${Number(order.walletUsed) > 0 ? totalRow('Wallet', '- ' + money(Number(order.walletUsed))) : ''}
     ${totalRow('TOTAL', money(order.total), 'grand')}

@@ -34,6 +34,9 @@ interface Settings {
   /* restaurant location + distance pricing */
   storeLat: number | null; storeLng: number | null; storeAddress: string;
   deliveryRadiusKm: number; avgPrepMinutes: number; avgRiderKmph: number;
+  /* GST — all default OFF; nothing changes until you actually register */
+  gstEnabled: boolean; gstRate: number; gstOnDelivery: boolean;
+  gstInclusive: boolean; invoicePrefix: string; hsnCode: string;
   baseDeliveryCharge: number; perKmCharge: number; freeDeliveryWithinKm: number;
   riderBaseFare: number; riderPerKmPay: number;
 }
@@ -110,6 +113,14 @@ export default function StoreSettingsPanel({
         freeDeliveryWithinKm: Number(d.freeDeliveryWithinKm) || 2,
         riderBaseFare: Number(d.riderBaseFare) || 20,
         riderPerKmPay: Number(d.riderPerKmPay) || 5,
+        /* GST — default to OFF/safe values so an un-migrated backend (columns
+           not yet added) reads as "not registered" rather than undefined. */
+        gstEnabled: Boolean(d.gstEnabled),
+        gstRate: Number(d.gstRate ?? 5),
+        gstOnDelivery: Boolean(d.gstOnDelivery),
+        gstInclusive: d.gstInclusive === undefined || d.gstInclusive === null ? true : Boolean(d.gstInclusive),
+        invoicePrefix: d.invoicePrefix || 'BT',
+        hsnCode: d.hsnCode || '996331',
       });
     }
     if (b.ok) setLive(await b.json());
@@ -244,6 +255,80 @@ export default function StoreSettingsPanel({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── GST (bug: tax was hardcoded to 0 on every order) ── */}
+      <div style={card}>
+        <div style={h}>🧾 GST &amp; tax invoice</div>
+        <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 12, lineHeight: 1.6 }}>
+          Leave this OFF until you are GST-registered. Once ON, every new order records
+          its tax and gets a sequential tax-invoice number (e.g. <b>BT/2026-27/0001</b>).
+          Past orders are never changed.
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={!!s.gstEnabled}
+            onChange={(e) => setS({ ...s, gstEnabled: e.target.checked })}
+          />
+          <span style={{ fontSize: 13.5, fontWeight: 700 }}>
+            GST registered — charge and declare GST
+          </span>
+        </label>
+
+        {s.gstEnabled && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>GST rate (%)</div>
+                <input type="number" min={0} max={28} step={0.5} style={inputStyle}
+                  value={s.gstRate}
+                  onChange={(e) => setS({ ...s, gstRate: Number(e.target.value) })} />
+                <div style={{ fontSize: 11, color: '#9aa8a0', marginTop: 4 }}>
+                  Restaurants are usually 5% (no input credit)
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>Invoice prefix</div>
+                <input style={inputStyle} value={s.invoicePrefix || ''}
+                  onChange={(e) => setS({ ...s, invoicePrefix: e.target.value })} />
+                <div style={{ fontSize: 11, color: '#9aa8a0', marginTop: 4 }}>
+                  BT → BT/2026-27/0001
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>HSN / SAC code</div>
+                <input style={inputStyle} value={s.hsnCode || ''}
+                  onChange={(e) => setS({ ...s, hsnCode: e.target.value })} />
+                <div style={{ fontSize: 11, color: '#9aa8a0', marginTop: 4 }}>
+                  996331 = restaurant service
+                </div>
+              </div>
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginTop: 14 }}>
+              <input type="checkbox" checked={s.gstInclusive !== false}
+                onChange={(e) => setS({ ...s, gstInclusive: e.target.checked })} />
+              <span style={{ fontSize: 13 }}>
+                Menu prices already include GST <b>(recommended)</b>
+              </span>
+            </label>
+            <div style={{ fontSize: 11.5, color: '#9aa8a0', margin: '4px 0 10px 26px', lineHeight: 1.5 }}>
+              ON: a ₹100 dish stays ₹100 and ₹4.76 of it is declared as tax — customers pay the same.<br />
+              OFF: 5% is <b>added</b> on top, so that ₹100 dish becomes ₹105 at checkout.
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!s.gstOnDelivery}
+                onChange={(e) => setS({ ...s, gstOnDelivery: e.target.checked })} />
+              <span style={{ fontSize: 13 }}>Also charge GST on the delivery fee</span>
+            </label>
+            <div style={{ fontSize: 11.5, color: '#9aa8a0', margin: '4px 0 0 26px' }}>
+              Usually OFF — restaurant GST applies to food. Confirm with your CA.
+            </div>
+          </>
+        )}
       </div>
 
       {/* location + distance pricing (audit §2.1 / §5.4) */}
