@@ -782,7 +782,12 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
 
 /** Sections a super_admin configured in Admin → Roles, cached per session. */
 let ROLE_SECTIONS_DB: Record<string, string[]> | null = null;
-export function setRoleSectionsFromDb(map: Record<string, string[]>) {
+/* NOTE: must NOT be exported — a Next.js page file may only export the page
+   component plus Next's own fields (metadata, viewport, etc.). Exporting this
+   helper broke the production build with:
+     Type error: "setRoleSectionsFromDb" is not a valid Page export field.
+   It's only used inside this file, so a plain module-scope function is right. */
+function setRoleSectionsFromDb(map: Record<string, string[]>) {
   ROLE_SECTIONS_DB = map;
 }
 
