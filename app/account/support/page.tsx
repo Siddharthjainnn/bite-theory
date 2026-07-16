@@ -71,9 +71,10 @@ export default function SupportPage() {
   }
   const [sent, setSent] = useState(false);
 
-  useEffect(() => {
-    if (status === 'unauthenticated') router.replace('/login?callbackUrl=/account/support');
-  }, [status, router]);
+  /* Previously this bounced signed-out visitors straight to /login, so nobody
+     could read a single FAQ without an account — the person who can't order is
+     exactly the person who needs help. Reading is public now; only raising a
+     ticket needs sign-in (handled in submit()). */
 
   function load() {
     if (!userId) return;
@@ -85,7 +86,13 @@ export default function SupportPage() {
   useEffect(load, [userId]);
 
   async function submit() {
-    if (!userId) return;
+    /* Signed-out visitors can now READ the FAQ on this page, so the ticket
+       button is reachable without an account. Silently returning would look
+       broken — send them to log in and bring them right back. */
+    if (!userId) {
+      router.push('/login?callbackUrl=/account/support');
+      return;
+    }
     if (!subject.trim()) { setError('Please add a short subject'); return; }
     if (!message.trim()) { setError('Please describe your issue'); return; }
     setError(''); setSending(true);
@@ -258,7 +265,9 @@ export default function SupportPage() {
           </div>
         )}
 
-        {/* my tickets */}
+        {/* my tickets — only meaningful once signed in */}
+        {userId && (
+        <>
         <div style={{ fontWeight: 800, fontSize: 14, color: C.ink, margin: '4px 4px 10px' }}>My tickets</div>
         {loading ? (
           <div style={{ fontSize: 13, color: C.muted, padding: 8 }}>Loading…</div>
@@ -280,6 +289,8 @@ export default function SupportPage() {
               <div style={{ fontSize: 11, color: '#9aa5a0' }}>{fmtDate(t.createdAt)}</div>
             </div>
           ))
+        )}
+        </>
         )}
       </div>
     </AppShell>

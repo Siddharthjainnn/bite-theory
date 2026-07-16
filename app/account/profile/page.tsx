@@ -102,7 +102,7 @@ export default function ProfilePage() {
     { href: '/account/addresses', icon: '📍', label: 'Saved Addresses' },
     { href: '/account/favorites', icon: '❤️', label: 'Favourites' },
     { href: '/account/reviews', icon: '⭐', label: 'My Reviews' },
-    { href: '/account/support', icon: '💬', label: 'Help & Support' },
+    { href: '/help', icon: '💬', label: 'Help & Support' },
   ];
 
   return (
