@@ -184,6 +184,18 @@ const api = {
     const r = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw await apiError(r, 'Delete failed');
   },
+  async listRoles(): Promise<any[]> {
+    const r = await fetch(`${API_BASE}/roles`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to load roles');
+    return r.json();
+  },
+  async updateRole(id: number, body: any): Promise<any> {
+    const r = await fetch(`${API_BASE}/roles/${id}`, {
+      method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw await apiError(r, 'Failed to update role');
+    return r.json();
+  },
   async listCategories(): Promise<Category[]> {
     const r = await fetch(`${API_BASE}/categories`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw await apiError(r, 'Failed to load categories');
@@ -729,6 +741,7 @@ const NAV: NavGroup[] = [
   { title: 'Access Control', items: [
     { key: 'admin_users', label: 'Admin Users', icon: '🛡️' },
     { key: 'roles', label: 'Roles', icon: '🔑' },
+    { key: 'roles_access', label: 'Roles & Access', icon: '🛡️' },
     { key: 'permissions', label: 'Permissions', icon: '🗝️' },
   ]},
   { title: 'System', items: [
@@ -767,10 +780,19 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
   ],
 };
 
-/** Sections visible to a role. Empty/unknown role or super_admin → all. */
+/** Sections a super_admin configured in Admin → Roles, cached per session. */
+let ROLE_SECTIONS_DB: Record<string, string[]> | null = null;
+export function setRoleSectionsFromDb(map: Record<string, string[]>) {
+  ROLE_SECTIONS_DB = map;
+}
+
+/** Sections visible to a role. Empty/unknown role or super_admin → all.
+    A saved config in Admin → Roles wins over the built-in defaults. */
 function allowedKeys(role?: string): Set<PageKey> {
   const r = (role || '').toLowerCase();
   if (!r || r === 'super_admin') return new Set(ALL_KEYS as PageKey[]);
+  const fromDb = ROLE_SECTIONS_DB?.[r];
+  if (fromDb && fromDb.length) return new Set(fromDb as PageKey[]);
   const list = ROLE_SECTIONS[r];
   // Unknown role → be safe, show only the dashboard.
   return new Set((list && list.length ? list : ['dashboard']) as PageKey[]);
@@ -889,7 +911,24 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   /* #9: on refresh the admin used to bounce back to Dashboard because the
      current page lived only in React state. Persist it in the URL hash
      (e.g. #orders) so a refresh — or a shared link — reopens the same page. */
-  const allowed = useMemo(() => allowedKeys(role), [role]);
+  /* Load the super_admin's saved role→sections config so the sidebar reflects
+     what was set in Admin → Roles & Access (falls back to built-in defaults). */
+  const [roleCfgReady, setRoleCfgReady] = useState(false);
+  useEffect(() => {
+    api.listRoles()
+      .then((rs) => {
+        const map: Record<string, string[]> = {};
+        rs.forEach((r: any) => {
+          const key = String(r.name || '').trim().toLowerCase().replace(/\s+/g, '_');
+          if (key && Array.isArray(r.sections) && r.sections.length) map[key] = r.sections;
+        });
+        setRoleSectionsFromDb(map);
+      })
+      .catch(() => { /* defaults still apply */ })
+      .finally(() => setRoleCfgReady(true));
+  }, []);
+
+  const allowed = useMemo(() => allowedKeys(role), [role, roleCfgReady]);
   // Sidebar with sections this role can't see removed entirely.
   const visibleNav = useMemo(
     () => NAV
@@ -917,7 +956,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'products', 'todays_special', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'products', 'todays_special', 'roles_access', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -982,6 +1021,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'dashboard' && <Dashboard showToast={showToast} />}
             {effectivePage === 'products' && <Products showToast={showToast} />}
             {effectivePage === 'todays_special' && <TodaysSpecial showToast={showToast} />}
+            {effectivePage === 'roles_access' && <RolesAccess showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
             {effectivePage === 'orders' && <Orders showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
@@ -2002,6 +2042,144 @@ function OrderItemModal({ item, orders, products, onClose, onSave }:
  * or remove in one tap. The ⚡ toggle in Products still works for quick edits —
  * both routes drive the same field.
  */
+/**
+ * Roles & Access — configure which sidebar modules each role can open.
+ *
+ * The map used to be hard-coded in this file, so changing a Kitchen Manager's
+ * access meant a code change + redeploy. It now lives on roles.sections, and a
+ * super_admin edits it here. Leaving a role untouched keeps the built-in
+ * defaults, so nothing changes until someone deliberately customises it.
+ */
+function RolesAccess({ showToast }: { showToast: (m: string) => void }) {
+  const [roles, setRoles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<Record<number, string[]>>({});
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.listRoles()
+      .then((rs) => {
+        setRoles(rs);
+        const d: Record<number, string[]> = {};
+        rs.forEach((r: any) => {
+          const key = String(r.name || '').trim().toLowerCase().replace(/\s+/g, '_');
+          d[r.id] = Array.isArray(r.sections) && r.sections.length
+            ? r.sections
+            : (ROLE_SECTIONS[key] || ['dashboard']);
+        });
+        setDraft(d);
+      })
+      .catch((e: any) => showToast(e.message || 'Could not load roles'))
+      .finally(() => setLoading(false));
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  function toggle(roleId: number, key: string) {
+    setDraft((d) => {
+      const cur = new Set(d[roleId] || []);
+      cur.has(key) ? cur.delete(key) : cur.add(key);
+      cur.add('dashboard'); // everyone keeps a landing page
+      return { ...d, [roleId]: Array.from(cur) };
+    });
+  }
+
+  async function save(role: any) {
+    setSavingId(role.id);
+    try {
+      await api.updateRole(role.id, { sections: draft[role.id] || ['dashboard'] });
+      showToast(`${role.name}: access updated`);
+      load();
+    } catch (e: any) { showToast(e.message || 'Could not save'); }
+    finally { setSavingId(null); }
+  }
+
+  const isSuper = (r: any) =>
+    String(r.name || '').trim().toLowerCase().replace(/\s+/g, '_') === 'super_admin';
+
+  return (
+    <>
+      <PageHead
+        title="Roles & Access"
+        sub="Choose exactly which modules each role can open. Changes apply the next time that admin signs in."
+      />
+      {loading ? (
+        <div style={{ ...cardStyle, padding: 18, color: C.muted, fontSize: 13 }}>Loading…</div>
+      ) : roles.length === 0 ? (
+        <div style={{ ...cardStyle, padding: 18, color: C.muted, fontSize: 13 }}>
+          No roles yet. Create them in the Roles section first (e.g. kitchen_manager).
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 14 }}>
+          {roles.map((r) => (
+            <div key={r.id} style={{ ...cardStyle, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <b style={{ fontSize: 15 }}>{r.name || `Role #${r.id}`}</b>
+                {isSuper(r) && (
+                  <span style={{ fontSize: 11, fontWeight: 800, background: C.greenSoft, color: C.darkGreen, padding: '2px 9px', borderRadius: 20 }}>
+                    Full access — always
+                  </span>
+                )}
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: C.muted }}>
+                  {isSuper(r) ? 'every module' : `${(draft[r.id] || []).length} module(s)`}
+                </span>
+              </div>
+
+              {isSuper(r) ? (
+                <div style={{ fontSize: 12.5, color: C.muted }}>
+                  Super admins always see everything — this is deliberate, so you can never
+                  lock yourself out of your own panel.
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    {NAV.map((group) => (
+                      <div key={group.title}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>
+                          {group.title}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                          {group.items.map((it) => {
+                            const on = (draft[r.id] || []).includes(it.key);
+                            const locked = it.key === 'dashboard';
+                            return (
+                              <button
+                                key={it.key}
+                                disabled={locked}
+                                onClick={() => toggle(r.id, it.key)}
+                                title={locked ? 'Every role needs a landing page' : undefined}
+                                style={{
+                                  border: `1px solid ${on ? C.green : C.line}`,
+                                  background: on ? C.greenSoft : '#fff',
+                                  color: on ? C.darkGreen : C.muted,
+                                  borderRadius: 18, padding: '6px 12px', fontSize: 12,
+                                  fontWeight: 700, cursor: locked ? 'default' : 'pointer',
+                                  opacity: locked ? .7 : 1,
+                                }}
+                              >
+                                {on ? '✓ ' : ''}{it.icon} {it.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button style={btnPrimary} disabled={savingId === r.id} onClick={() => save(r)}>
+                      {savingId === r.id ? 'Saving…' : 'Save access'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function TodaysSpecial({ showToast }: { showToast: (m: string) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
