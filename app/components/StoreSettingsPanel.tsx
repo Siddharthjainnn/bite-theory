@@ -37,6 +37,8 @@ interface Settings {
   /* GST — all default OFF; nothing changes until you actually register */
   gstEnabled: boolean; gstRate: number; gstOnDelivery: boolean;
   gstInclusive: boolean; invoicePrefix: string; hsnCode: string;
+  /* Ask Bhaiya intro */
+  bhaiyaIntroEnabled: boolean; bhaiyaIntroFrequency: string;
   baseDeliveryCharge: number; perKmCharge: number; freeDeliveryWithinKm: number;
   riderBaseFare: number; riderPerKmPay: number;
 }
@@ -121,6 +123,10 @@ export default function StoreSettingsPanel({
         gstInclusive: d.gstInclusive === undefined || d.gstInclusive === null ? true : Boolean(d.gstInclusive),
         invoicePrefix: d.invoicePrefix || 'BT',
         hsnCode: d.hsnCode || '996331',
+        /* default ON so an un-migrated backend behaves exactly as before */
+        bhaiyaIntroEnabled: d.bhaiyaIntroEnabled === undefined || d.bhaiyaIntroEnabled === null
+          ? true : Boolean(d.bhaiyaIntroEnabled),
+        bhaiyaIntroFrequency: d.bhaiyaIntroFrequency || 'daily',
       });
     }
     if (b.ok) setLive(await b.json());
@@ -255,6 +261,57 @@ export default function StoreSettingsPanel({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Ask Bhaiya intro ── */}
+      <div style={card}>
+        <div style={h}>🧪 Ask Bhaiya intro</div>
+        <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 12, lineHeight: 1.6 }}>
+          The goal-picker popup that greets customers on the home page.
+          Turning this off does <b>not</b> remove the feature — the
+          <b> Ask Bhaiya</b> button in the header always works, so customers can
+          still open it whenever they want.
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={s.bhaiyaIntroEnabled !== false}
+            onChange={(e) => setS({ ...s, bhaiyaIntroEnabled: e.target.checked })}
+          />
+          <span style={{ fontSize: 13.5, fontWeight: 700 }}>
+            Show the intro automatically on the home page
+          </span>
+        </label>
+
+        {s.bhaiyaIntroEnabled !== false && (
+          <div style={{ marginLeft: 26 }}>
+            <div style={{ fontSize: 12, color: '#6b7d74', marginBottom: 5 }}>How often per customer</div>
+            <select
+              value={s.bhaiyaIntroFrequency || 'daily'}
+              onChange={(e) => setS({ ...s, bhaiyaIntroFrequency: e.target.value })}
+              style={{ ...inputStyle, maxWidth: 260 }}
+            >
+              <option value="once">Once ever — first visit only</option>
+              <option value="daily">Once a day (recommended)</option>
+              <option value="always">Every visit — launch week only</option>
+            </select>
+            <div style={{ fontSize: 11, color: '#9aa8a0', marginTop: 6, lineHeight: 1.5 }}>
+              <b>Every visit</b> gets attention but annoys regulars fast — use it for a
+              launch, then move to Daily or Once.
+            </div>
+          </div>
+        )}
+
+        {s.bhaiyaIntroEnabled === false && (
+          <div style={{
+            marginLeft: 26, fontSize: 12, color: '#8a5a00',
+            background: '#fff6e8', border: '1px solid #ffd591',
+            borderRadius: 8, padding: '8px 11px',
+          }}>
+            Customers now reach Bhaiya only by tapping the ✨ button in the header.
+          </div>
+        )}
       </div>
 
       {/* ── GST (bug: tax was hardcoded to 0 on every order) ── */}

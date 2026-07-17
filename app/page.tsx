@@ -22,7 +22,7 @@ import ThaliBuilder, { ThaliConfig } from './components/ThaliBuilder';
 import FlashDealBar from './components/FlashDealBar';
 import { useCatalog } from './lib/useCatalog';
 import { useCart } from './providers/CartProvider';
-import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners } from './lib/bite';
+import { Product, C, money, effectivePrice, hasOffer, Banner, fetchBanners, fetchStoreSettings } from './lib/bite';
 import { useStoreSettings } from './lib/useStoreSettings';
 import { useFeaturedCoupon } from './lib/useFeaturedCoupon';
 import StoreClosedBanner from './components/StoreClosedBanner';
@@ -79,14 +79,37 @@ export default function HomePage() {
     Math.floor(Math.random() * BHAIYA_LINES.length),
   );
 
-  // show intro once per day; read session-close for special
+  /* The Ask Bhaiya intro is now ADMIN-CONTROLLED (Store Settings).
+     It used to hard-pop once a day for everyone with no way to switch it off
+     short of a deploy. Now:
+       enabled=false → never auto-shows (the header button still opens it)
+       frequency: 'once'   → first visit only, ever
+                  'daily'  → once per day (previous behaviour, still default)
+                  'always' → every visit
+     Fetch fails → we DON'T show it. A silent home page beats a popup nobody
+     can explain if settings are unreachable. */
   useEffect(() => {
-    try {
-      const last = localStorage.getItem('bt_intro_seen');
-      if (last !== new Date().toDateString()) setShowIntro(true);
-    } catch {
-      setShowIntro(true);
-    }
+    let alive = true;
+    fetchStoreSettings()
+      .then((st) => {
+        if (!alive) return;
+        if (st?.bhaiyaIntroEnabled === false) return;      // admin turned it off
+        const freq = st?.bhaiyaIntroFrequency || 'daily';
+        try {
+          const seen = localStorage.getItem('bt_intro_seen');
+          if (freq === 'always') { setShowIntro(true); return; }
+          if (freq === 'once') { if (!seen) setShowIntro(true); return; }
+          if (seen !== new Date().toDateString()) setShowIntro(true);   // daily
+        } catch {
+          setShowIntro(true);   // storage blocked — showing once is the kinder failure
+        }
+      })
+      .catch(() => { /* settings unreachable → stay quiet */ });
+    return () => { alive = false; };
+  }, []);
+
+  // read session-close for special
+  useEffect(() => {
     try {
       if (sessionStorage.getItem('bt_special_closed') === '1')
         setAgentClosed(true);
