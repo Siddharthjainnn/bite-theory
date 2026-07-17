@@ -522,6 +522,57 @@ export async function fetchStoreSettings(): Promise<any> {
   return jsonOrThrow(res);
 }
 
+/* ───────────── offers (timed campaigns) ───────────── */
+export interface LiveOffer {
+  id: number;
+  title: string;
+  subtitle?: string | null;
+  offerType: 'flat' | 'percentage' | 'free_item' | 'free_delivery';
+  rewardValue: number;
+  maxDiscount?: number | null;
+  minOrder: number;
+  /** absolute ISO end time — the client counts down FROM this, never from a
+   *  server-sent "secondsLeft", so a wrong device clock can't show an expired
+   *  offer as live. */
+  endsAt: string;
+  secondsLeft: number;
+  imageUrl?: string | null;
+  badge?: string | null;
+  accent?: string | null;
+  freeProductId?: number | null;
+  freeProductName?: string | null;
+  freeProductImage?: string | null;
+  freeProductPrice?: number | null;
+  usedByYou: number;
+  exhausted: boolean;
+  /** null = unlimited; a number only when it's genuinely limited */
+  remaining: number | null;
+}
+
+/** Offers live right now. Sends the user token so `usedByYou` is accurate. */
+export async function fetchOffers(): Promise<LiveOffer[]> {
+  try {
+    const res = await fetch(`${API_BASE}/offers`, {
+      cache: 'no-store', headers: await authHeaders(),
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
+}
+
+/** Check an offer against the current cart before applying it. */
+export async function checkOffer(
+  id: number, subtotal: number, deliveryCharge: number,
+): Promise<{ valid: boolean; discount: number; freeProductId?: number | null; freeDelivery?: boolean; message?: string }> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/offers/${id}/check?subtotal=${subtotal}&deliveryCharge=${deliveryCharge}`,
+      { cache: 'no-store', headers: await authHeaders() });
+    if (!res.ok) return { valid: false, discount: 0, message: 'Could not check this offer.' };
+    return await res.json();
+  } catch { return { valid: false, discount: 0, message: 'Could not check this offer.' }; }
+}
+
 /* ───────────── help centre (FAQ) ───────────── */
 export interface FaqArticle {
   id: number; question: string; answer: string;

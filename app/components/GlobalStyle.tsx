@@ -1183,6 +1183,72 @@ a{text-decoration:none;color:inherit}
   50%{transform:rotate(0)}
 }
 
+/* ── Timed offers strip ── */
+.ofr-wrap{padding:14px 0 2px}
+.ofr-head{padding:0 14px 10px}
+.ofr-title{font-size:16.5px;font-weight:850;letter-spacing:-.3px;margin:0;color:${C.ink}}
+.ofr-sub{font-size:11.5px;color:${C.muted};font-weight:600}
+
+.ofr-row{display:flex;gap:12px;overflow-x:auto;padding:2px 14px 8px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory}
+.ofr-row::-webkit-scrollbar{display:none}
+
+.ofr-card{position:relative;flex:0 0 268px;scroll-snap-align:start;
+  border:none;cursor:pointer;text-align:left;overflow:hidden;
+  border-radius:18px;padding:14px;min-height:132px;
+  background:linear-gradient(135deg,var(--ofr-accent),#0d3b2e 145%);
+  box-shadow:0 8px 22px rgba(13,59,46,.2);
+  transition:transform .2s}
+.ofr-card:active{transform:scale(.98)}
+.ofr-card--used{opacity:.55}
+@media(min-width:1024px){.ofr-card{flex:0 0 300px}}
+
+/* comic-burst rays, same energy as the promo deck */
+.ofr-rays{position:absolute;inset:-40%;pointer-events:none;opacity:.4;
+  background:conic-gradient(from 0deg,
+    transparent 0 16deg, rgba(255,255,255,.12) 16deg 28deg,
+    transparent 28deg 48deg, rgba(255,255,255,.12) 48deg 60deg,
+    transparent 60deg 80deg, rgba(255,255,255,.12) 80deg 92deg,
+    transparent 92deg 112deg, rgba(255,255,255,.12) 112deg 124deg,
+    transparent 124deg 144deg, rgba(255,255,255,.12) 144deg 156deg,
+    transparent 156deg 176deg, rgba(255,255,255,.12) 176deg 188deg,
+    transparent 188deg);
+  animation:ofrSpin 30s linear infinite}
+@keyframes ofrSpin{to{transform:rotate(360deg)}}
+
+.ofr-badge{position:absolute;top:10px;right:10px;z-index:2;
+  font-size:8.5px;font-weight:900;letter-spacing:.5px;color:#1a2b23;
+  background:var(--bt-yellow);padding:3px 8px;border-radius:999px}
+
+.ofr-body{position:relative;z-index:1;display:flex;flex-direction:column;gap:2px;max-width:70%}
+.ofr-reward{font-size:21px;font-weight:900;font-style:italic;letter-spacing:-.6px;
+  color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.25);line-height:1.05}
+.ofr-name{font-size:12px;font-weight:700;color:rgba(255,255,255,.95);margin-top:3px}
+.ofr-min{font-size:10.5px;color:rgba(255,255,255,.75)}
+
+.ofr-pic{position:absolute;right:-6px;bottom:26px;width:86px;height:86px;
+  object-fit:cover;border-radius:14px;z-index:1;
+  filter:drop-shadow(0 6px 12px rgba(0,0,0,.35))}
+
+/* flip-clock style countdown */
+.ofr-timer{position:relative;z-index:1;display:flex;gap:5px;margin-top:10px}
+.ofr-tcell{display:flex;flex-direction:column;align-items:center;
+  background:rgba(0,0,0,.42);border-radius:7px;padding:4px 7px;min-width:34px}
+.ofr-tcell b{font-size:14px;font-weight:900;color:#fff;line-height:1;
+  font-variant-numeric:tabular-nums}
+.ofr-tcell i{font-size:7.5px;font-style:normal;font-weight:700;
+  color:rgba(255,255,255,.7);letter-spacing:.3px;margin-top:2px}
+/* last hour: make the seconds pulse */
+.ofr-timer--hot .ofr-tcell:last-child b{color:#ff8a80;animation:ofrPulse 1s ease-in-out infinite}
+@keyframes ofrPulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+.ofr-left{position:absolute;bottom:12px;right:12px;z-index:2;
+  font-size:9.5px;font-weight:800;color:#fff;
+  background:rgba(198,40,40,.9);padding:3px 8px;border-radius:999px}
+.ofr-used{position:absolute;bottom:12px;right:12px;z-index:2;
+  font-size:9.5px;font-weight:800;color:#1a2b23;
+  background:rgba(255,255,255,.9);padding:3px 8px;border-radius:999px}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
   );

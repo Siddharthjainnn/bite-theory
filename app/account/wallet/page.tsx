@@ -10,11 +10,9 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import AppShell from '../../components/AppShell';
 import AppHeader from '../../components/AppHeader';
-import {
-  C, money, WalletTxn, WalletSummary,
+import {  C, money, WalletTxn, WalletSummary,
   fetchWalletTransactions, fetchWalletSummary,
-  LoyaltySummary, PointsEntry, fetchLoyaltySummary, fetchPointsHistory,
-} from '../../lib/bite';
+  LoyaltySummary, PointsEntry, fetchLoyaltySummary, fetchPointsHistory, fetchStoreSettings } from '../../lib/bite';
 
 const TIER_EMOJI: Record<string, string> = {
   bronze: '🥉', silver: '🥈', gold: '🥇', platinum: '💎',
@@ -38,6 +36,30 @@ export default function WalletPage() {
   const [points, setPoints] = useState<PointsEntry[]>([]);
   const [tab, setTab] = useState<'wallet' | 'points'>('wallet');
   const [loading, setLoading] = useState(true);
+
+  /* LEGAL FRAMING (see settings.entity.ts): this balance is gift-only —
+     refunds, referrals and admin credit, with no top-up path — so it is a
+     loyalty scheme, not an RBI-regulated prepaid instrument. Showing a bare
+     "₹500" implies stored customer money, which is exactly the impression to
+     avoid. The label/unit/disclaimer come from Store Settings so the store can
+     present it correctly without a deploy. */
+  const [wl, setWl] = useState<{ label: string; unit: string; note: string }>({
+    label: 'Wallet', unit: '₹', note: '',
+  });
+  useEffect(() => {
+    fetchStoreSettings()
+      .then((st) => setWl({
+        label: st?.walletLabel || 'Wallet',
+        unit: st?.walletUnit || '₹',
+        note: st?.walletNote || '',
+      }))
+      .catch(() => { /* defaults are fine */ });
+  }, []);
+
+  /** Render a balance in the configured unit. '₹' keeps rupee formatting;
+   *  anything else (e.g. "Coins") reads as a loyalty balance. */
+  const amt = (n: number) =>
+    wl.unit === '₹' ? money(n) : `${Math.round(Number(n) || 0)} ${wl.unit}`;
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -63,7 +85,7 @@ export default function WalletPage() {
   };
 
   return (
-    <AppShell header={<AppHeader variant="page" title="Wallet & Transactions" />}>
+    <AppShell header={<AppHeader variant="page" title={`${wl.label} & Transactions`} />}>
       <div style={{ padding: '14px 14px 28px' }}>
         {/* balance card */}
         <div style={{
@@ -77,22 +99,24 @@ export default function WalletPage() {
             borderRadius: '50%', pointerEvents: 'none',
             background: 'radial-gradient(circle, rgba(76,175,80,.35), transparent 70%)',
           }} />
-          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 700, letterSpacing: 0.4 }}>WALLET BALANCE</div>
+          <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 700, letterSpacing: 0.4 }}>
+            {wl.label.toUpperCase()} BALANCE
+          </div>
           <div style={{ fontSize: 34, fontWeight: 800, margin: '6px 0 14px' }}>
-            {loading ? '…' : money(summary?.balance || 0)}
+            {loading ? '…' : amt(summary?.balance || 0)}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1, background: 'rgba(255,255,255,.1)', borderRadius: 12, padding: '9px 12px' }}>
-              <div style={{ fontSize: 10.5, opacity: 0.7 }}>Total added</div>
-              <b style={{ fontSize: 15, color: '#a3e3b2' }}>{loading ? '…' : `+ ${money(summary?.totalCredited || 0)}`}</b>
+              <div style={{ fontSize: 10.5, opacity: 0.7 }}>Total earned</div>
+              <b style={{ fontSize: 15, color: '#a3e3b2' }}>{loading ? '…' : `+ ${amt(summary?.totalCredited || 0)}`}</b>
             </div>
             <div style={{ flex: 1, background: 'rgba(255,255,255,.1)', borderRadius: 12, padding: '9px 12px' }}>
               <div style={{ fontSize: 10.5, opacity: 0.7 }}>Total spent</div>
-              <b style={{ fontSize: 15, color: '#ffcf9e' }}>{loading ? '…' : `− ${money(summary?.totalDebited || 0)}`}</b>
+              <b style={{ fontSize: 15, color: '#ffcf9e' }}>{loading ? '…' : `− ${amt(summary?.totalDebited || 0)}`}</b>
             </div>
           </div>
           <div style={{ fontSize: 11, opacity: 0.65, marginTop: 12 }}>
-            Wallet money is applied at checkout — turn on “Use wallet” when placing an order.
+            Applied at checkout — turn on “Use {wl.label.toLowerCase()}” when placing an order.
           </div>
         </div>
 
@@ -230,6 +254,20 @@ export default function WalletPage() {
           </div>
         )}
         </>
+        )}
+
+        {/* LEGAL: states plainly that these credits are issued by us, are not
+            withdrawable, and are not stored customer money. This is what keeps
+            the balance a loyalty reward rather than a prepaid instrument under
+            RBI's PPI rules. Text is admin-editable in Store Settings. */}
+        {wl.note && (
+          <div style={{
+            marginTop: 16, background: '#fff', border: `1px solid ${C.line}`,
+            borderRadius: 12, padding: '11px 13px',
+            fontSize: 11, color: C.muted, lineHeight: 1.6,
+          }}>
+            ℹ️ {wl.note}
+          </div>
         )}
       </div>
     </AppShell>
