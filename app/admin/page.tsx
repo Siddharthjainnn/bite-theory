@@ -2826,7 +2826,7 @@ function Reports({ showToast }: { showToast: (m: string) => void }) {
 
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(today);
-  const [tab, setTab] = useState<'sales' | 'items' | 'customers' | 'money' | 'ops'>('sales');
+  const [tab, setTab] = useState<'sales' | 'items' | 'customers' | 'money' | 'ops' | 'areas' | 'quality' | 'health'>('sales');
   const [data, setData] = useState<any>(null);
   const [extra, setExtra] = useState<any>({});
   const [loading, setLoading] = useState(true);
@@ -2846,9 +2846,12 @@ function Reports({ showToast }: { showToast: (m: string) => void }) {
   useEffect(() => {
     const want: Record<string, string[]> = {
       items: ['top-items', 'dead-items', 'sales-by-category'],
-      customers: ['top-customers', 'new-vs-returning', 'referrals'],
-      money: ['payments', 'coupons', 'cancellations'],
-      ops: ['riders'],
+      customers: ['top-customers', 'new-vs-returning', 'referrals', 'cohorts'],
+      money: ['payments', 'coupons', 'cancellations', 'discount-leakage', 'wallet'],
+      ops: ['riders', 'bottlenecks'],
+      areas: ['areas'],
+      quality: ['item-ratings', 'rating-trend', 'support'],
+      health: ['stock'],
       sales: [],
     };
     const paths = want[tab] || [];
@@ -2987,7 +2990,8 @@ function Reports({ showToast }: { showToast: (m: string) => void }) {
           {/* tabs */}
           <div style={{ display: 'flex', gap: 7, marginBottom: 14, flexWrap: 'wrap' }}>
             {([['sales', '📈 Sales'], ['items', '🍱 Items'], ['customers', '👥 Customers'],
-               ['money', '💳 Money'], ['ops', '🛵 Operations']] as const).map(([k, l]) => (
+               ['money', '💳 Money'], ['ops', '🛵 Operations'], ['areas', '📍 Areas'],
+               ['quality', '⭐ Quality'], ['health', '🩺 Health']] as const).map(([k, l]) => (
               <button key={k} onClick={() => setTab(k as any)}
                 style={{ ...btnGhost, background: tab === k ? C.green : '#fff', color: tab === k ? '#fff' : C.ink, borderColor: tab === k ? C.green : C.line }}>
                 {l}
@@ -3075,6 +3079,18 @@ function Reports({ showToast }: { showToast: (m: string) => void }) {
 
           {tab === 'money' && (
             <>
+              {/* The two numbers owners most often don't know they're carrying */}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+                {stat('Discount leakage', `${extra['discount-leakage']?.discountRate || 0}%`,
+                  `${money(Number(extra['discount-leakage']?.couponDiscounts || 0))} given away`,
+                  Number(extra['discount-leakage']?.discountRate) > 15 ? C.red : undefined)}
+                {stat('Discounted orders', `${extra['discount-leakage']?.discountedShare || 0}%`, 'used a coupon')}
+                {stat('Wallet owed', money(Number(extra['wallet']?.outstandingLiability || 0)),
+                  `${extra['wallet']?.customersWithBalance || 0} customers — you owe this in food`)}
+                {stat('Credits issued', money(Number(extra['wallet']?.creditsIssued || 0)),
+                  `${money(Number(extra['wallet']?.creditsSpent || 0))} redeemed`)}
+              </div>
+
               <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
                 <div style={{ fontWeight: 700, marginBottom: 12 }}>Payments — online vs cash</div>
                 {tbl(extra['payments'] || [], [
@@ -3113,6 +3129,17 @@ function Reports({ showToast }: { showToast: (m: string) => void }) {
                   'p90 — the ones that hurt',
                   Number(data?.ops?.p90TotalMins) > 60 ? C.red : undefined)}
               </div>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Where the minutes go</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                  You can&apos;t fix an average. This shows which step actually eats the time —
+                  kitchen, rider wait, or the road.
+                </div>
+                {tbl(extra['bottlenecks'] || [], [
+                  ['status', 'Stage'], ['orders', 'Orders'],
+                  ['avgMins', 'Avg mins'], ['p90Mins', 'Slowest 10%'],
+                ])}
+              </div>
               <div style={{ ...cardStyle, padding: 16 }}>
                 <div style={{ fontWeight: 700, marginBottom: 12 }}>Rider performance</div>
                 {tbl(extra['riders'] || [], [
@@ -3122,6 +3149,61 @@ function Reports({ showToast }: { showToast: (m: string) => void }) {
                 ])}
               </div>
             </>
+          )}
+
+          {tab === 'areas' && (
+            <div style={{ ...cardStyle, padding: 16 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Where your money lives</div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                Revenue by pincode. This decides where a second kitchen goes, where to run
+                local ads, and which areas are quietly unprofitable because every order is far.
+              </div>
+              {tbl(extra['areas'] || [], [
+                ['pincode', 'Pincode'], ['city', 'City'],
+                ['orders', 'Orders'], ['customers', 'Customers'],
+                ['revenue', 'Revenue', (v: any) => money(Number(v))],
+                ['avgDistanceKm', 'Avg km'], ['avgDeliveryMins', 'Avg mins'],
+              ])}
+            </div>
+          )}
+
+          {tab === 'quality' && (
+            <>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Dish ratings — worst first</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                  Cross-check with Items: a low-rated bestseller is a reputation time-bomb.
+                </div>
+                {tbl(extra['item-ratings'] || [], [
+                  ['productName', 'Dish'], ['category', 'Category'],
+                  ['avgRating', 'Rating'], ['reviews', 'Reviews'],
+                  ['unhappy', '1-2★'], ['happy', '4-5★'],
+                ])}
+              </div>
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Support load</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                  {extra['support']?.tickets || 0} tickets · {extra['support']?.open || 0} open ·
+                  avg resolve {extra['support']?.avgResolveHours ?? '—'}h.
+                  Rising tickets usually means a quality or delivery problem, not a support problem.
+                </div>
+                {bar(extra['support']?.byDay || [], 'day', 'tickets')}
+              </div>
+            </>
+          )}
+
+          {tab === 'health' && (
+            <div style={{ ...cardStyle, padding: 16 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Stock needing attention</div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                Low or out of stock right now. Every out-of-stock bestseller is a sale you already lost.
+              </div>
+              {tbl(extra['stock'] || [], [
+                ['productName', 'Item'], ['category', 'Category'],
+                ['quantity', 'Qty'], ['lowThreshold', 'Low at'],
+                ['stockStatus', 'Status'], ['price', 'Price', (v: any) => money(Number(v))],
+              ])}
+            </div>
           )}
         </>
       )}
