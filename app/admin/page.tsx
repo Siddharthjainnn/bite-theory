@@ -218,6 +218,23 @@ const api = {
     if (!r.ok) throw await apiError(r, 'Failed to delete category');
     return r.json();
   },
+  async offersAll(): Promise<any[]> {
+    const r = await fetch(`${API_BASE}/offers/admin/all`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to load offers');
+    return r.json();
+  },
+  async saveOffer(id: number | null, body: any): Promise<any> {
+    const r = await fetch(`${API_BASE}/offers${id ? '/' + id : ''}`, {
+      method: id ? 'PATCH' : 'POST', headers: WRITE_HEADERS, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw await apiError(r, 'Failed to save offer');
+    return r.json();
+  },
+  async deleteOffer(id: number): Promise<any> {
+    const r = await fetch(`${API_BASE}/offers/${id}`, { method: 'DELETE', headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to delete offer');
+    return r.json();
+  },
   async report(path: string, params: Record<string, any> = {}): Promise<any> {
     const qs = new URLSearchParams(
       Object.entries(params).filter(([, v]) => v !== '' && v != null) as any).toString();
@@ -776,6 +793,7 @@ const NAV: NavGroup[] = [
     { key: 'favorites', label: 'Favorites', icon: '❤️' },
   ]},
   { title: 'Marketing', items: [
+    { key: 'campaigns_new', label: 'Campaigns', icon: '⚡' },
     { key: 'coupons', label: 'Coupons', icon: '🎟️' },
     { key: 'coupon_assign', label: 'Assign Coupon', icon: '🎁' },
     { key: 'campaigns', label: 'Campaigns', icon: '📣' },
@@ -828,7 +846,7 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
     'favorites', 'support_tickets', 'help_centre', 'notifications',
   ],
   marketing_manager: [
-    'dashboard', 'reports', 'coupons', 'coupon_assign', 'campaigns',
+    'dashboard', 'reports', 'campaigns_new', 'coupons', 'coupon_assign', 'campaigns',
     'banners', 'referrals', 'loyalty_points',
   ],
   finance_manager: [
@@ -1388,7 +1406,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1458,6 +1476,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'reports' && <Reports showToast={showToast} />}
             {effectivePage === 'refunds' && <Refunds showToast={showToast} />}
             {effectivePage === 'help_centre' && <HelpCentre showToast={showToast} />}
+            {effectivePage === 'campaigns_new' && <Campaigns showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
             {effectivePage === 'orders' && <Orders showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
@@ -2584,6 +2603,279 @@ function OrderItemModal({ item, orders, products, onClose, onSave }:
  * answers were actually failing customers. Now it's data — categories,
  * articles, ordering, and a "worst answers" report driven by real 👍/👎 votes.
  */
+/**
+ * Campaigns — timed offers with a live countdown for customers.
+ *
+ * Why this exists alongside Coupons and Flash Deals:
+ *   • Coupons need a CODE the customer already knows — useless for a banner.
+ *   • Flash Deals are ONE storewide % off — can't run two, can't gift a dish.
+ * Campaigns are multiple, concurrent, time-boxed and visible, and can give
+ * away a FREE ITEM rather than only cutting a price.
+ */
+function Campaigns({ showToast }: { showToast: (m: string) => void }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [edit, setEdit] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([api.offersAll(), api.listProducts().catch(() => [])])
+      .then(([o, p]) => { setRows(o); setProducts(p as Product[]); })
+      .catch((e: any) => showToast(e.message || 'Could not load campaigns'))
+      .finally(() => setLoading(false));
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  /** datetime-local needs 'YYYY-MM-DDTHH:mm' in LOCAL time; the API speaks ISO
+   *  UTC. Converting in both directions here keeps the admin thinking in their
+   *  own clock while the server stays unambiguous. */
+  const toLocalInput = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const off = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - off).toISOString().slice(0, 16);
+  };
+  const toIso = (local: string) => (local ? new Date(local).toISOString() : '');
+
+  function blank() {
+    const now = new Date();
+    const end = new Date(Date.now() + 24 * 3600e3);
+    return {
+      title: '', subtitle: '', offerType: 'percentage', rewardValue: 20,
+      minOrder: 0, perUserLimit: 1, isActive: true, accent: '#F59E0B',
+      startsAt: toLocalInput(now.toISOString()),
+      endsAt: toLocalInput(end.toISOString()),
+    };
+  }
+
+  async function save() {
+    if (!edit?.title?.trim()) { showToast('Give the campaign a title'); return; }
+    if (!edit.startsAt || !edit.endsAt) { showToast('Set a start and end time'); return; }
+    if (new Date(edit.endsAt) <= new Date(edit.startsAt)) {
+      showToast('The campaign must end after it starts'); return;
+    }
+    if (edit.offerType === 'free_item' && !edit.freeProductId) {
+      showToast('Pick the dish customers get free'); return;
+    }
+    setBusy(true);
+    try {
+      await api.saveOffer(edit.id || null, {
+        title: edit.title.trim(),
+        subtitle: edit.subtitle?.trim() || undefined,
+        offerType: edit.offerType,
+        rewardValue: Number(edit.rewardValue) || 0,
+        maxDiscount: edit.maxDiscount ? Number(edit.maxDiscount) : undefined,
+        freeProductId: edit.offerType === 'free_item' ? Number(edit.freeProductId) : undefined,
+        minOrder: Number(edit.minOrder) || 0,
+        startsAt: toIso(edit.startsAt),
+        endsAt: toIso(edit.endsAt),
+        usageLimit: edit.usageLimit ? Number(edit.usageLimit) : undefined,
+        perUserLimit: Number(edit.perUserLimit ?? 1),
+        badge: edit.badge?.trim() || undefined,
+        accent: edit.accent || undefined,
+        isActive: edit.isActive !== false,
+      });
+      showToast(edit.id ? 'Campaign updated' : 'Campaign created');
+      setEdit(null); load();
+    } catch (e: any) { showToast(e.message || 'Save failed'); }
+    finally { setBusy(false); }
+  }
+
+  async function del(o: any) {
+    if (!confirm(`Delete "${o.title}"?`)) return;
+    try { await api.deleteOffer(o.id); showToast('Campaign deleted'); load(); }
+    catch (e: any) { showToast(e.message || 'Delete failed'); }
+  }
+
+  const rewardLabel = (o: any) => {
+    if (o.offer_type === 'free_item') return `${o.freeProductName || 'Item'} FREE`;
+    if (o.offer_type === 'free_delivery') return 'Free delivery';
+    if (o.offer_type === 'percentage') return `${Number(o.reward_value)}% off`;
+    return `${money(Number(o.reward_value))} off`;
+  };
+
+  const fLbl2: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4, marginTop: 10 };
+  const fInp2: React.CSSProperties = {
+    width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,
+    padding: '10px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit',
+  };
+
+  return (
+    <>
+      <PageHead
+        title="Campaigns"
+        sub="Timed offers with a live countdown on the home page. Multiple can run at once."
+        action={<button style={btnPrimary} onClick={() => setEdit(blank())}>+ New campaign</button>}
+      />
+
+      {loading ? (
+        <div style={{ ...cardStyle, padding: 20, color: C.muted, fontSize: 13 }}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ ...cardStyle, padding: 30, textAlign: 'center' }}>
+          <div style={{ fontSize: 28 }}>⚡</div>
+          <div style={{ fontWeight: 800, marginTop: 6 }}>No campaigns yet</div>
+          <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>
+            Create one and it appears on the home page with a countdown.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {rows.map((o) => (
+            <div key={o.id} style={{
+              ...cardStyle, padding: 15,
+              borderLeft: `4px solid ${o.accent || C.orange}`,
+              opacity: o.is_active ? 1 : .6,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+                <b style={{ fontSize: 14.5 }}>{o.title}</b>
+                <span style={{
+                  fontSize: 10.5, fontWeight: 800, borderRadius: 20, padding: '2px 9px',
+                  background: o.live ? C.greenSoft : '#f0f0f0',
+                  color: o.live ? C.darkGreen : '#888',
+                }}>
+                  {o.live ? '● LIVE NOW' : (new Date(o.starts_at) > new Date() ? 'SCHEDULED' : 'ENDED')}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: o.accent || C.orange }}>
+                  {rewardLabel(o)}
+                </span>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <button style={{ ...btnGhost, padding: '5px 11px', fontSize: 12 }} onClick={() => setEdit({
+                    ...o,
+                    offerType: o.offer_type, rewardValue: o.reward_value,
+                    maxDiscount: o.max_discount, freeProductId: o.free_product_id,
+                    minOrder: o.min_order, usageLimit: o.usage_limit,
+                    perUserLimit: o.per_user_limit, isActive: o.is_active,
+                    startsAt: toLocalInput(o.starts_at), endsAt: toLocalInput(o.ends_at),
+                  })}>Edit</button>
+                  <button style={{ ...btnGhost, padding: '5px 11px', fontSize: 12, color: C.red }}
+                    onClick={() => del(o)}>Delete</button>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+                {new Date(o.starts_at).toLocaleString('en-IN')} → {new Date(o.ends_at).toLocaleString('en-IN')}
+                {Number(o.min_order) > 0 && ` · min ${money(Number(o.min_order))}`}
+              </div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>
+                Claimed {o.redemptions || 0}{o.usage_limit ? ` / ${o.usage_limit}` : ''} ·
+                {' '}gave away {money(Number(o.benefitGiven || 0))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {edit && (
+        <Modal title={edit.id ? 'Edit campaign' : 'New campaign'} onClose={() => setEdit(null)}>
+          <label style={fLbl2}>Title (customers see this)</label>
+          <input style={fInp2} value={edit.title || ''} placeholder="Weekend Feast"
+            onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
+
+          <label style={fLbl2}>What do they get?</label>
+          <select style={fInp2} value={edit.offerType}
+            onChange={(e) => setEdit({ ...edit, offerType: e.target.value })}>
+            <option value="percentage">% off the order</option>
+            <option value="flat">₹ off the order</option>
+            <option value="free_item">A free dish</option>
+            <option value="free_delivery">Free delivery</option>
+          </select>
+
+          {edit.offerType === 'free_item' ? (
+            <>
+              <label style={fLbl2}>Free dish</label>
+              <select style={fInp2} value={edit.freeProductId || ''}
+                onChange={(e) => setEdit({ ...edit, freeProductId: e.target.value })}>
+                <option value="">Choose a dish…</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} — {money(p.price)}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>
+                Set a minimum order below — that&apos;s what makes a free dish push order value up.
+              </div>
+            </>
+          ) : edit.offerType !== 'free_delivery' && (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={fLbl2}>{edit.offerType === 'percentage' ? 'Percent off' : 'Amount off (₹)'}</label>
+                <input style={fInp2} inputMode="decimal" value={edit.rewardValue ?? ''}
+                  onChange={(e) => setEdit({ ...edit, rewardValue: e.target.value })} />
+              </div>
+              {edit.offerType === 'percentage' && (
+                <div style={{ flex: 1 }}>
+                  <label style={fLbl2}>Max discount (₹)</label>
+                  <input style={fInp2} inputMode="decimal" value={edit.maxDiscount ?? ''}
+                    placeholder="e.g. 100" onChange={(e) => setEdit({ ...edit, maxDiscount: e.target.value })} />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Starts</label>
+              <input type="datetime-local" style={fInp2} value={edit.startsAt || ''}
+                onChange={(e) => setEdit({ ...edit, startsAt: e.target.value })} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Ends (the countdown)</label>
+              <input type="datetime-local" style={fInp2} value={edit.endsAt || ''}
+                onChange={(e) => setEdit({ ...edit, endsAt: e.target.value })} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Minimum order (₹)</label>
+              <input style={fInp2} inputMode="decimal" value={edit.minOrder ?? 0}
+                onChange={(e) => setEdit({ ...edit, minOrder: e.target.value })} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Total claims (blank = unlimited)</label>
+              <input style={fInp2} inputMode="numeric" value={edit.usageLimit ?? ''}
+                placeholder="e.g. 50" onChange={(e) => setEdit({ ...edit, usageLimit: e.target.value })} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Per customer</label>
+              <input style={fInp2} inputMode="numeric" value={edit.perUserLimit ?? 1}
+                onChange={(e) => setEdit({ ...edit, perUserLimit: e.target.value })} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Badge (optional)</label>
+              <input style={fInp2} value={edit.badge || ''} placeholder="LIMITED"
+                onChange={(e) => setEdit({ ...edit, badge: e.target.value })} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Card colour</label>
+              <input type="color" style={{ ...fInp2, padding: 4, height: 40 }}
+                value={edit.accent || '#F59E0B'}
+                onChange={(e) => setEdit({ ...edit, accent: e.target.value })} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={fLbl2}>Live?</label>
+              <select style={fInp2} value={edit.isActive === false ? 'no' : 'yes'}
+                onChange={(e) => setEdit({ ...edit, isActive: e.target.value === 'yes' })}>
+                <option value="yes">Yes</option><option value="no">Paused</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button style={btnGhost} onClick={() => setEdit(null)}>Cancel</button>
+            <button style={btnPrimary} disabled={busy} onClick={save}>
+              {busy ? 'Saving…' : 'Save campaign'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function HelpCentre({ showToast }: { showToast: (m: string) => void }) {
   const [data, setData] = useState<{ categories: any[]; articles: any[] }>({ categories: [], articles: [] });
   const [problems, setProblems] = useState<any[]>([]);
