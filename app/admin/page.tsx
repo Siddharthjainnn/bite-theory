@@ -218,6 +218,13 @@ const api = {
     if (!r.ok) throw await apiError(r, 'Failed to delete category');
     return r.json();
   },
+  async report(path: string, params: Record<string, any> = {}): Promise<any> {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== '' && v != null) as any).toString();
+    const r = await fetch(`${API_BASE}/reports/${path}${qs ? '?' + qs : ''}`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Failed to load report');
+    return r.json();
+  },
   async listRefunds(q = ''): Promise<any> {
     const r = await fetch(`${API_BASE}/orders/refunds/list?q=${encodeURIComponent(q)}`, { headers: ADMIN_KEY_HEADER() });
     if (!r.ok) throw await apiError(r, 'Failed to load refunds');
@@ -750,7 +757,7 @@ interface NavItem { key: string; label: string; icon: string; table?: string; de
 interface NavGroup { title: string; items: NavItem[]; }
 
 const NAV: NavGroup[] = [
-  { title: 'Overview', items: [{ key: 'dashboard', label: 'Dashboard', icon: '▦' }] },
+  { title: 'Overview', items: [{ key: 'dashboard', label: 'Dashboard', icon: '▦' }, { key: 'reports', label: 'Reports', icon: '📊' }] },
   { title: 'Orders', items: [
     { key: 'orders', label: 'Orders', icon: '🧾' },
     { key: 'order_items', label: 'Order Items', icon: '🍽️' },
@@ -821,11 +828,11 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
     'favorites', 'support_tickets', 'help_centre', 'notifications',
   ],
   marketing_manager: [
-    'dashboard', 'coupons', 'coupon_assign', 'campaigns',
+    'dashboard', 'reports', 'coupons', 'coupon_assign', 'campaigns',
     'banners', 'referrals', 'loyalty_points',
   ],
   finance_manager: [
-    'dashboard', 'payments', 'refunds', 'wallet_transactions', 'orders',
+    'dashboard', 'reports', 'payments', 'refunds', 'wallet_transactions', 'orders',
   ],
 };
 
@@ -1381,7 +1388,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1448,6 +1455,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'products' && <Products showToast={showToast} />}
             {effectivePage === 'todays_special' && <TodaysSpecial showToast={showToast} />}
             {effectivePage === 'roles_access' && <RolesAccess showToast={showToast} />}
+            {effectivePage === 'reports' && <Reports showToast={showToast} />}
             {effectivePage === 'refunds' && <Refunds showToast={showToast} />}
             {effectivePage === 'help_centre' && <HelpCentre showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
@@ -2799,6 +2807,327 @@ const fInp: React.CSSProperties = {
   width: '100%', border: `1px solid ${C.line}`, borderRadius: 10,
   padding: '10px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit',
 };
+
+/**
+ * Reports — the business intelligence module.
+ *
+ * Everything is driven by ONE filter bar. A report that filters differently
+ * from the one next to it is a report people stop trusting, because two
+ * screens end up disagreeing about the same week.
+ *
+ * Revenue always means DELIVERED orders. Counting cancelled orders as revenue
+ * is the most common way a food dashboard quietly lies to its owner.
+ */
+function Reports({ showToast }: { showToast: (m: string) => void }) {
+  /* Default to the last 30 days — long enough to see a pattern, short enough
+     to load fast on the first open. */
+  const today = new Date().toISOString().slice(0, 10);
+  const monthAgo = new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10);
+
+  const [from, setFrom] = useState(monthAgo);
+  const [to, setTo] = useState(today);
+  const [tab, setTab] = useState<'sales' | 'items' | 'customers' | 'money' | 'ops'>('sales');
+  const [data, setData] = useState<any>(null);
+  const [extra, setExtra] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await api.report('dashboard', { from, to }));
+    } catch (e: any) { showToast(e.message || 'Could not load reports'); }
+    finally { setLoading(false); }
+  }, [from, to, showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  /* Tab-specific reports load lazily — no point querying rider stats when
+     someone only wants to see today's sales. */
+  useEffect(() => {
+    const want: Record<string, string[]> = {
+      items: ['top-items', 'dead-items', 'sales-by-category'],
+      customers: ['top-customers', 'new-vs-returning', 'referrals'],
+      money: ['payments', 'coupons', 'cancellations'],
+      ops: ['riders'],
+      sales: [],
+    };
+    const paths = want[tab] || [];
+    if (!paths.length) return;
+    Promise.all(paths.map((p) => api.report(p, { from, to, limit: 20 }).catch(() => null)))
+      .then((res) => {
+        const merged: any = {};
+        paths.forEach((p, i) => { merged[p] = res[i]; });
+        setExtra((prev: any) => ({ ...prev, ...merged }));
+      });
+  }, [tab, from, to]);
+
+  /** CSV built client-side from the flat export — no server file to clean up. */
+  async function exportCsv() {
+    setBusy(true);
+    try {
+      const rows = await api.report('export/orders', { from, to, limit: 5000 });
+      if (!rows.length) { showToast('Nothing to export for this range'); return; }
+      const cols = Object.keys(rows[0]);
+      const esc = (v: any) => {
+        const t = v == null ? '' : String(v);
+        // quote anything that would break a CSV cell
+        return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+      };
+      const csv = [cols.join(','), ...rows.map((r: any) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM so Excel reads ₹ correctly
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `bite-theory-orders-${from}-to-${to}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+      showToast(`Exported ${rows.length} orders`);
+    } catch (e: any) { showToast(e.message || 'Export failed'); }
+    finally { setBusy(false); }
+  }
+
+  const preset = (days: number) => {
+    setFrom(new Date(Date.now() - (days - 1) * 864e5).toISOString().slice(0, 10));
+    setTo(today);
+  };
+
+  const s = data?.summary || {};
+  const stat = (label: string, value: string, sub?: string, tone?: string) => (
+    <div style={{ ...cardStyle, padding: 14, flex: '1 1 150px', minWidth: 140 }}>
+      <div style={{ fontSize: 10.5, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4 }}>{label}</div>
+      <div style={{ fontSize: 21, fontWeight: 850, color: tone || C.ink, marginTop: 4, letterSpacing: '-0.5px' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+
+  const bar = (rows: any[], labelKey: string, valueKey: string, fmt?: (n: any) => string) => {
+    const max = Math.max(...rows.map((r) => Number(r[valueKey]) || 0), 1);
+    return (
+      <div style={{ display: 'grid', gap: 7 }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 120, fontSize: 12, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {r[labelKey]}
+            </span>
+            <div style={{ flex: 1, height: 18, background: C.bg, borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{
+                width: `${((Number(r[valueKey]) || 0) / max) * 100}%`, height: '100%',
+                background: `linear-gradient(90deg,${C.green},${C.darkGreen})`, borderRadius: 5,
+              }} />
+            </div>
+            <span style={{ width: 78, textAlign: 'right', fontSize: 12, fontWeight: 800 }}>
+              {fmt ? fmt(r[valueKey]) : r[valueKey]}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const tbl = (rows: any[], cols: [string, string, ((v: any) => any)?][]) => (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 520 }}>
+        <thead><tr>{cols.map(([, l]) => <th key={l} style={th}>{l}</th>)}</tr></thead>
+        <tbody>
+          {rows.length === 0
+            ? <tr><td style={td} colSpan={cols.length}>No data for this range.</td></tr>
+            : rows.map((r, i) => (
+              <tr key={i}>{cols.map(([k, , f]) => <td key={k} style={td}>{f ? f(r[k]) : (r[k] ?? '—')}</td>)}</tr>
+            ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <>
+      <PageHead
+        title="Reports"
+        sub="Everything, filterable and downloadable. Revenue counts delivered orders only."
+        action={
+          <button style={btnPrimary} disabled={busy} onClick={exportCsv}>
+            {busy ? 'Exporting…' : '⬇ Export CSV'}
+          </button>
+        }
+      />
+
+      {/* one filter bar for every report */}
+      <div style={{ ...cardStyle, padding: 14, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>From</div>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+            style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>To</div>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
+            style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[['Today', 1], ['7d', 7], ['30d', 30], ['90d', 90]].map(([l, d]) => (
+            <button key={l as string} onClick={() => preset(d as number)}
+              style={{ ...btnGhost, padding: '8px 12px', fontSize: 12 }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ ...cardStyle, padding: 22, color: C.muted, fontSize: 13 }}>Crunching the numbers…</div>
+      ) : (
+        <>
+          {/* headline numbers */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+            {stat('Revenue', money(Number(s.revenue || 0)), `${s.delivered || 0} delivered`)}
+            {stat('Orders', String(s.totalOrders || 0), `${s.inFlight || 0} in flight`)}
+            {stat('Avg order', money(Number(s.avgOrderValue || 0)))}
+            {stat('Customers', String(s.uniqueCustomers || 0), `${data?.repeat?.repeatRate || 0}% repeat`)}
+            {stat('Cancelled', String(s.cancelled || 0), `${s.cancelRate || 0}% of orders`,
+              Number(s.cancelRate) > 5 ? C.red : undefined)}
+            {stat('Discounts', money(Number(s.discounts || 0)), 'given away')}
+          </div>
+
+          {/* tabs */}
+          <div style={{ display: 'flex', gap: 7, marginBottom: 14, flexWrap: 'wrap' }}>
+            {([['sales', '📈 Sales'], ['items', '🍱 Items'], ['customers', '👥 Customers'],
+               ['money', '💳 Money'], ['ops', '🛵 Operations']] as const).map(([k, l]) => (
+              <button key={k} onClick={() => setTab(k as any)}
+                style={{ ...btnGhost, background: tab === k ? C.green : '#fff', color: tab === k ? '#fff' : C.ink, borderColor: tab === k ? C.green : C.line }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'sales' && (
+            <>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Revenue by day</div>
+                {bar((data?.byDay || []).slice(-14), 'day', 'revenue', (n) => money(Number(n)))}
+              </div>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Orders by hour</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                  Your rush hours — staff and prep around these.
+                </div>
+                {bar((data?.byHour || []).map((h: any) => ({ ...h, label: `${h.hour}:00` })), 'label', 'orders')}
+              </div>
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Orders by weekday</div>
+                {bar(data?.byWeekday || [], 'weekday', 'orders')}
+              </div>
+            </>
+          )}
+
+          {tab === 'items' && (
+            <>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Top selling items</div>
+                {tbl(extra['top-items'] || [], [
+                  ['productName', 'Item'], ['category', 'Category'],
+                  ['unitsSold', 'Units'], ['orders', 'Orders'],
+                  ['revenue', 'Revenue', (v: any) => money(Number(v))],
+                ])}
+              </div>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Revenue by category</div>
+                {bar(extra['sales-by-category'] || [], 'category', 'revenue', (n) => money(Number(n)))}
+              </div>
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Nobody ordered these</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                  Zero sales in this range — fix the photo, the price, or remove them.
+                </div>
+                {tbl(extra['dead-items'] || [], [
+                  ['productName', 'Item'], ['category', 'Category'],
+                  ['price', 'Price', (v: any) => money(Number(v))], ['status', 'Status'],
+                ])}
+              </div>
+            </>
+          )}
+
+          {tab === 'customers' && (
+            <>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+                {stat('Repeat rate', `${data?.repeat?.repeatRate || 0}%`, `${data?.repeat?.repeat || 0} came back`)}
+                {stat('One-time', String(data?.repeat?.oneTime || 0), 'ordered once only')}
+                {stat('Loyal (5+)', String(data?.repeat?.loyal || 0), 'your regulars')}
+                {stat('Avg lifetime', money(Number(data?.repeat?.avgLifetimeValue || 0)))}
+              </div>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Top customers</div>
+                {tbl(extra['top-customers'] || [], [
+                  ['name', 'Customer'], ['mobile', 'Mobile'],
+                  ['orders', 'Orders'], ['spent', 'Spent', (v: any) => money(Number(v))],
+                  ['avgOrder', 'Avg', (v: any) => money(Number(v))],
+                ])}
+              </div>
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Referrals</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                  {extra['referrals']?.invited || 0} invited · {extra['referrals']?.converted || 0} converted
+                  {' '}({extra['referrals']?.conversionRate || 0}%) · {money(Number(extra['referrals']?.rewardPaid || 0))} paid out
+                </div>
+                {tbl(extra['referrals']?.topReferrers || [], [
+                  ['name', 'Referrer'], ['code', 'Code'],
+                  ['invited', 'Invited'], ['converted', 'Converted'],
+                  ['earned', 'Earned', (v: any) => money(Number(v))],
+                ])}
+              </div>
+            </>
+          )}
+
+          {tab === 'money' && (
+            <>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Payments — online vs cash</div>
+                {tbl(extra['payments'] || [], [
+                  ['method', 'Method'], ['status', 'Status'], ['orders', 'Orders'],
+                  ['amount', 'Amount', (v: any) => money(Number(v))],
+                ])}
+              </div>
+              <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Coupon performance</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 12 }}>
+                  What each code cost you, and what it brought in.
+                </div>
+                {tbl(extra['coupons'] || [], [
+                  ['code', 'Code'], ['orders', 'Orders'], ['customers', 'Customers'],
+                  ['discountGiven', 'Given', (v: any) => money(Number(v))],
+                  ['revenue', 'Revenue', (v: any) => money(Number(v))],
+                ])}
+              </div>
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Cancellations</div>
+                {tbl(extra['cancellations'] || [], [
+                  ['day', 'Day'], ['cancelled', 'Cancelled'],
+                  ['lostValue', 'Lost value', (v: any) => money(Number(v))],
+                ])}
+              </div>
+            </>
+          )}
+
+          {tab === 'ops' && (
+            <>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+                {stat('Avg prep', `${data?.ops?.avgPrepMins ?? '—'} min`, 'order → picked up')}
+                {stat('Avg delivery', `${data?.ops?.avgDeliveryMins ?? '—'} min`, 'pickup → door')}
+                {stat('Avg total', `${data?.ops?.avgTotalMins ?? '—'} min`, 'order → door')}
+                {stat('Slowest 10%', `${data?.ops?.p90TotalMins ?? '—'} min`,
+                  'p90 — the ones that hurt',
+                  Number(data?.ops?.p90TotalMins) > 60 ? C.red : undefined)}
+              </div>
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 12 }}>Rider performance</div>
+                {tbl(extra['riders'] || [], [
+                  ['name', 'Rider'], ['deliveries', 'Deliveries'],
+                  ['avgDeliveryMins', 'Avg mins'], ['totalKm', 'Km'],
+                  ['tips', 'Tips', (v: any) => money(Number(v))],
+                ])}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+}
 
 function Refunds({ showToast }: { showToast: (m: string) => void }) {
   const [data, setData] = useState<any>({ refunds: [], refundable: [], summary: {} });
