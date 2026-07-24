@@ -94,6 +94,8 @@ export default function RiderPage() {
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  /* Bug #17: which order's customer-location map is open inline */
+  const [mapFor, setMapFor] = useState<number | null>(null);
   const [mine, setMine] = useState<ApiOrder[]>([]);
   const [completed, setCompleted] = useState<ApiOrder[]>([]); // #13/#16 delivered history
   const [gpsOn, setGpsOn] = useState(false);
@@ -476,7 +478,29 @@ export default function RiderPage() {
               </span>
             </a>
           )}
+          {/* Bug #17 — riders could only see the address TEXT; the drop-pin
+              location is now viewable on an inline map (no API key needed),
+              alongside turn-by-turn Navigate. */}
+          {o.deliveryLat != null && mapFor === o.id && (
+            <div style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.line}`, marginBottom: 10 }}>
+              <iframe
+                title={`Customer location for ${o.orderNumber}`}
+                src={`https://maps.google.com/maps?q=${o.deliveryLat},${o.deliveryLng}&z=16&output=embed`}
+                style={{ width: '100%', height: 220, border: 0, display: 'block' }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          )}
           <div style={{ display: 'grid', gap: 8 }}>
+            {o.deliveryLat != null && (
+              <button
+                style={{ ...btn('#fff', C.greenDeep), border: `1px solid ${C.line}` }}
+                onClick={() => setMapFor((cur) => (cur === o.id ? null : o.id))}
+              >
+                {mapFor === o.id ? '🗺️ Hide customer location' : '🗺️ View customer location on map'}
+              </button>
+            )}
             {o.deliveryLat != null && (
               <a
                 href={`https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLat},${o.deliveryLng}`}

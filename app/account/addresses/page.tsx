@@ -85,7 +85,10 @@ export default function SavedAddressesPage() {
     try {
       await deleteAddress(Number(a.id));
       setRows((r) => r.filter((x) => Number(x.id) !== Number(a.id)));
-    } catch { setError('Could not delete address'); }
+    } catch (e: any) {
+      // Bug #14: was a silent generic message — surface the server's reason
+      setError(e?.message || 'Could not delete address. Please try again.');
+    }
     finally { setBusyId(null); }
   }
 

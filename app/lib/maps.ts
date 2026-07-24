@@ -25,15 +25,42 @@ export function loadGoogleMaps(): Promise<typeof google> {
   return loader;
 }
 
-/** Browser geolocation as a promise. */
+/** Browser geolocation as a promise.
+ *  Bug #38 — "map shows a different address every time": the browser was free
+ *  to hand back a CACHED or coarse (wifi/IP) fix, which jumps around by
+ *  hundreds of metres between opens. Two changes:
+ *   1) maximumAge: 0 — never accept a stale cached position.
+ *   2) watchPosition sampling — GPS warms up over a few seconds; we keep the
+ *      most accurate fix seen and stop early once it's within ~30 m.        */
 export function getCurrentPosition(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('Geolocation unsupported'));
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => reject(err),
-      { enableHighAccuracy: true, timeout: 10000 },
+
+    let best: GeolocationPosition | null = null;
+    let settled = false;
+    const finish = (err?: any) => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      clearTimeout(timer);
+      if (best) {
+        resolve({ lat: best.coords.latitude, lng: best.coords.longitude });
+      } else {
+        reject(err || new Error('Could not get an accurate location'));
+      }
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        // good enough — a ~30 m fix pins the right building
+        if (pos.coords.accuracy <= 30) finish();
+      },
+      (err) => finish(err),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
+    // hard stop after 8s: return the best fix collected so far
+    const timer = setTimeout(() => finish(new Error('Location timed out')), 8000);
   });
 }
 

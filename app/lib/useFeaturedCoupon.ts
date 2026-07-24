@@ -9,9 +9,12 @@ export interface FeaturedCoupon {
 
 /* Bug #46/#55: the home & cart pages used to hard-code "BITE70", a coupon that
    didn't exist in the DB — so it was advertised but failed on apply. This hook
-   pulls the first REAL active coupon from GET /coupons and builds a label from
-   its actual values, so we only ever promote coupons that genuinely work. If
-   there are none, callers show nothing. */
+   pulls a REAL active coupon from GET /coupons and builds a label from its
+   actual values, so we only ever promote coupons that genuinely work.
+   Bug #69: it then auto-promoted the FIRST active coupon (and silently swapped
+   to the next when one was deactivated) — a code appeared on the UI with zero
+   admin intent. Now ONLY coupons the admin flags "Feature on storefront"
+   (is_featured) are shown. No featured coupon → nothing is advertised. */
 export function useFeaturedCoupon(): FeaturedCoupon | null {
   const [coupon, setCoupon] = useState<FeaturedCoupon | null>(null);
 
@@ -24,11 +27,12 @@ export function useFeaturedCoupon(): FeaturedCoupon | null {
         const now = Date.now();
         const active = (data || []).filter((c) => {
           const isActive = (c.isActive ?? c.is_active) !== false;
+          const featured = (c.isFeatured ?? c.is_featured) === true; // #69
           const until = c.validUntil ?? c.valid_until;
           const limit = Number(c.usageLimit ?? c.usage_limit ?? 0);
           const used = Number(c.usedCount ?? c.used_count ?? 0);
           const notExhausted = limit === 0 || used < limit;
-          return isActive && notExhausted && (!until || new Date(until).getTime() > now);
+          return isActive && featured && notExhausted && (!until || new Date(until).getTime() > now);
         });
         if (!active.length) { setCoupon(null); return; }
         const c = active[0];

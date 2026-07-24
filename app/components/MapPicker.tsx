@@ -122,15 +122,50 @@ export default function MapPicker({
   }
 
   if (noMap) {
+    /* Bug #67 — "the map doesn't display": with no Google key (or the script
+       blocked) the picker collapsed into a text note, so users couldn't see a
+       map at all. Show a free OpenStreetMap embed as a visual fallback plus a
+       "use my location" shortcut. Pin-drag picking still needs the Google key
+       (set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY on Vercel for the full picker). */
+    const center = picked || FALLBACK_CENTER as any;
+    const lat = Number((center as any).lat) || FALLBACK_CENTER.lat;
+    const lng = Number((center as any).lng) || FALLBACK_CENTER.lng;
+    const d = 0.008;
     return (
-      <div
-        style={{
-          border: `1px dashed ${C.line}`, borderRadius: 14, padding: 16,
-          background: C.bg, fontSize: 13, color: C.muted,
-        }}
-      >
-        📍 Map unavailable (missing <b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b>).
-        Enter your full address manually below — everything else works.
+      <div>
+        <div style={{ borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.line}` }}>
+          <iframe
+            title="Map"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${lng - d},${lat - d},${lng + d},${lat + d}&layer=mapnik&marker=${lat},${lng}`}
+            style={{ width: '100%', height, border: 0, display: 'block' }}
+            loading="lazy"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const pos = await getCurrentPosition();
+              settle(pos.lat, pos.lng);
+            } catch {
+              alert('Location permission denied. Please allow location access.');
+            }
+          }}
+          style={{
+            marginTop: 8, background: '#fff', border: `1px solid ${C.line}`,
+            borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 700,
+            color: C.greenDeep, cursor: 'pointer',
+          }}
+        >
+          🎯 Use my current location
+        </button>
+        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>
+          {picked?.address
+            ? <>📍 {picked.address}</>
+            : <>Interactive pin-drop needs the Google Maps key
+                (<b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b>) — until then, use the
+                button above or type the address below.</>}
+        </div>
       </div>
     );
   }

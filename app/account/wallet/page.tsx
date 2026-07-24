@@ -51,7 +51,13 @@ export default function WalletPage() {
       .then((st) => setWl({
         label: st?.walletLabel || 'Wallet',
         unit: st?.walletUnit || '₹',
-        note: st?.walletNote || '',
+        /* Bug #24 — QA flagged "no Add Money option". That is deliberate:
+           this balance is a rewards ledger (refunds, referrals, admin
+           credit), NOT a prepaid wallet — adding a top-up path would make it
+           an RBI-regulated prepaid instrument. Say so in the UI instead of
+           leaving customers hunting for a button that doesn't exist. */
+        note: st?.walletNote ||
+          'Balance here comes from refunds, referral rewards and store credit — it can\u2019t be topped up directly. Spend it at checkout on any order.',
       }))
       .catch(() => { /* defaults are fine */ });
   }, []);

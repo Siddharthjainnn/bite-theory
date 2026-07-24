@@ -595,7 +595,14 @@ export default function CheckoutPage() {
               <div style={h}>🧾 Bill details</div>
               {[
                 ['Item total', money(subtotal)],
-                ...(discount > 0 ? [['Coupon discount', `− ${money(discount)}`]] : []),
+                /* Bug #68 — a live flash deal was lumped into one "Coupon
+                   discount" line, so a discount appeared with NO coupon
+                   applied and looked like a glitch. Each source is now its
+                   own clearly-labelled row. */
+                ...(coupon && coupon.discount > 0
+                  ? [[`Coupon ${coupon.code}`, `− ${money(coupon.discount)}`]] : []),
+                ...(flashOff > 0
+                  ? [[`Flash deal (${Number(flashDeal?.discountPct || 0)}% OFF)`, `− ${money(flashOff)}`]] : []),
                 ['Delivery fee', delivery === 0 ? 'FREE' : money(delivery)],
                 ...(tip > 0 ? [['Rider tip', money(tip)]] : []),
                 ...(walletUsed > 0 ? [['Wallet used', `− ${money(walletUsed)}`]] : []),

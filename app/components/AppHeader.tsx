@@ -256,7 +256,7 @@ export default function AppHeader({
 .bt-logo{height:34px;width:auto;display:block}
 .bt-acct-wrap{position:relative}
 .bt-acct-scrim{position:fixed;inset:0;z-index:2000}
-.bt-acct-pop{position:fixed;top:64px;right:14px;z-index:2001;background:#fff;
+.bt-acct-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:2001;background:#fff;
   border:1px solid #e4ebe6;border-radius:16px;box-shadow:0 16px 40px rgba(13,59,46,.22);
   padding:8px;min-width:200px;display:flex;flex-direction:column;gap:2px;
   animation:acctPop .2s cubic-bezier(.34,1.4,.64,1) both}

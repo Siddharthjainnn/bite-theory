@@ -506,7 +506,7 @@ const C = {
 };
 
 /* ============ field types for generic CRUD ============ */
-type FieldType = 'text' | 'textarea' | 'number' | 'bool' | 'select' | 'datetime' | 'readonly' | 'lookup' | 'image' | 'video';
+type FieldType = 'text' | 'textarea' | 'number' | 'bool' | 'select' | 'datetime' | 'readonly' | 'lookup' | 'image' | 'video' | 'password';
 
 // A lookup source = a table we pull options from, plus how to label each row.
 type LookupSource = 'users' | 'products' | 'orders' | 'roles' | 'admin_users';
@@ -521,6 +521,17 @@ interface FieldDef {
   inTable?: boolean;       // show in list table
   money?: boolean;         // format as ₹ in table
   badge?: boolean;         // show as pill in table
+  /* Bugs #28/#29/#30 — the generic form had no validation at all: any length,
+     any characters, no mandatory markers. Fields can now declare rules and the
+     modal enforces them before save (and labels required fields with *). */
+  required?: boolean;      // mandatory — starred in the form, blocks empty save
+  requiredOnCreate?: boolean; // mandatory only when creating (e.g. password)
+  pattern?: string;        // regex the value must fully match
+  patternHint?: string;    // human error shown when the pattern fails
+  maxLength?: number;      // hard cap on input length
+  digitsOnly?: boolean;    // strip non-digits as the user types (mobile numbers)
+  upper?: boolean;         // force UPPERCASE as the user types (vehicle plates)
+  placeholder?: string;
 }
 interface ModuleConfig {
   key: string;
@@ -530,6 +541,10 @@ interface ModuleConfig {
   sub: string;
   fields: FieldDef[];
   titleKey?: string;       // which field is the "name" of a row (for delete confirm)
+  /* Bugs #31/#42 — some tables are system-generated (payments come from
+     checkout/Razorpay, favorites come from customers tapping ♥). Admin should
+     SEE them, never hand-create them. readOnly hides Add / Edit / Delete. */
+  readOnly?: boolean;
 }
 
 /* a few reusable enum option sets (match your DB enums; safe because backend stores as text) */
@@ -580,7 +595,10 @@ const MODULES: Record<string, ModuleConfig> = {
   },
   favorites: {
     key: 'favorites', route: 'favorites', singular: 'Favorite', title: 'Favorites',
-    sub: 'Products each customer has favorited.', titleKey: 'productId',
+    /* Bug #42 — favorites reflect what customers ♥ in the app; the admin has
+       no business creating them. View-only. */
+    readOnly: true,
+    sub: 'Products each customer has favorited (view-only — reflects customer taps automatically).', titleKey: 'productId',
     fields: [
       { key: 'userId', label: 'Customer', type: 'lookup', lookup: 'users', inTable: true },
       { key: 'productId', label: 'Product', type: 'lookup', lookup: 'products', inTable: true },
@@ -623,6 +641,9 @@ const MODULES: Record<string, ModuleConfig> = {
       { key: 'usageLimit', label: 'Usage limit', type: 'number', inTable: true },
       { key: 'usedCount', label: 'Used count', type: 'number', inTable: true },
       { key: 'isActive', label: 'Active', type: 'bool', inTable: true, badge: true },
+      /* Bug #69 — only coupons you explicitly feature are advertised on the
+         customer's home & cart pages. Nothing is auto-promoted anymore. */
+      { key: 'isFeatured', label: 'Feature on storefront', type: 'bool', inTable: true, badge: true },
     ],
   },
   campaigns: {
@@ -673,7 +694,11 @@ const MODULES: Record<string, ModuleConfig> = {
   },
   payments: {
     key: 'payments', route: 'payments', singular: 'Payment', title: 'Payments',
-    sub: 'Razorpay / UPI / card transactions per order.', titleKey: 'transactionId',
+    /* Bug #31 — payments are written by checkout / Razorpay / COD collection.
+       Hand-adding a payment row here desyncs money records, so this list is
+       now view-only. */
+    readOnly: true,
+    sub: 'Razorpay / UPI / card transactions per order (view-only — created automatically by checkout).', titleKey: 'transactionId',
     fields: [
       { key: 'orderId', label: 'Order', type: 'lookup', lookup: 'orders', inTable: true },
       { key: 'method', label: 'Method', type: 'select', options: ENUMS.paymentMethod, inTable: true, badge: true },
@@ -697,9 +722,18 @@ const MODULES: Record<string, ModuleConfig> = {
     key: 'delivery_partners', route: 'delivery-partners', singular: 'Delivery partner', title: 'Delivery Partners',
     sub: 'Rider accounts, active status, availability.', titleKey: 'name',
     fields: [
-      { key: 'name', label: 'Name', type: 'text', inTable: true },
-      { key: 'mobile', label: 'Mobile', type: 'text', inTable: true },
-      { key: 'vehicleNo', label: 'Vehicle number', type: 'text', inTable: true },
+      /* Bugs #28/#29/#30 — name/mobile/vehicle are now mandatory (starred),
+         mobile is a strict 10-digit Indian number, and the vehicle plate must
+         match the Indian registration format (e.g. MP09AB1234). */
+      { key: 'name', label: 'Name', type: 'text', inTable: true, required: true, maxLength: 60 },
+      { key: 'mobile', label: 'Mobile', type: 'text', inTable: true, required: true,
+        digitsOnly: true, maxLength: 10, pattern: '^[6-9][0-9]{9}$',
+        patternHint: 'Mobile must be a valid 10-digit Indian number (starts with 6–9).',
+        placeholder: '10-digit mobile number' },
+      { key: 'vehicleNo', label: 'Vehicle number', type: 'text', inTable: true, required: true,
+        upper: true, maxLength: 13, pattern: '^[A-Z]{2}[ -]?[0-9]{1,2}[ -]?[A-Z]{1,3}[ -]?[0-9]{4}$',
+        patternHint: 'Vehicle number must be a valid plate, e.g. MP09AB1234.',
+        placeholder: 'e.g. MP09AB1234' },
       { key: 'isActive', label: 'Active', type: 'bool', inTable: true, badge: true },
       { key: 'isAvailable', label: 'Available now', type: 'bool', inTable: true, badge: true },
       { key: 'photo', label: 'Rider photo', type: 'image', uploadFolder: 'delivery_partners' },
@@ -734,9 +768,18 @@ const MODULES: Record<string, ModuleConfig> = {
     key: 'admin_users', route: 'admin-users', singular: 'Admin user', title: 'Admin Users',
     sub: 'Super Admin, Kitchen Manager, Delivery Manager, etc.', titleKey: 'name',
     fields: [
-      { key: 'roleId', label: 'Role', type: 'lookup', lookup: 'roles', inTable: true },
-      { key: 'name', label: 'Name', type: 'text', inTable: true },
-      { key: 'email', label: 'Email', type: 'text', inTable: true },
+      { key: 'roleId', label: 'Role', type: 'lookup', lookup: 'roles', inTable: true, required: true },
+      { key: 'name', label: 'Name', type: 'text', inTable: true, required: true, maxLength: 60 },
+      { key: 'email', label: 'Email', type: 'text', inTable: true, required: true,
+        pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$', patternHint: 'Enter a valid email address.' },
+      /* Bug #87 — "creation failed": the backend REQUIRES a password (min 8
+         chars) but this form never had a password field, so every create was
+         rejected. Required when creating; leave blank while editing to keep
+         the current password. */
+      { key: 'password', label: 'Password (min 8 characters)', type: 'password',
+        requiredOnCreate: true, pattern: '^.{8,}$',
+        patternHint: 'Password must be at least 8 characters.',
+        placeholder: 'Set a login password' },
       { key: 'isActive', label: 'Active', type: 'bool', inTable: true, badge: true },
       { key: 'avatar', label: 'Avatar', type: 'image', uploadFolder: 'admin_users' },
     ],
@@ -1532,7 +1575,8 @@ function GenericModule({ config, showToast }: { config: ModuleConfig; showToast:
   const [lookupsReady, setLookupsReady] = useState(0); // bump to re-render once names are cached
 
   const tableFields = config.fields.filter(f => f.inTable);
-  const isReadOnly = config.key === 'audit_logs'; // logs are append-only; no create/edit
+  // logs are append-only; payments/favorites are system-generated (#31/#42)
+  const isReadOnly = config.key === 'audit_logs' || !!config.readOnly;
 
   // every distinct lookup source this module references
   const lookupSources = Array.from(new Set(
@@ -1567,6 +1611,8 @@ function GenericModule({ config, showToast }: { config: ModuleConfig; showToast:
       let v = data[f.key];
       if (f.type === 'number' || f.type === 'lookup') v = v === '' || v === undefined || v === null ? null : Number(v);
       if (f.type === 'bool') v = !!v;
+      // #87: an empty password on edit means "keep the current one" — omit it
+      if (f.type === 'password' && !v) continue;
       body[f.key] = v;
     }
     try {
@@ -1614,7 +1660,7 @@ function GenericModule({ config, showToast }: { config: ModuleConfig; showToast:
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       {!isReadOnly && <button onClick={() => setEditing(r)} style={{ ...btnGhost, padding: '6px 10px' }}>✏️</button>}
-                      <button onClick={() => setConfirmDel(r)} style={{ ...btnGhost, padding: '6px 10px', color: C.red }}>🗑️</button>
+                      {!isReadOnly && <button onClick={() => setConfirmDel(r)} style={{ ...btnGhost, padding: '6px 10px', color: C.red }}>🗑️</button>}
                     </div>
                   </td>
                 </tr>
@@ -1723,12 +1769,48 @@ function GenericModal({ config, row, onClose, onSave }:
   const [f, setF] = useState<any>(init);
   const set = (k: string, v: any) => setF((s: any) => ({ ...s, [k]: v }));
   const editFields = config.fields.filter(x => x.type !== 'readonly');
-  const required = editFields[0]; // first field is treated as the key field
+  const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
+
+  /* Bugs #28/#29/#30 — enforce the declared rules before save:
+     required fields cannot be blank, patterns must match, and required labels
+     are starred so mandatory fields are visible up-front. */
+  function validate(): boolean {
+    const errs: Record<string, string> = {};
+    for (const fd of editFields) {
+      const raw = f[fd.key];
+      const v = raw === undefined || raw === null ? '' : String(raw).trim();
+      const mustHave = fd.required || (fd.requiredOnCreate && !row.id);
+      if (mustHave && !v) { errs[fd.key] = `${fd.label} is required`; continue; }
+      if (v && fd.pattern && !new RegExp(fd.pattern).test(v)) {
+        errs[fd.key] = fd.patternHint || `${fd.label} has an invalid format`;
+      }
+    }
+    // legacy behaviour: the first field is the key field and always required
+    const first = editFields[0];
+    if (first && !errs[first.key]) {
+      const v0 = f[first.key];
+      if (v0 === '' || v0 === undefined || v0 === null) errs[first.key] = `${first.label} is required`;
+    }
+    setFieldErr(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  /* per-field input massaging: digit-only mobile numbers, UPPERCASE plates,
+     hard maxLength caps (bug #28 — unlimited digits in mobile field) */
+  const massage = (fd: FieldDef, v: string) => {
+    let out = v;
+    if (fd.digitsOnly) out = out.replace(/\D+/g, '');
+    if (fd.upper) out = out.toUpperCase();
+    if (fd.maxLength) out = out.slice(0, fd.maxLength);
+    return out;
+  };
+  const starred = (fd: FieldDef) =>
+    fd.required || (fd.requiredOnCreate && !row.id) ? `${fd.label} *` : fd.label;
 
   return (
     <Modal title={row.id ? `Edit ${config.singular}` : `Add ${config.singular}`} onClose={onClose}>
       {editFields.map(field => (
-        <Field key={field.key} label={field.label}>
+        <Field key={field.key} label={starred(field)}>
           {field.type === 'textarea' ? (
             <textarea style={{ ...inputStyle, minHeight: 70 }} value={f[field.key] ?? ''} onChange={e => set(field.key, e.target.value)} />
           ) : field.type === 'image' ? (
@@ -1750,18 +1832,27 @@ function GenericModal({ config, row, onClose, onSave }:
             <input style={inputStyle} type="datetime-local" value={f[field.key] ? String(f[field.key]).slice(0, 16) : ''} onChange={e => set(field.key, e.target.value)} />
           ) : field.type === 'number' ? (
             <input style={inputStyle} type="number" value={f[field.key] ?? ''} onChange={e => set(field.key, e.target.value)} />
+          ) : field.type === 'password' ? (
+            <>
+              <input style={inputStyle} type="password" autoComplete="new-password"
+                placeholder={row.id ? 'Leave blank to keep the current password' : (field.placeholder || '')}
+                value={f[field.key] ?? ''} onChange={e => set(field.key, massage(field, e.target.value))} />
+              {fieldErr[field.key] && <div style={{ fontSize: 12, color: C.red, marginTop: 4 }}>{fieldErr[field.key]}</div>}
+            </>
           ) : (
-            <input style={inputStyle} value={f[field.key] ?? ''} onChange={e => set(field.key, e.target.value)} />
+            <>
+              <input style={inputStyle} value={f[field.key] ?? ''} placeholder={field.placeholder || ''}
+                maxLength={field.maxLength} inputMode={field.digitsOnly ? 'numeric' : undefined}
+                onChange={e => set(field.key, massage(field, e.target.value))} />
+              {fieldErr[field.key] && <div style={{ fontSize: 12, color: C.red, marginTop: 4 }}>{fieldErr[field.key]}</div>}
+            </>
           )}
         </Field>
       ))}
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
         <button style={btnGhost} onClick={onClose}>Cancel</button>
-        <button style={btnPrimary} onClick={() => {
-          if (required && (f[required.key] === '' || f[required.key] === undefined || f[required.key] === null))
-            return alert(`${required.label} is required`);
-          onSave(f);
-        }}>{row.id ? 'Save changes' : `Create ${config.singular.toLowerCase()}`}</button>
+        <button style={btnPrimary} onClick={() => { if (validate()) onSave(f); }}>
+          {row.id ? 'Save changes' : `Create ${config.singular.toLowerCase()}`}</button>
       </div>
     </Modal>
   );
@@ -4267,6 +4358,7 @@ export default function AdminPage() {
   const [checked, setChecked] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false); // bug #7: view-password toggle
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -4340,9 +4432,22 @@ export default function AdminPage() {
           onChange={(e) => setEmail(e.target.value)} placeholder="admin@bitetheory.com" autoComplete="username" />
 
         <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Password</label>
-        <input style={{ ...inp, marginBottom: 6 }} type="password" value={password}
-          onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"
-          onKeyDown={(e) => { if (e.key === 'Enter') doLogin(); }} />
+        {/* bug #7: there was no way to view the typed password — eye toggle added */}
+        <div style={{ position: 'relative', marginBottom: 6 }}>
+          <input style={{ ...inp, paddingRight: 44 }} type={showPwd ? 'text' : 'password'} value={password}
+            onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"
+            onKeyDown={(e) => { if (e.key === 'Enter') doLogin(); }} />
+          <button type="button" onClick={() => setShowPwd((s) => !s)}
+            aria-label={showPwd ? 'Hide password' : 'View password'}
+            title={showPwd ? 'Hide password' : 'View password'}
+            style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: 17,
+              padding: '4px 6px', lineHeight: 1, color: C.muted,
+            }}>
+            {showPwd ? '🙈' : '👁️'}
+          </button>
+        </div>
 
         {err && <div style={{ color: C.red, fontSize: 12.5, fontWeight: 600, margin: '8px 0 2px' }}>⚠️ {err}</div>}
 
