@@ -71,10 +71,10 @@ export default function TodaysSpecialModal({
                     <div className="bt-qty bt-sp-qty">
                       <button onClick={() => sub(p.id)} aria-label={`Remove one ${p.name}`}>−</button>
                       <span>{cart[p.id]}</span>
-                      <button onClick={() => add(p.id)} aria-label={`Add one ${p.name}`}>+</button>
+                      <button onClick={() => add(p.id, soldOut ? 0 : p.stockQty)} aria-label={`Add one ${p.name}`}>+</button>
                     </div>
                   ) : (
-                    <button className="bt-sp-add" onClick={() => add(p.id)}>ADD +</button>
+                    <button className="bt-sp-add" onClick={() => add(p.id, soldOut ? 0 : p.stockQty)}>ADD +</button>
                   )}
                 </div>
               </div>

@@ -306,9 +306,13 @@ export async function checkoutOrder(payload: CheckoutPayload): Promise<ApiOrder 
 }
 
 /** Customer cancels their own order (allowed until the kitchen starts cooking). */
-export async function cancelOrder(orderId: number | string, userId: number): Promise<ApiOrder> {
+export async function cancelOrder(
+  orderId: number | string, userId: number,
+  refundTo?: 'original' | 'wallet',           // #99: refund destination
+): Promise<ApiOrder> {
   const res = await fetch(`${API_BASE}/orders/${orderId}/cancel`, {
-    method: 'POST', headers: await authHeaders(), body: JSON.stringify({ userId }),
+    method: 'POST', headers: await authHeaders(),
+    body: JSON.stringify({ userId, ...(refundTo ? { refundTo } : {}) }),
   });
   return jsonOrThrow(res);
 }

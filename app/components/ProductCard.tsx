@@ -60,12 +60,12 @@ export default function ProductCard({ p }: { p: Product }) {
                 −
               </button>
               <span>{qty}</span>
-              <button onClick={() => add(p.id)} aria-label="Add one">
+              <button onClick={() => add(p.id, soldOut ? 0 : p.stockQty)} aria-label="Add one">
                 +
               </button>
             </div>
           ) : (
-            <button className="bt-add" onClick={() => add(p.id)}>
+            <button className="bt-add" onClick={() => add(p.id, soldOut ? 0 : p.stockQty)}>
               ADD
             </button>
           )}

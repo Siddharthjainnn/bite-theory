@@ -54,7 +54,11 @@ export default function ProfileDrawer({
   const [copied, setCopied] = useState(false);
 
   const referralCode = user?.referralCode || user?.referral_code || '';
-  const userId = Number(user?.dbId || 0);
+  /* Bug #83 — "Unable to refer the code": the session exposes the DB id as
+     `user.id` (see lib/auth.ts session callback), but this read `user.dbId`
+     which is never set client-side → userId was ALWAYS 0, so submitting a
+     friend's code silently did nothing and referral history never loaded. */
+  const userId = Number(user?.dbId || user?.id || 0);
 
   /* real referral earnings */
   const [refs, setRefs] = useState<ReferralRow[]>([]);
@@ -71,7 +75,8 @@ export default function ProfileDrawer({
   const pendingRefs = refs.filter((r) => !r.isConverted).length;
 
   async function submitFriendCode() {
-    if (!friendCode.trim() || !userId) return;
+    if (!friendCode.trim()) { setClaimMsg({ ok: false, text: 'Enter your friend\u2019s code first' }); return; }
+    if (!userId) { setClaimMsg({ ok: false, text: 'Please sign in to use a referral code' }); return; }
     setClaiming(true); setClaimMsg(null);
     try {
       const r = await claimReferral(userId, friendCode.trim());

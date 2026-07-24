@@ -30,7 +30,7 @@ export interface ThaliCartItem {
 interface CartCtx {
   /* cart */
   cart: CartMap;
-  add: (id: number) => void;
+  add: (id: number, max?: number | null) => void;
   sub: (id: number) => void;
   remove: (id: number) => void;
   setQty: (id: number, qty: number) => void;
@@ -100,8 +100,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
      while still catching runaway input. The server enforces this too — the
      client cap is only for feedback. */
   const MAX_QTY = 20;
-  const add = (id: number) =>
-    setCart((c) => ({ ...c, [id]: Math.min((c[id] || 0) + 1, MAX_QTY) }));
+  /* Bugs #88/#89 — the cart happily accepted MORE than the stock the admin
+     set (and even out-of-stock items), so customers only found out at
+     checkout with a confusing popup. Callers that know the product now pass
+     its stock as `max`; 0 blocks the add entirely. The server still re-checks
+     at checkout — this is the friendly front line, not the enforcement. */
+  const add = (id: number, max?: number | null) =>
+    setCart((c) => {
+      const ceiling = Math.min(MAX_QTY, max == null ? MAX_QTY : Math.max(0, max));
+      const next = Math.min((c[id] || 0) + 1, ceiling);
+      if (next <= 0) { const n = { ...c }; delete n[id]; return n; }
+      return { ...c, [id]: next };
+    });
 
   const sub = (id: number) =>
     setCart((c) => {

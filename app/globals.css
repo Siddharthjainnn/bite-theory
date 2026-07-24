@@ -52,9 +52,15 @@ body {
 
 
 /* Today's Special: compact qty stepper (matches bt-qty, sized for the card) */
-.bt-sp-qty { margin-top: 2px; }
-.bt-sp-qty button { width: 26px; height: 26px; font-size: 16px; }
-.bt-sp-qty span { min-width: 20px; text-align: center; font-weight: 800; }
+/* Bug #86 — after tapping ADD, the qty stepper appeared with different
+   margins/width than the ADD button it replaced, so the count looked
+   shoved out of line. Match the ADD button's footprint exactly. */
+.bt-sp-qty { margin-top: 9px; width: 100%; justify-content: space-between;
+  padding: 7px 12px; box-sizing: border-box; border-radius: 11px; }
+.bt-sp-qty button { width: 26px; height: 26px; font-size: 16px;
+  display: grid; place-items: center; }
+.bt-sp-qty span { min-width: 20px; text-align: center; font-weight: 800;
+  line-height: 26px; }
 
 /* Cart: list header with a Clear action */
 .cart-listhead {

@@ -96,6 +96,31 @@ export default function RiderPage() {
   const [busy, setBusy] = useState(false);
   /* Bug #17: which order's customer-location map is open inline */
   const [mapFor, setMapFor] = useState<number | null>(null);
+
+  /* Bug #103 — with the UPI QR overlay open, the phone's Back button popped
+     the rider clean off /rider (landing on the customer/role screen). Opening
+     the QR now pushes one history entry; Back consumes it and just CLOSES the
+     overlay, keeping the rider on their dashboard. */
+  const qrTrapRef = useRef(false);
+  useEffect(() => {
+    if (qr && !qrTrapRef.current) {
+      qrTrapRef.current = true;
+      window.history.pushState({ btQrOpen: true }, '');
+    } else if (!qr && qrTrapRef.current) {
+      qrTrapRef.current = false;
+      if (window.history.state?.btQrOpen) window.history.back();
+    }
+  }, [qr]);
+  useEffect(() => {
+    const onPop = () => {
+      if (qrTrapRef.current) {
+        qrTrapRef.current = false;
+        setQr(null); setQrPaid(false);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const [mine, setMine] = useState<ApiOrder[]>([]);
   const [completed, setCompleted] = useState<ApiOrder[]>([]); // #13/#16 delivered history
   const [gpsOn, setGpsOn] = useState(false);

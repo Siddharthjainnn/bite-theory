@@ -246,7 +246,8 @@ export default function CartPage() {
                     −
                   </button>
                   <span>{qty}</span>
-                  <button onClick={() => add(p.id)} aria-label="Add one">
+                  {/* #88: + stops at the stock the admin set (server re-checks too) */}
+                  <button onClick={() => add(p.id, p.stockQty)} aria-label="Add one">
                     +
                   </button>
                 </div>
@@ -265,8 +266,18 @@ export default function CartPage() {
                 <span>{money(subtotal)}</span>
               </div>
               {savings > 0 && (
+                /* Bug #96 — QA read the savings scaling with quantity as a
+                   glitch. It's per-unit-offer × qty (correct maths); making
+                   the per-unit rate visible removes the confusion. */
                 <div className="bill-row free">
-                  <span>Item savings (offer prices)</span>
+                  <span>
+                    Item savings (offer prices
+                    {okLines.some((l) => hasOffer(l.p))
+                      ? ` — ${okLines.filter((l) => hasOffer(l.p))
+                          .map((l) => `₹${(l.p.price - l.p.offerPrice).toFixed(0)}/item`)
+                          .filter((v, i, a) => a.indexOf(v) === i).slice(0, 2).join(', ')}`
+                      : ''})
+                  </span>
                   <span>− {money(savings)}</span>
                 </div>
               )}

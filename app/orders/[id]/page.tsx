@@ -71,13 +71,21 @@ export default function OrderTrackPage() {
 
   /* cancel */
   const [cancelling, setCancelling] = useState(false);
-  async function handleCancel() {
+  /* Bug #99 — refund destination choice (original method vs wallet) */
+  const [refundChoice, setRefundChoice] = useState(false);
+  async function handleCancel(refundTo?: 'original' | 'wallet') {
     if (!order || !userId) return;
-    if (!confirm('Cancel this order? Any payment will be refunded automatically.')) return;
+    const paidOnline = (order as any).paymentMethod === 'online'
+      && (order as any).paymentStatus === 'paid';
+    /* #99: online-paid orders get a destination choice before we cancel */
+    if (paidOnline && !refundTo) { setRefundChoice(true); return; }
+    if (!paidOnline && !confirm('Cancel this order? Any payment will be refunded automatically.')) return;
+    setRefundChoice(false);
     setCancelling(true);
     try {
-      await cancelOrder(order.id, userId);
-      await load();
+      await cancelOrder(order.id, userId, refundTo);
+      const o = await fetchOrderTrack(order.id);
+      setOrder(o);
     } catch (e: any) {
       alert(e.message || 'Could not cancel the order');
     } finally {
@@ -439,7 +447,7 @@ export default function OrderTrackPage() {
             {/* ── CANCEL (only before cooking starts) ── */}
             {['order_received', 'order_confirmed'].includes(order.status) && userId && (
               <button
-                onClick={handleCancel}
+                onClick={() => handleCancel()}
                 disabled={cancelling}
                 style={{
                   width: '100%', background: '#fff', color: '#c0392b',
@@ -449,6 +457,63 @@ export default function OrderTrackPage() {
               >
                 {cancelling ? 'Cancelling…' : '✖ Cancel order (free until cooking starts)'}
               </button>
+            )}
+
+            {/* ── #99: refund destination sheet for online-paid cancels ── */}
+            {refundChoice && (
+              <div style={{
+                position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(4,22,15,.55)',
+                display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+              }} onClick={() => setRefundChoice(false)}>
+                <div style={{
+                  background: '#fff', borderRadius: '20px 20px 0 0', padding: '20px 18px 26px',
+                  width: '100%', maxWidth: 480,
+                }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: C.ink, marginBottom: 4 }}>
+                    Where should we send your refund?
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 14 }}>
+                    You paid ₹{Number(order.total).toFixed(0)} online. Choose a refund destination to cancel this order.
+                  </div>
+                  <button
+                    onClick={() => handleCancel('original')}
+                    disabled={cancelling}
+                    style={{
+                      width: '100%', background: '#fff', border: `1.5px solid ${C.green}`,
+                      color: C.greenDeep, borderRadius: 12, padding: '13px', fontWeight: 800,
+                      fontSize: 13.5, cursor: 'pointer', marginBottom: 10, textAlign: 'left',
+                    }}
+                  >
+                    🏦 Back to my original payment method
+                    <div style={{ fontWeight: 600, fontSize: 11.5, color: C.muted, marginTop: 3 }}>
+                      Reaches your bank/UPI in 5–7 working days
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => handleCancel('wallet')}
+                    disabled={cancelling}
+                    style={{
+                      width: '100%', background: C.greenSoft, border: `1.5px solid ${C.green}`,
+                      color: C.greenDeep, borderRadius: 12, padding: '13px', fontWeight: 800,
+                      fontSize: 13.5, cursor: 'pointer', marginBottom: 10, textAlign: 'left',
+                    }}
+                  >
+                    💳 Instant refund to my Bites Theory wallet
+                    <div style={{ fontWeight: 600, fontSize: 11.5, color: C.muted, marginTop: 3 }}>
+                      Credited immediately — spend it on your next order
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setRefundChoice(false)}
+                    style={{
+                      width: '100%', background: 'none', border: 'none', color: C.muted,
+                      fontWeight: 700, fontSize: 12.5, cursor: 'pointer', padding: 8,
+                    }}
+                  >
+                    Keep my order
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* ── RATE YOUR ORDER (after delivery) ── */}
@@ -625,11 +690,18 @@ export default function OrderTrackPage() {
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 15, color: C.ink, marginTop: 6 }}>
-                  {/* bug #21: exactly ONE payment status, from the payment method */}
+                  {/* bug #21 + #98: ONE payment label, and it must default to
+                      "To pay" — the old code fell through to "Paid" whenever
+                      paymentMethod was missing from the payload, so brand-new
+                      COD orders read "Paid" before a rupee changed hands. */}
                   <span>
-                    {order.paymentMethod === 'cod'
-                      ? (order.status === 'delivered' ? 'Paid (cash)' : 'To pay')
-                      : 'Paid'}
+                    {(() => {
+                      const st = (order as any).paymentStatus as string | undefined;
+                      if (st === 'paid') return order.paymentMethod === 'cod' ? 'Paid (cash)' : 'Paid';
+                      if (st === 'refunded') return 'Refunded';
+                      if (order.paymentMethod === 'online') return 'Paid';
+                      return order.status === 'delivered' ? 'Paid (cash)' : 'To pay';
+                    })()}
                   </span>
                   <span>{money(Number(order.total))}</span>
                 </div>

@@ -1224,7 +1224,26 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
 
   const newOrders = orders.filter((o) => o.status === 'order_received');
   const stuckReady = orders.filter((o) => o.status === 'food_ready');
-  const count = newOrders.length + stuckReady.length;
+
+  /* Bug #101 — the badge counted every order still needing action, so it sat
+     at "2" forever even after the admin had LOOKED at both alerts. Viewing the
+     panel now marks the current alerts seen (per order+status, kept in
+     sessionStorage) and the badge only counts UNSEEN ones. The list itself
+     still shows everything — only the red number clears. */
+  const [seenAlerts, setSeenAlerts] = useState<Record<string, true>>(() => {
+    try { return JSON.parse(sessionStorage.getItem('bt_admin_alerts_seen') || '{}'); }
+    catch { return {}; }
+  });
+  const alertKey = (o: { id: number; status: string }) => `${o.id}:${o.status}`;
+  useEffect(() => {
+    if (!open) return;
+    const next = { ...seenAlerts };
+    [...newOrders, ...stuckReady].forEach((o) => { next[alertKey(o)] = true; });
+    setSeenAlerts(next);
+    try { sessionStorage.setItem('bt_admin_alerts_seen', JSON.stringify(next)); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, orders]);
+  const count = [...newOrders, ...stuckReady].filter((o) => !seenAlerts[alertKey(o)]).length;
 
   return (
     <div style={{ position: 'relative' }}>
@@ -1441,7 +1460,20 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const setPage = useCallback((p: PageKey) => {
     if (!allowed.has(p)) return; // role can't access this section
     _setPage(p);
-    if (typeof window !== 'undefined') window.history.replaceState(null, '', `#${p}`);
+    /* Bug #91 — replaceState never created history entries, so the browser's
+       Back button jumped clean OUT of the admin console. pushState makes each
+       section a history step; the popstate listener below walks Back through
+       sections instead of exiting the app. */
+    if (typeof window !== 'undefined') window.history.pushState(null, '', `#${p}`);
+  }, [allowed]);
+  useEffect(() => {
+    const onPop = () => {
+      const fromHash = (window.location.hash.replace('#', '') || 'dashboard') as PageKey;
+      const valid = NAV.flatMap(g => g.items).some(i => i.key === fromHash);
+      _setPage(valid && allowed.has(fromHash) ? fromHash : 'dashboard');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, [allowed]);
   const [toast, setToast] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -1603,7 +1635,10 @@ function GenericModule({ config, showToast }: { config: ModuleConfig; showToast:
   const filtered = !search ? rows : rows.filter(r =>
     JSON.stringify(r).toLowerCase().includes(search.toLowerCase()));
 
+  const [savingRow, setSavingRow] = useState(false); // #85: visible busy state
   async function save(data: any) {
+    if (savingRow) return; // #85: block double-submits while the request runs
+    setSavingRow(true);
     // build body only from configured fields
     const body: any = {};
     for (const f of config.fields) {
@@ -1622,6 +1657,7 @@ function GenericModule({ config, showToast }: { config: ModuleConfig; showToast:
       showToast(data.id ? `${config.singular} updated` : `${config.singular} created`);
       load();
     } catch (e: any) { showToast(e.message || 'Save failed'); }
+    finally { setSavingRow(false); }
   }
   async function del(row: any) {
     try { await api.genericDelete(config.route, row.id); setConfirmDel(null); showToast(`${config.singular} deleted`); load(); }
@@ -4000,13 +4036,26 @@ function TodaysSpecial({ showToast }: { showToast: (m: string) => void }) {
                     <button style={{ ...btnGhost, padding: '6px 10px' }} onClick={() => setTagEdit(null)}>✕</button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setTagEdit({ id: p.id, value: p.specialTag || '' })}
-                    title="Edit the badge shown on the customer's card"
-                    style={{ ...btnGhost, padding: '6px 11px', fontSize: 11, whiteSpace: 'nowrap' }}
-                  >
-                    🏷️ {p.specialTag || "TODAY'S SPECIAL"}
-                  </button>
+                  /* Bug #102 — the badge text LOOKED like plain text but was
+                     secretly the edit trigger, so tapping it made it "editable"
+                     with no visible control. Now: read-only badge + a separate,
+                     clearly-labelled ✏️ edit button, aligned in one row. */
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 800, color: C.orange, background: C.orangeSoft,
+                      borderRadius: 8, padding: '5px 10px', letterSpacing: .3,
+                    }}>
+                      🏷️ {p.specialTag || "TODAY'S SPECIAL"}
+                    </span>
+                    <button
+                      onClick={() => setTagEdit({ id: p.id, value: p.specialTag || '' })}
+                      title="Edit the badge shown on the customer's card"
+                      aria-label="Edit badge text"
+                      style={{ ...btnGhost, padding: '5px 9px', fontSize: 12 }}
+                    >
+                      ✏️
+                    </button>
+                  </div>
                 )}
 
                 <button

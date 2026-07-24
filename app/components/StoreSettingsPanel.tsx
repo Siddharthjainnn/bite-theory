@@ -87,11 +87,22 @@ export default function StoreSettingsPanel({
     finally { setFlashBusy(false); }
   }
 
+  const [loadErr, setLoadErr] = useState('');
   async function load() {
-    const [a, b] = await Promise.all([
-      fetch(`${API_BASE}/settings`, { cache: 'no-store' }),
-      fetch(`${API_BASE}/settings/status`, { cache: 'no-store' }),
-    ]);
+    /* Bug #91 — a single failed fetch left this stuck on "Loading settings…"
+       forever with no error and no retry. Fail loudly, offer a Retry. */
+    setLoadErr('');
+    let a: Response, b: Response;
+    try {
+      [a, b] = await Promise.all([
+        fetch(`${API_BASE}/settings`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/settings/status`, { cache: 'no-store' }),
+      ]);
+    } catch {
+      setLoadErr('Could not reach the server. Check your connection and retry.');
+      return;
+    }
+    if (!a.ok) setLoadErr(`Settings failed to load (HTTP ${a.status}).`);
     if (a.ok) {
       const d = await a.json();
       setS({
@@ -137,7 +148,12 @@ export default function StoreSettingsPanel({
     if (!s) return;
     setSaving(true); setMsg('');
     try {
-      const body = { ...s, ...(patch || {}) };
+      const merged: any = { ...s, ...(patch || {}) };
+      // #97: coerce any field left empty back to a number before saving
+      for (const k of Object.keys(merged)) {
+        if (merged[k] === '') merged[k] = 0;
+      }
+      const body = merged;
       const r = await fetch(`${API_BASE}/settings`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...adminHeaders() },
@@ -154,10 +170,29 @@ export default function StoreSettingsPanel({
     }
   }
 
-  if (!s) return <div style={{ padding: 24, color: '#888' }}>Loading settings…</div>;
+  if (!s) {
+    return (
+      <div style={{ padding: 24, color: '#888' }}>
+        {loadErr ? (
+          <div>
+            <div style={{ color: '#c62828', fontWeight: 700, marginBottom: 10 }}>⚠️ {loadErr}</div>
+            <button onClick={() => load()} style={{
+              background: GREEN, color: '#fff', border: 'none', borderRadius: 10,
+              padding: '10px 18px', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+            }}>↻ Retry</button>
+          </div>
+        ) : 'Loading settings…'}
+      </div>
+    );
+  }
 
-  const num = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setS({ ...s, [k]: Number(e.target.value) || 0 });
+  /* Bug #97 — Number(value)||0 snapped the field back to 0 the instant it was
+     cleared, so admins could never wipe the default and type fresh digits.
+     An empty field now STAYS empty while editing; save() coerces '' → 0. */
+  const num = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setS({ ...s, [k]: (raw === '' ? '' : Number(raw)) as any });
+  };
 
   const setDay = (d: DayKey, patch: Partial<DayHours>) =>
     setS({
