@@ -10,7 +10,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { C, money, API_BASE, ApiOrder } from '../lib/bite';
 
-const PING_MS = 15000;
+/* Bugs #34/#36 — a 15s ping made the customer's rider marker crawl in big
+   jumps and often look "stuck". 5s keeps the map honest at trivial cost. */
+const PING_MS = 5000;
 const REFRESH_MS = 12000;
 const LS_RIDER = 'bt_rider_v1';
 
@@ -190,7 +192,7 @@ export default function RiderPage() {
         }).catch(() => { /* retry next ping */ });
       },
       () => setGpsOn(false),
-      { enableHighAccuracy: true, maximumAge: 5000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }, // #36: never a cached fix
     );
     return () => {
       if (watchId.current != null) {
@@ -464,9 +466,23 @@ export default function RiderPage() {
       )}
       {mine.map((o) => (
         <div key={o.id} style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <b style={{ fontSize: 14 }}>{o.orderNumber}</b>
-            <b style={{ color: C.greenDeep }}>{money(Number(o.total))}</b>
+            {/* Bug #61 — the rider was shown the ORDER VALUE even on prepaid /
+                free-delivery orders, which read like money to collect. Show
+                only what actually changes hands at the door. */}
+            {Number((o as any).cashToCollect ?? 0) > 0 ? (
+              <b style={{ color: C.greenDeep }}>
+                COLLECT {money(Number((o as any).cashToCollect))}
+              </b>
+            ) : (
+              <span style={{
+                fontSize: 11.5, fontWeight: 800, color: '#137a43', background: '#e7f7ee',
+                borderRadius: 12, padding: '3px 10px',
+              }}>
+                PAID ✓ — nothing to collect
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 10 }}>
             📍 {o.deliveryAddress || 'Address on order'}

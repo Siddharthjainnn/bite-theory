@@ -150,17 +150,22 @@ export default function ThaliAdminPanel({
               color: t.status === 'active' ? C.greenDeep : '#b3261e',
             }}>{t.status}</span>
             <span style={{ flex: 1 }} />
-            <button style={btnGhost} disabled={busy}
-              onClick={() => api('PATCH', `/thali-templates/${t.id}`, { status: t.status === 'active' ? 'inactive' : 'active' })}>
-              {t.status === 'active' ? 'Deactivate' : 'Activate'}
-            </button>
-            <button style={btnGhost} onClick={() => setOpen(open === t.id ? null : t.id)}>
-              {open === t.id ? 'Close ▲' : 'Sections ▼'}
-            </button>
-            <button style={btnDanger} disabled={busy}
-              onClick={() => { if (confirm(`Delete "${t.name}" poora?`)) api('DELETE', `/thali-templates/${t.id}`); }}>
-              Delete
-            </button>
+            {/* Bug #81 — the three actions wrapped independently at narrow
+                widths and landed scattered across two ragged lines. Group them
+                so they wrap as ONE aligned unit with equal sizing. */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button style={{ ...btnGhost, minWidth: 96, whiteSpace: 'nowrap' }} disabled={busy}
+                onClick={() => api('PATCH', `/thali-templates/${t.id}`, { status: t.status === 'active' ? 'inactive' : 'active' })}>
+                {t.status === 'active' ? 'Deactivate' : 'Activate'}
+              </button>
+              <button style={{ ...btnGhost, minWidth: 96, whiteSpace: 'nowrap' }} onClick={() => setOpen(open === t.id ? null : t.id)}>
+                {open === t.id ? 'Close ▲' : 'Sections ▼'}
+              </button>
+              <button style={{ ...btnDanger, minWidth: 72, whiteSpace: 'nowrap' }} disabled={busy}
+                onClick={() => { if (confirm(`Delete "${t.name}" poora?`)) api('DELETE', `/thali-templates/${t.id}`); }}>
+                Delete
+              </button>
+            </div>
           </div>
 
           {open === t.id && (

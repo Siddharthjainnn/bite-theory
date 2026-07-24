@@ -541,6 +541,10 @@ interface ModuleConfig {
   sub: string;
   fields: FieldDef[];
   titleKey?: string;       // which field is the "name" of a row (for delete confirm)
+  /* Bug #26 — some records are created by customers (support tickets) but
+     still need admin EDITS (status: open → resolved). noCreate hides only
+     the "+ Add" button; edit/delete stay. */
+  noCreate?: boolean;
   /* Bugs #31/#42 — some tables are system-generated (payments come from
      checkout/Razorpay, favorites come from customers tapping ♥). Admin should
      SEE them, never hand-create them. readOnly hides Add / Edit / Delete. */
@@ -742,7 +746,10 @@ const MODULES: Record<string, ModuleConfig> = {
   },
   support_tickets: {
     key: 'support_tickets', route: 'support-tickets', singular: 'Ticket', title: 'Support Tickets',
-    sub: 'Customer support requests and resolution status.', titleKey: 'subject',
+    /* Bug #26 — tickets are raised BY customers; the admin's job is to work
+       them (change status, reply), not to invent them. Add button removed. */
+    noCreate: true,
+    sub: 'Customer support requests — raised by customers in the app; update the status here as you resolve them.', titleKey: 'subject',
     fields: [
       { key: 'userId', label: 'Customer', type: 'lookup', lookup: 'users', inTable: true },
       { key: 'orderId', label: 'Order', type: 'lookup', lookup: 'orders' },
@@ -794,7 +801,11 @@ const MODULES: Record<string, ModuleConfig> = {
   },
   permissions: {
     key: 'permissions', route: 'permissions', singular: 'Permission', title: 'Permissions',
-    sub: 'What each role is allowed to access.', titleKey: 'name',
+    /* Bug #22 — QA asked "what shows here?": free-form permission NAMES you
+       define (e.g. refund_orders, edit_menu) for documentation. Actual access
+       control is role-based: each role's visible sections are defined in the
+       ROLE_SECTIONS map, and money actions require super_admin. */
+    sub: 'Named permissions for documenting role capabilities (e.g. refund_orders). Section access itself is controlled per-role — see Roles.', titleKey: 'name',
     fields: [
       { key: 'name', label: 'Name', type: 'text', inTable: true },
       { key: 'description', label: 'Description', type: 'textarea', inTable: true },
@@ -1669,7 +1680,7 @@ function GenericModule({ config, showToast }: { config: ModuleConfig; showToast:
   return (
     <>
       <PageHead title={config.title} sub={config.sub}
-        action={!isReadOnly ? <button style={btnPrimary} onClick={() => setEditing({})}>＋ Add {config.singular}</button> : undefined} />
+        action={!isReadOnly && !config.noCreate ? <button style={btnPrimary} onClick={() => setEditing({})}>＋ Add {config.singular}</button> : undefined} />
 
       <div style={{ marginBottom: 14, maxWidth: 320 }}>
         <input style={inputStyle} placeholder={`Search ${config.title.toLowerCase()}…`} value={search} onChange={e => setSearch(e.target.value)} />
@@ -1723,12 +1734,12 @@ function GenericModule({ config, showToast }: { config: ModuleConfig; showToast:
    Click-to-pick OR drag-drop. Uploads to /upload/:folder on the backend,
    shows a live preview, returns the saved URL. Works in BOTH add & edit
    (in edit, the existing url shows as a preview automatically).            */
-function ImageUpload({ folder, value, onChange, accept = 'image' }:
-  { folder: string; value?: string; onChange: (url: string) => void; accept?: 'image' | 'video' }) {
+function ImageUpload({ folder, value, onChange, accept = 'image', linkFirst = false }:
+  { folder: string; value?: string; onChange: (url: string) => void; accept?: 'image' | 'video'; linkFirst?: boolean }) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState('');
-  const [manual, setManual] = useState(false);
+  const [manual, setManual] = useState<boolean>(linkFirst || false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const acceptAttr = accept === 'video' ? 'video/*' : 'image/*';
@@ -2402,12 +2413,20 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: C.ink }}>
           🎬 Prep video (shown to the customer while cooking)
         </div>
+        {/* Bug #74 — the paste-a-link field was hidden behind a tiny toggle,
+            so admins thought links couldn't be added. It's open by default
+            here, with guidance on what kind of link actually plays. */}
         <ImageUpload
           folder="orders"
           accept="video"
           value={prepVideoUrl}
           onChange={setPrepVideoUrl}
+          linkFirst
         />
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
+          Upload an MP4/WebM clip, or paste a <b>direct video link</b> (ending in
+          .mp4/.webm). YouTube page links won&apos;t play in the customer app.
+        </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
           <button style={{ ...btnPrimary, opacity: savingVideo ? 0.6 : 1 }} disabled={savingVideo} onClick={savePrepVideo}>
             {savingVideo ? 'Saving…' : (full?.prepVideoUrl ? 'Update video' : 'Attach & notify customer')}
@@ -4410,6 +4429,44 @@ export default function AdminPage() {
   const [showPwd, setShowPwd] = useState(false); // bug #7: view-password toggle
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  /* Bug #4 — forgot-password: 'login' → 'forgot' (send code) → 'reset' */
+  const [mode, setMode] = useState<'login' | 'forgot' | 'reset'>('login');
+  const [resetCode, setResetCode] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [info, setInfo] = useState('');
+
+  async function sendResetCode() {
+    if (!email.trim()) { setErr('Enter your admin email first'); return; }
+    setBusy(true); setErr(''); setInfo('');
+    try {
+      const r = await fetch(`${API_BASE}/admin-users/forgot`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(data?.message || 'Could not send the reset code'); return; }
+      setInfo(data?.message || 'Check your inbox for the 6-digit code.');
+      setMode('reset');
+    } catch { setErr('Could not reach the server. Try again.'); }
+    finally { setBusy(false); }
+  }
+
+  async function submitReset() {
+    if (!/^\d{6}$/.test(resetCode.trim())) { setErr('Enter the 6-digit code from the email'); return; }
+    if (newPwd.length < 8) { setErr('New password must be at least 8 characters'); return; }
+    setBusy(true); setErr(''); setInfo('');
+    try {
+      const r = await fetch(`${API_BASE}/admin-users/reset`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), code: resetCode.trim(), password: newPwd }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(data?.message || 'Reset failed — check the code'); return; }
+      setInfo('Password updated ✓ Sign in with your new password.');
+      setMode('login'); setPassword(''); setResetCode(''); setNewPwd('');
+    } catch { setErr('Could not reach the server. Try again.'); }
+    finally { setBusy(false); }
+  }
 
   useEffect(() => {
     try {
@@ -4480,6 +4537,45 @@ export default function AdminPage() {
         <input style={{ ...inp, marginBottom: 14 }} type="email" value={email}
           onChange={(e) => setEmail(e.target.value)} placeholder="admin@bitetheory.com" autoComplete="username" />
 
+        {mode === 'forgot' && (
+          <>
+            <div style={{ fontSize: 12.5, color: C.muted, margin: '2px 0 12px' }}>
+              We&apos;ll email a 6-digit code to reset your password.
+            </div>
+            <button onClick={sendResetCode} disabled={busy}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 11, border: 'none', cursor: busy ? 'wait' : 'pointer', background: busy ? '#8fbf92' : C.green, color: '#fff', fontWeight: 800, fontSize: 14.5 }}>
+              {busy ? 'Sending…' : 'Email me a reset code'}
+            </button>
+            <button onClick={() => { setMode('login'); setErr(''); setInfo(''); }}
+              style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+              ← Back to sign in
+            </button>
+            {info && <div style={{ color: '#137a43', fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>✓ {info}</div>}
+            {err && <div style={{ color: C.red, fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>⚠️ {err}</div>}
+          </>
+        )}
+        {mode === 'reset' && (
+          <>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>6-digit code (from your email)</label>
+            <input style={{ ...inp, marginBottom: 12, letterSpacing: 6, fontWeight: 800 }} inputMode="numeric" maxLength={6}
+              value={resetCode} onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>New password (min 8 characters)</label>
+            <input style={{ ...inp, marginBottom: 12 }} type="password" autoComplete="new-password"
+              value={newPwd} onChange={(e) => setNewPwd(e.target.value)} placeholder="••••••••" />
+            <button onClick={submitReset} disabled={busy}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 11, border: 'none', cursor: busy ? 'wait' : 'pointer', background: busy ? '#8fbf92' : C.green, color: '#fff', fontWeight: 800, fontSize: 14.5 }}>
+              {busy ? 'Updating…' : 'Set new password'}
+            </button>
+            <button onClick={() => { setMode('login'); setErr(''); setInfo(''); }}
+              style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+              ← Back to sign in
+            </button>
+            {info && <div style={{ color: '#137a43', fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>✓ {info}</div>}
+            {err && <div style={{ color: C.red, fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>⚠️ {err}</div>}
+          </>
+        )}
+        {mode === 'login' && (<>
+        {info && <div style={{ color: '#137a43', fontSize: 12.5, fontWeight: 600, margin: '0 0 10px' }}>✓ {info}</div>}
         <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Password</label>
         {/* bug #7: there was no way to view the typed password — eye toggle added */}
         <div style={{ position: 'relative', marginBottom: 6 }}>
@@ -4504,6 +4600,12 @@ export default function AdminPage() {
           style={{ width: '100%', marginTop: 16, padding: '12px 14px', borderRadius: 11, border: 'none', cursor: busy ? 'wait' : 'pointer', background: busy ? '#8fbf92' : C.green, color: '#fff', fontWeight: 800, fontSize: 14.5, letterSpacing: 0.3 }}>
           {busy ? 'Signing in…' : 'Sign in →'}
         </button>
+        {/* Bug #4 — self-serve reset entry point */}
+        <button onClick={() => { setMode('forgot'); setErr(''); setInfo(''); }}
+          style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: C.darkGreen, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
+          Forgot password?
+        </button>
+        </>)}
 
         <div style={{ marginTop: 14, fontSize: 11, color: C.muted, textAlign: 'center' }}>
           Access is restricted to Bites Theory staff.
