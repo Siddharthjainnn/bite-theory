@@ -132,6 +132,13 @@ export default function OrderTrackPage() {
   const riderPos = useRef<google.maps.LatLng | null>(null);   // marker's current on-screen position
   const routePath = useRef<google.maps.LatLng[] | null>(null); // the drawn road route, to measure rider deviation
   const routeDest = useRef<string>('');                        // destination the current route was drawn to
+  /* Owner cost cap: the Directions request is the ONLY repeat-billable Google
+     call on this page. HARD ceiling of 3 per delivery — after the 3rd, the
+     marker keeps gliding along the last drawn route (or a straight line),
+     with ZERO further Google spend. 3 calls/delivery stays inside the free
+     tier at any realistic order volume. */
+  const routeCalls = useRef(0);
+  const MAX_ROUTE_CALLS = 3;
   const didFit = useRef<boolean>(false);                      // fit bounds only once
 
   const load = useCallback(async () => {
@@ -297,8 +304,20 @@ export default function OrderTrackPage() {
           if (minDist > 150) needsRoute = true;
         }
 
+        /* Enforce the hard cap: budget spent → never call Google again this
+           delivery. Keep the existing route for gliding; if none was ever
+           drawn, use a free straight line so the marker still moves. */
+        if (needsRoute && routeCalls.current >= MAX_ROUTE_CALLS) {
+          needsRoute = false;
+          routeDest.current = destKey;
+          if (!routePath.current) {
+            routePath.current = [target, new g.maps.LatLng(dest.lat, dest.lng)];
+          }
+        }
+
         if (needsRoute) {
           routeDest.current = destKey;
+          routeCalls.current += 1; // billable event #N of 3 — counted BEFORE the call
           if (!dirService.current) dirService.current = new g.maps.DirectionsService();
           dirService.current.route(
             {

@@ -10,9 +10,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { C, money, API_BASE, ApiOrder } from '../lib/bite';
 
-/* Bugs #34/#36 — a 15s ping made the customer's rider marker crawl in big
-   jumps and often look "stuck". 5s keeps the map honest at trivial cost. */
-const PING_MS = 5000;
+/* Owner decision (cost control): 15s pings — the original cadence, reverted
+   from 5s. Fewer requests; the customer map still glides the marker between
+   pings, and the billable Directions API is hard-capped separately. */
+const PING_MS = 15000;
 const REFRESH_MS = 12000;
 const LS_RIDER = 'bt_rider_v1';
 
@@ -192,7 +193,7 @@ export default function RiderPage() {
         }).catch(() => { /* retry next ping */ });
       },
       () => setGpsOn(false),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }, // #36: never a cached fix
+      { enableHighAccuracy: true, maximumAge: 5000 }, // original settings restored (owner: cost control)
     );
     return () => {
       if (watchId.current != null) {
