@@ -65,29 +65,38 @@ function cfgOrDefault(cfg?: Partial<InvoiceConfig> | null): InvoiceConfig {
 function baseStyles(cfg: InvoiceConfig): string {
   const isThermal = cfg.paper !== 'a4';
   const base = isThermal ? 12 : 13;
+  // Thermal heads print grey when given #333/#555 — force pure black and heavier
+  // weights so every line burns solid. On A4 keep the softer greys.
+  const ink      = isThermal ? '#000' : '#111';
+  const inkSoft  = isThermal ? '#000' : '#333';
+  const inkFaint = isThermal ? '#000' : '#555';
+  const ruleCol  = isThermal ? '#000' : '#999';
+  const bodyWeight = isThermal ? 600 : 400; // thicker default stroke on thermal
   return `
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     html,body { margin:0; padding:0; }
     body { font-family: ${isThermal ? "'Courier New', ui-monospace, monospace" : "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"};
-      font-size:${base}px; color:#111; line-height:1.4; }
+      font-size:${base}px; color:${ink}; font-weight:${bodyWeight}; line-height:1.4; }
     .doc { width:${contentWidth(cfg.paper)}; margin:0 auto; padding:${isThermal ? '6px 2px' : '18px'}; }
     .center { text-align:center; }
-    .brand { font-weight:800; font-size:${isThermal ? 16 : 22}px; letter-spacing:.5px; color:${esc(cfg.accentColor)}; }
-    .tagline { font-size:${base - 2}px; color:#555; margin-top:2px; }
-    .meta { font-size:${base - 1}px; color:#333; }
+    .brand { font-weight:800; font-size:${isThermal ? 18 : 22}px; letter-spacing:.5px; color:${isThermal ? '#000' : esc(cfg.accentColor)}; }
+    .tagline { font-size:${base - 2}px; color:${inkFaint}; margin-top:2px; }
+    .meta { font-size:${base - 1}px; color:${inkSoft}; font-weight:${isThermal ? 600 : 400}; }
     .logo { max-width:${isThermal ? '120px' : '160px'}; max-height:64px; object-fit:contain; margin:0 auto 4px; display:block; }
-    .rule { border:none; border-top:1px dashed #999; margin:8px 0; }
-    .rule-solid { border:none; border-top:2px solid ${esc(cfg.accentColor)}; margin:8px 0; }
+    .rule { border:none; border-top:1px dashed ${ruleCol}; margin:8px 0; }
+    .rule-solid { border:none; border-top:2px solid ${isThermal ? '#000' : esc(cfg.accentColor)}; margin:8px 0; }
     table { width:100%; border-collapse:collapse; }
     th,td { text-align:left; padding:${isThermal ? '2px 0' : '5px 4px'}; font-size:${base - 1}px; vertical-align:top; }
-    th { border-bottom:1px solid #000; font-weight:700; }
+    th { border-bottom:1px solid #000; font-weight:800; }
+    td { font-weight:${isThermal ? 600 : 400}; }
+    .item-name { font-weight:${isThermal ? 700 : 600}; }
     .num { text-align:right; white-space:nowrap; }
-    .totrow td { padding:2px 4px; }
-    .grand td { font-weight:800; font-size:${base + 2}px; border-top:2px solid #000; padding-top:5px; }
-    .note { background:#f4f4f4; border-left:3px solid ${esc(cfg.accentColor)}; padding:6px 8px; margin:6px 0; font-size:${base - 1}px; }
-    .footer { margin-top:10px; text-align:center; font-size:${base - 1}px; color:#333; }
-    .big-item { font-size:${isThermal ? 15 : 16}px; font-weight:800; }
-    .qtybox { display:inline-block; min-width:26px; padding:1px 6px; border:2px solid #000; font-weight:800; text-align:center; margin-right:8px; }
+    .totrow td { padding:2px 4px; font-weight:${isThermal ? 700 : 600}; }
+    .grand td { font-weight:900; font-size:${base + 3}px; border-top:2px solid #000; padding-top:5px; }
+    .note { background:${isThermal ? '#fff' : '#f4f4f4'}; border-left:3px solid #000; padding:6px 8px; margin:6px 0; font-size:${base - 1}px; font-weight:${isThermal ? 700 : 400}; }
+    .footer { margin-top:10px; text-align:center; font-size:${base - 1}px; color:${inkSoft}; }
+    .big-item { font-size:${isThermal ? 16 : 16}px; font-weight:900; }
+    .qtybox { display:inline-block; min-width:26px; padding:1px 6px; border:2px solid #000; font-weight:900; text-align:center; margin-right:8px; }
     @media print { @page { size:${paperWidth(cfg.paper)} auto; margin:${isThermal ? '2mm' : '12mm'}; } }
   `;
 }
@@ -142,7 +151,7 @@ export function customerInvoice(order: InvoiceOrder, rawCfg?: Partial<InvoiceCon
         ${cols.lineTotal ? '<th class="num">Amt</th>' : ''}
       </tr></thead><tbody>
       ${order.items.map((it) => `<tr>
-        <td>${esc(it.productName)}</td>
+        <td class="item-name">${esc(it.productName)}</td>
         ${cols.qty ? `<td class="num">${it.quantity}</td>` : ''}
         ${cols.unitPrice ? `<td class="num">${money(it.unitPrice)}</td>` : ''}
         ${cols.lineTotal ? `<td class="num">${money(it.lineTotal)}</td>` : ''}
@@ -221,6 +230,21 @@ export function printHtml(html: string) {
   };
   // give images/fonts a beat to load
   setTimeout(fire, 350);
+}
+
+/**
+ * Print the chef ticket AND the customer invoice for one order.
+ * They go as TWO separate print jobs so that a printer set to "Document[Cut]"
+ * cuts the paper between them — giving you one chef ticket and one bill,
+ * each cleanly cut. The gap lets the first job clear before the second fires.
+ */
+export function printBoth(
+  order: InvoiceOrder,
+  cfg?: Partial<InvoiceConfig> | null,
+  gapMs = 1500,
+) {
+  printHtml(chefTicket(order, cfg));
+  setTimeout(() => printHtml(customerInvoice(order, cfg)), gapMs);
 }
 
 /** Open the raw HTML in a new tab (useful for previewing the layout). */
