@@ -97,6 +97,11 @@ function baseStyles(cfg: InvoiceConfig): string {
     .footer { margin-top:10px; text-align:center; font-size:${base - 1}px; color:${inkSoft}; }
     .big-item { font-size:${isThermal ? 16 : 16}px; font-weight:900; }
     .qtybox { display:inline-block; min-width:26px; padding:1px 6px; border:2px solid #000; font-weight:900; text-align:center; margin-right:8px; }
+    .qrrow { display:flex; justify-content:space-around; gap:8px; margin:8px 0 4px; }
+    .qrcell { text-align:center; flex:1; }
+    .qrimg { display:flex; justify-content:center; }
+    .qrimg svg { width:${isThermal ? '96px' : '120px'}; height:auto; }
+    .qrcap { font-size:${base - 3}px; line-height:1.25; margin-top:2px; color:#000; }
     @media print { @page { size:${paperWidth(cfg.paper)} auto; margin:${isThermal ? '2mm' : '12mm'}; } }
   `;
 }
@@ -109,8 +114,15 @@ ${autoprint ? '<script>window.onload=function(){setTimeout(function(){window.pri
 </body></html>`;
 }
 
-/** Branded customer invoice / receipt. */
-export function customerInvoice(order: InvoiceOrder, rawCfg?: Partial<InvoiceConfig> | null, autoprint = false): string {
+/** Branded customer invoice / receipt.
+ *  `qr` carries pre-rendered SVG strings (QR encoding is async, so the caller
+ *  generates them via qrSvg() and passes them in — keeps this render sync). */
+export function customerInvoice(
+  order: InvoiceOrder,
+  rawCfg?: Partial<InvoiceConfig> | null,
+  autoprint = false,
+  qr?: { reorder?: string; insta?: string } | null,
+): string {
   const cfg = cfgOrDefault(rawCfg);
   const when = order.placedAt ? new Date(order.placedAt).toLocaleString('en-IN') : '';
   const cols = cfg.columns;
@@ -178,8 +190,17 @@ export function customerInvoice(order: InvoiceOrder, rawCfg?: Partial<InvoiceCon
     ${totalRow('TOTAL', money(order.total), 'grand')}
   </table>`;
 
+  const qrReorder = cfg.showReorderQr && qr?.reorder ? qr.reorder : '';
+  const qrInsta = cfg.showInstaQr && qr?.insta ? qr.insta : '';
+  const qrBlock = (qrReorder || qrInsta) ? `
+    <hr class="rule">
+    <div class="qrrow">
+      ${qrReorder ? `<div class="qrcell"><div class="qrimg">${qrReorder}</div><div class="qrcap"><b>Scan to order again</b><br>www.bitestheory.com</div></div>` : ''}
+      ${qrInsta ? `<div class="qrcell"><div class="qrimg">${qrInsta}</div><div class="qrcap"><b>Follow us</b><br>${esc(cfg.instagramHandle || '')}</div></div>` : ''}
+    </div>` : '';
+
   const footer = `
-    ${cfg.showQrNote ? `<div class="footer">Scan the QR on your tracking page to reorder.</div>` : ''}
+    ${qrBlock}
     ${cfg.footerNote ? `<div class="footer">${esc(cfg.footerNote)}</div>` : ''}
     ${cfg.thankYouNote ? `<div class="footer" style="font-weight:700;">${esc(cfg.thankYouNote)}</div>` : ''}`;
 

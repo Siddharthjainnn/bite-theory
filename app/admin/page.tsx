@@ -23,6 +23,7 @@ import {
 import {
   customerInvoice, chefTicket, printHtml, openHtmlPreview, InvoiceOrder,
 } from '../lib/invoice';
+import { qrSvg } from '../lib/qr';
 /* ============ types ============ */
 type Status = 'active' | 'inactive';
 
@@ -2157,7 +2158,10 @@ function Orders({ showToast }: { showToast: (m: string) => void }) {
         const list = await api.listOrders();
         if (!alive) return;
         setOrders(list);
-        const ready = list.filter((o) => o.status === 'food_ready');
+        // Print the chef ticket the moment the KITCHEN ACCEPTS the order
+        // (status → order_confirmed). This is the accept/confirm step, so the
+        // ticket lands as soon as the order is taken, not when it's already cooked.
+        const ready = list.filter((o) => o.status === 'order_confirmed');
 
         // first pass: remember, don't print the backlog
         if (!primedRef.current) {
@@ -2293,8 +2297,20 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
     };
   }
   function printChef() { printHtml(chefTicket(buildInvoiceOrder(), invoiceCfg)); }
-  function printCustomer() { printHtml(customerInvoice(buildInvoiceOrder(), invoiceCfg)); }
-  function previewCustomer() { openHtmlPreview(customerInvoice(buildInvoiceOrder(), invoiceCfg)); }
+  async function buildQrs() {
+    const cfg = invoiceCfg || undefined;
+    const reorder = cfg?.showReorderQr && cfg?.websiteUrl
+      ? await qrSvg(cfg.websiteUrl, { scale: 4 }) : '';
+    return { reorder, insta: '' };
+  }
+  async function printCustomer() {
+    const qr = await buildQrs();
+    printHtml(customerInvoice(buildInvoiceOrder(), invoiceCfg, false, qr));
+  }
+  async function previewCustomer() {
+    const qr = await buildQrs();
+    openHtmlPreview(customerInvoice(buildInvoiceOrder(), invoiceCfg, false, qr));
+  }
 
   const load = useCallback(async () => {
     setLoading(true);

@@ -507,6 +507,8 @@ export interface InvoiceConfig {
   headerNote: string; footerNote: string; thankYouNote: string;
   chefTicketTitle: string; chefShowNotes: boolean;
   autoPrintOnReady: boolean;
+  websiteUrl: string; showReorderQr: boolean;
+  instagramHandle: string; instagramUrl: string; showInstaQr: boolean;
 }
 
 export const DEFAULT_INVOICE_CONFIG: InvoiceConfig = {
@@ -518,6 +520,8 @@ export const DEFAULT_INVOICE_CONFIG: InvoiceConfig = {
   showTaxBreakup: true, showPaymentMethod: true, showQrNote: false,
   headerNote: '', footerNote: 'Thank you for ordering with us!', thankYouNote: 'See you again soon 🍱',
   chefTicketTitle: 'KITCHEN TICKET', chefShowNotes: true, autoPrintOnReady: false,
+  websiteUrl: 'https://www.bitestheory.com/', showReorderQr: true,
+  instagramHandle: '@bitestheoryofficial', instagramUrl: 'https://instagram.com/bitestheoryofficial', showInstaQr: false,
 };
 
 /** Public settings read — includes invoiceConfig once migration is applied. */
