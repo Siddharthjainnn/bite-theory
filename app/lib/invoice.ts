@@ -40,6 +40,23 @@ export interface InvoiceOrder {
 
 const money = (n: number) => '\u20B9' + Number(n || 0).toLocaleString('en-IN');
 
+/** Grab a clean first name from a full name for the personalized greeting. */
+function firstName(full?: string | null): string {
+  const n = String(full ?? '').trim().split(/\s+/)[0] || '';
+  if (!n) return '';
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+
+/** Pick a greeting template deterministically from the order number, so one bill
+ *  always shows the same line but different orders vary naturally. */
+function pickGreeting(templates: string[], seed: string): string {
+  const list = (templates || []).filter((t) => t && t.trim());
+  if (!list.length) return '';
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return list[h % list.length];
+}
+
 function esc(s: unknown): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -199,8 +216,15 @@ export function customerInvoice(
       ${qrInsta ? `<div class="qrcell"><div class="qrimg">${qrInsta}</div><div class="qrcap"><b>Follow us</b><br>${esc(cfg.instagramHandle || '')}</div></div>` : ''}
     </div>` : '';
 
+  const greetName = firstName(order.customerName);
+  const greetingLine = cfg.showPersonalGreeting && greetName
+    ? pickGreeting(cfg.personalGreetings, order.orderNumber || greetName).replace(/\{name\}/g, greetName)
+    : '';
+
   const footer = `
+    ${greetingLine ? `<hr class="rule"><div class="footer center" style="font-weight:800;font-size:13px;">${esc(greetingLine)}</div>` : ''}
     ${qrBlock}
+    ${cfg.showWhatsappLine && cfg.whatsappNumber ? `<div class="footer" style="font-weight:800;">📱 Order directly on WhatsApp: ${esc(cfg.whatsappNumber)}</div>` : ''}
     ${cfg.footerNote ? `<div class="footer">${esc(cfg.footerNote)}</div>` : ''}
     ${cfg.thankYouNote ? `<div class="footer" style="font-weight:700;">${esc(cfg.thankYouNote)}</div>` : ''}`;
 

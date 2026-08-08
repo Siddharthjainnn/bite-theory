@@ -171,8 +171,23 @@ export default function InvoiceLayoutPanel({ adminHeaders }: { adminHeaders: () 
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>✍️ Copy</div>
             <div style={{ marginBottom: 12 }}><label style={label}>Header note (top of bill)</label><input style={input} value={cfg.headerNote} onChange={(e) => set('headerNote', e.target.value)} placeholder="optional" /></div>
             <div style={{ marginBottom: 12 }}><label style={label}>Footer note</label><input style={input} value={cfg.footerNote} onChange={(e) => set('footerNote', e.target.value)} /></div>
+            <div style={{ marginBottom: 12 }}><label style={label}>WhatsApp ordering number</label><input style={input} value={cfg.whatsappNumber} onChange={(e) => set('whatsappNumber', e.target.value)} placeholder="+91 90000 00000" /></div>
+            <div style={{ marginBottom: 12 }}><Toggle checked={cfg.showWhatsappLine} onChange={(v) => set('showWhatsappLine', v)}>Show &quot;Order on WhatsApp&quot; line on bill</Toggle></div>
             <div><label style={label}>Thank-you line</label><input style={input} value={cfg.thankYouNote} onChange={(e) => set('thankYouNote', e.target.value)} /></div>
           </div>
+
+          <div style={box}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>💬 Personalized greeting</div>
+            <Toggle checked={cfg.showPersonalGreeting} onChange={(v) => set('showPersonalGreeting', v)}>Add a personal thank-you using the customer&apos;s name</Toggle>
+            <div style={{ fontSize: 11.5, color: C.muted, margin: '8px 0 6px', lineHeight: 1.5 }}>
+              One line per row. Use <b>{'{name}'}</b> where the customer&apos;s first name should appear. A line is picked automatically per order, so repeat customers see some variety.
+            </div>
+            <textarea
+              style={{ ...input, minHeight: 90, fontFamily: 'inherit', resize: 'vertical' }}
+              value={(cfg.personalGreetings || []).join('\n')}
+              onChange={(e) => set('personalGreetings', e.target.value.split('\n'))}
+              placeholder={'{name}, thank you for ordering and trusting us!'}
+            />
 
           <div style={box}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>👨‍🍳 Chef ticket</div>

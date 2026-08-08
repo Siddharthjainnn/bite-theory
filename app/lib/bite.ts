@@ -509,6 +509,12 @@ export interface InvoiceConfig {
   autoPrintOnReady: boolean;
   websiteUrl: string; showReorderQr: boolean;
   instagramHandle: string; instagramUrl: string; showInstaQr: boolean;
+  /* WhatsApp direct-ordering line printed on the customer bill */
+  whatsappNumber: string; showWhatsappLine: boolean;
+  /* personalized thank-you line — auto-fills the customer's first name.
+     {name} in each template is replaced at print time; a line is picked so
+     repeat customers don't always get the same wording. */
+  showPersonalGreeting: boolean; personalGreetings: string[];
 }
 
 export const DEFAULT_INVOICE_CONFIG: InvoiceConfig = {
@@ -522,6 +528,14 @@ export const DEFAULT_INVOICE_CONFIG: InvoiceConfig = {
   chefTicketTitle: 'KITCHEN TICKET', chefShowNotes: true, autoPrintOnReady: false,
   websiteUrl: 'https://www.bitestheory.com/', showReorderQr: true,
   instagramHandle: '@bitestheoryofficial', instagramUrl: 'https://instagram.com/bitestheoryofficial', showInstaQr: false,
+  whatsappNumber: '', showWhatsappLine: true,
+  showPersonalGreeting: true,
+  personalGreetings: [
+    '{name}, thank you for ordering and trusting us! 🙏',
+    'Thanks a ton, {name}! Hope you love every bite. 🍱',
+    '{name}, your order means the world to us. See you again soon!',
+    'Made with care for you, {name}. Thank you for choosing us! ❤️',
+  ],
 };
 
 /** Public settings read — includes invoiceConfig once migration is applied. */
