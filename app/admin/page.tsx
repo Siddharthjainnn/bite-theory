@@ -17,7 +17,7 @@ import StoreSettingsPanel from '../components/StoreSettingsPanel';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
 import ThaliAdminPanel from '../components/ThaliAdminPanel';
 import {
-  fetchStoreSettings, InvoiceConfig as InvoiceConfigT,
+  fetchStoreSettings, InvoiceConfig as InvoiceConfigT, DEFAULT_INVOICE_CONFIG,
   fetchCouponAssignments, assignCoupon, deleteCouponAssignment,
 } from '../lib/bite';
 import {
@@ -2297,19 +2297,23 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
     };
   }
   function printChef() { printHtml(chefTicket(buildInvoiceOrder(), invoiceCfg)); }
+  // Merge the saved (DB) config over the defaults. Older store-settings rows
+  // predate the QR fields, so reading invoiceCfg alone leaves websiteUrl /
+  // showReorderQr undefined and the QR never renders. Defaults fill the gaps.
+  const mergedCfg = (): InvoiceConfigT => ({ ...DEFAULT_INVOICE_CONFIG, ...(invoiceCfg || {}) });
   async function buildQrs() {
-    const cfg = invoiceCfg || undefined;
-    const reorder = cfg?.showReorderQr && cfg?.websiteUrl
+    const cfg = mergedCfg();
+    const reorder = cfg.showReorderQr && cfg.websiteUrl
       ? await qrSvg(cfg.websiteUrl, { scale: 4 }) : '';
     return { reorder, insta: '' };
   }
   async function printCustomer() {
     const qr = await buildQrs();
-    printHtml(customerInvoice(buildInvoiceOrder(), invoiceCfg, false, qr));
+    printHtml(customerInvoice(buildInvoiceOrder(), mergedCfg(), false, qr));
   }
   async function previewCustomer() {
     const qr = await buildQrs();
-    openHtmlPreview(customerInvoice(buildInvoiceOrder(), invoiceCfg, false, qr));
+    openHtmlPreview(customerInvoice(buildInvoiceOrder(), mergedCfg(), false, qr));
   }
 
   const load = useCallback(async () => {
