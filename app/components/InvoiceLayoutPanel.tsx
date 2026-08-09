@@ -188,6 +188,9 @@ export default function InvoiceLayoutPanel({ adminHeaders }: { adminHeaders: () 
               onChange={(e) => set('personalGreetings', e.target.value.split('\n'))}
               placeholder={'{name}, thank you for ordering and trusting us!'}
             />
+          </div>
+
+          
 
           <div style={box}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>👨‍🍳 Chef ticket</div>
