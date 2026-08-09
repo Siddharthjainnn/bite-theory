@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import NotificationBell from './NotificationBell';
 import { useMenu } from './MenuProvider';
@@ -65,6 +66,9 @@ export default function AppHeader({
 
   // #8: avatar opens the account menu, not the same drawer as the hamburger.
   const [acctOpen, setAcctOpen] = useState(false);
+  // portal needs the DOM present (Next.js SSR guard)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   function goAccount(href: string) {
     setAcctOpen(false);
     router.push(href);
@@ -187,7 +191,7 @@ export default function AppHeader({
               >
                 {avatarInitial}
               </button>
-              {acctOpen && (
+              {acctOpen && mounted && createPortal(
                 <>
                   <div className="bt-acct-scrim" onClick={() => setAcctOpen(false)} />
                   <div className="bt-acct-pop" role="menu">
@@ -196,7 +200,8 @@ export default function AppHeader({
                     <button role="menuitem" onClick={() => goAccount('/orders')}>🧾 My Orders</button>
                     <button role="menuitem" onClick={() => goAccount('/account/wallet')}>💳 Wallet</button>
                   </div>
-                </>
+                </>,
+                document.body
               )}
             </div>
           </div>
