@@ -201,7 +201,7 @@ export default function HomePage() {
         ? products
         : products.filter((p) => p.categoryId === activeCat);
     if (vegOnly) list = list.filter((p) => p.isVeg);
-    if (quick.has('under150')) list = list.filter((p) => (p.offerPrice || p.price) <= 150);
+    if (quick.has('under99')) list = list.filter((p) => (p.offerPrice || p.price) <= 99);
     if (quick.has('rating4')) list = list.filter((p) => p.rating >= 4);
     if (quick.has('offers')) list = list.filter((p) => p.offerPrice > 0 && p.offerPrice < p.price);
     if (quick.has('protein')) list = list.filter((p) => p.protein >= 15);
@@ -521,18 +521,20 @@ export default function HomePage() {
       {/* filters */}
       <section className="bt-filters">
         <button
-          className={`bt-vegtoggle ${vegOnly ? 'on' : ''}`}
-          onClick={() => setVegOnly((v) => !v)}
-          aria-pressed={vegOnly}
+          className="bt-vegtoggle on locked"
+          aria-pressed={true}
+          aria-disabled={true}
+          title="We're a 100% pure-veg kitchen"
+          onClick={() => {}}
         >
-          <span className="lbl">VEG</span>
+          <span className="lbl">PURE VEG</span>
           <span className="sw"><i /></span>
         </button>
 
         {/* quick filters (multi-select) */}
         {(
           [
-            ['under150', '💸 Under ₹150'],
+            ['under99', '💸 Under ₹99'],
             ['rating4', '⭐ Rating 4+'],
             ['offers', '🏷️ Offers'],
             ['protein', '💪 High Protein'],

@@ -82,6 +82,8 @@ export default function OfferStrip() {
   if (!liveOffers.length) return null;
 
   const rewardLine = (o: LiveOffer) => {
+    // Launch-combos card is a product promo, not a discount — show the price.
+    if (/₹?49/.test(o.title) && /combo/i.test(o.title)) return '@ ₹49';
     switch (o.offerType) {
       case 'free_item':
         return o.freeProductName ? `${o.freeProductName} FREE` : 'FREE ITEM';
@@ -92,6 +94,18 @@ export default function OfferStrip() {
       default:
         return `${money(Number(o.rewardValue))} OFF`;
     }
+  };
+
+  // Where each offer card navigates. Product ids match the DB:
+  // Paneer=1, Rajma=2, Chole=3, Fries+Coffee=4.
+  const offerHref = (o: LiveOffer) => {
+    const t = o.title.toLowerCase();
+    if (t.includes('paneer')) return '/product/1';
+    if (t.includes('rajma')) return '/product/2';
+    if (t.includes('chole')) return '/product/3';
+    if (t.includes('fries') || t.includes('coffee')) return '/product/4';
+    if (t.includes('combo')) return '/menu?cat=launch49'; // generic combos card → all combos
+    return '/menu';
   };
 
   return (
@@ -107,7 +121,7 @@ export default function OfferStrip() {
             key={o.id}
             className={`ofr-card ${o.exhausted ? 'ofr-card--used' : ''}`}
             style={{ ['--ofr-accent' as any]: o.accent || C.orange }}
-            onClick={() => router.push('/menu')}
+            onClick={() => router.push(offerHref(o))}
           >
             <span className="ofr-rays" aria-hidden />
             {o.badge && <span className="ofr-badge">{o.badge}</span>}

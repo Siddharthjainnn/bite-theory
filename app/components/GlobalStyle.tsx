@@ -214,6 +214,8 @@ a{text-decoration:none;color:inherit}
   background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .bt-vegtoggle.on .sw{background:var(--bt-green)}
 .bt-vegtoggle.on .sw i{left:17px}
+.bt-vegtoggle.locked{cursor:default;opacity:.95}
+.bt-vegtoggle.locked .sw{background:var(--bt-green)}
 
 /* ═══════════════ CATEGORIES (cream circles) ═══════════════ */
 .bt-cats{padding:0;max-width:100%;background:#fff}
@@ -924,6 +926,12 @@ a{text-decoration:none;color:inherit}
   radial-gradient(130% 160% at 85% -20%, #59c65e 0%, var(--bt-green) 38%, var(--bt-green-deep) 100%)}
 .pbd--dark{background:
   radial-gradient(130% 160% at 85% -20%, #1a5f47 0%, #124a37 40%, var(--bt-deep) 100%)}
+.pbd--launch{background:
+  radial-gradient(130% 160% at 85% -20%, #f7a73a 0%, #e8853c 30%, #0D3B2E 100%);
+  box-shadow:0 0 0 2px #EF9F27, 0 8px 26px rgba(239,159,39,.4);
+  animation:launchPulse 2.4s ease-in-out infinite}
+@keyframes launchPulse{0%,100%{box-shadow:0 0 0 2px #EF9F27,0 8px 26px rgba(239,159,39,.35)}
+  50%{box-shadow:0 0 0 3px #EF9F27,0 10px 32px rgba(239,159,39,.6)}}
 
 /* rotating starburst rays */
 .pbd-rays{position:absolute;inset:-40%;pointer-events:none;opacity:.5;
@@ -1193,7 +1201,7 @@ a{text-decoration:none;color:inherit}
   scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory}
 .ofr-row::-webkit-scrollbar{display:none}
 
-.ofr-card{position:relative;flex:0 0 268px;scroll-snap-align:start;
+.ofr-card{position:relative;flex:0 0 calc(100% - 28px);scroll-snap-align:center;
   border:none;cursor:pointer;text-align:left;overflow:hidden;
   border-radius:18px;padding:14px;min-height:132px;
   background:linear-gradient(135deg,var(--ofr-accent),#0d3b2e 145%);
@@ -1201,7 +1209,7 @@ a{text-decoration:none;color:inherit}
   transition:transform .2s}
 .ofr-card:active{transform:scale(.98)}
 .ofr-card--used{opacity:.55}
-@media(min-width:1024px){.ofr-card{flex:0 0 300px}}
+@media(min-width:1024px){.ofr-card{flex:0 0 calc(100% - 28px)}}
 
 /* comic-burst rays, same energy as the promo deck */
 .ofr-rays{position:absolute;inset:-40%;pointer-events:none;opacity:.4;

@@ -24,7 +24,25 @@ export default function PromoBannerDeck({
   const router = useRouter();
   const [idx, setIdx] = useState(0);
 
-  const slides = [
+  // Launch-combos slide leads the carousel through the promo window (Aug 12-26 2026),
+  // then drops off automatically.
+  const now = new Date();
+  const showLaunch =
+    now >= new Date('2026-08-12T00:00:00+05:30') &&
+    now <= new Date('2026-08-26T23:59:59+05:30');
+
+  const launchSlide = {
+    key: 'launch49',
+    cls: 'pbd--gold pbd--launch',
+    eyebrow: '🎉 GRAND OPENING · 12 AUG',
+    big: 'LAUNCH COMBOS @ ₹49',
+    sub: <>Paneer thali · Rajma rice · Chole rice · Fries + coffee — FREE delivery above ₹99</>,
+    cta: 'Grab ₹49 combos',
+    href: '/menu?cat=launch49',
+    art: '🍱',
+  };
+
+  const baseSlides = [
     coupon
       ? {
           key: 'coupon',
@@ -67,6 +85,8 @@ export default function PromoBannerDeck({
       art: '💪',
     },
   ];
+
+  const slides = showLaunch ? [launchSlide, ...baseSlides] : baseSlides;
 
   // auto-advance every 3.8s
   useEffect(() => {

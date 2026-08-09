@@ -4423,13 +4423,13 @@ function CategoryModal({ cat, nextSort, onClose, onSave }:
 /* ============ modal + form helpers ============ */
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, background: 'rgba(13,59,46,.45)', backdropFilter: 'blur(3px)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '30px 14px', overflowY: 'auto' }}>
-      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 580, boxShadow: '0 24px 60px rgba(13,59,46,.3)' }}>
-        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, background: 'rgba(13,59,46,.45)', backdropFilter: 'blur(3px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 14px' }}>
+      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 580, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(13,59,46,.3)' }}>
+        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <h3 style={{ fontSize: 16, margin: 0 }}>{title}</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.muted }}>×</button>
         </div>
-        <div style={{ padding: 20, maxHeight: '64vh', overflowY: 'auto' }}>{children}</div>
+        <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>{children}</div>
       </div>
     </div>
   );
