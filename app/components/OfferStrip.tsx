@@ -16,7 +16,7 @@
  * Offers vanish from the strip the instant they hit zero — no dead cards.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { C, LiveOffer, fetchOffers, money } from '../lib/bite';
 
@@ -66,6 +66,9 @@ export default function OfferStrip() {
   const router = useRouter();
   const [offers, setOffers] = useState<LiveOffer[]>([]);
   const [now, setNow] = useState(Date.now());
+  const rowRef = useRef<HTMLDivElement>(null);
+  const idxRef = useRef(0);
+  const pausedRef = useRef(false);
 
   useEffect(() => {
     fetchOffers().then(setOffers);
@@ -79,6 +82,39 @@ export default function OfferStrip() {
 
   // drop anything that has expired since the last fetch
   const liveOffers = offers.filter((o) => new Date(o.endsAt).getTime() > now);
+
+  /* Auto-advance the carousel every 1.8s, looping back to the first card.
+     Pauses briefly while the user is touching/scrolling so it doesn't fight them. */
+  useEffect(() => {
+    if (liveOffers.length <= 1) return;
+    const row = rowRef.current;
+    if (!row) return;
+
+    const onTouch = () => {
+      pausedRef.current = true;
+      // resume auto-scroll a few seconds after the user stops interacting
+      window.clearTimeout((onTouch as any)._t);
+      (onTouch as any)._t = window.setTimeout(() => { pausedRef.current = false; }, 4000);
+    };
+    row.addEventListener('touchstart', onTouch, { passive: true });
+    row.addEventListener('mousedown', onTouch);
+
+    const id = window.setInterval(() => {
+      if (pausedRef.current) return;
+      const cards = row.children;
+      if (!cards.length) return;
+      idxRef.current = (idxRef.current + 1) % cards.length;
+      const target = cards[idxRef.current] as HTMLElement;
+      row.scrollTo({ left: target.offsetLeft - row.offsetLeft, behavior: 'smooth' });
+    }, 1800);
+
+    return () => {
+      window.clearInterval(id);
+      row.removeEventListener('touchstart', onTouch);
+      row.removeEventListener('mousedown', onTouch);
+    };
+  }, [liveOffers.length]);
+
   if (!liveOffers.length) return null;
 
   const rewardLine = (o: LiveOffer) => {
@@ -115,7 +151,7 @@ export default function OfferStrip() {
         <span className="ofr-sub">Grab them before the clock runs out</span>
       </div>
 
-      <div className="ofr-row">
+      <div className="ofr-row" ref={rowRef}>
         {liveOffers.map((o) => (
           <button
             key={o.id}
