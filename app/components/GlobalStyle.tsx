@@ -350,10 +350,10 @@ a{text-decoration:none;color:inherit}
 .bt-section-h{font-size:15px;font-weight:900;margin:18px 14px 10px}
 
 /* ═══════════════ PRODUCT DETAIL ═══════════════ */
-.pd-hero{position:relative;width:100%;aspect-ratio:1/1;max-height:340px;
-  background:linear-gradient(160deg,#ffe0b2,#ffcc80);
+.pd-hero{position:relative;width:100%;aspect-ratio:1/1;
+  background:#ede1d1;
   display:flex;align-items:center;justify-content:center;overflow:hidden}
-.pd-hero img{width:100%;height:100%;object-fit:cover}
+.pd-hero img{width:100%;height:100%;object-fit:contain}
 .pd-hero .food-emoji{font-size:120px}
 .pd-hero-off{position:absolute;top:14px;left:14px;background:var(--bt-orange);color:#fff;
   font-size:12px;font-weight:900;padding:6px 13px;border-radius:10px;
@@ -612,7 +612,7 @@ a{text-decoration:none;color:inherit}
 .bt-chip--clear.on,.bt-chip--clear:active{background:#fdecec}
 
 /* ── Product detail: premium layer ── */
-.pd-hero{aspect-ratio:4/3;max-height:360px;
+.pd-hero{aspect-ratio:1/1;
   background:radial-gradient(130% 110% at 50% 8%, #fff 0%, ${C.greenSoft} 78%, #dff0e2 100%);
   box-shadow:inset 0 -30px 40px -30px rgba(13,59,46,.18)}
 .pd-hero .food-emoji{font-size:110px;filter:drop-shadow(0 8px 16px rgba(13,59,46,.18))}
