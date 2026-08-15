@@ -44,6 +44,7 @@ interface Order {
   subtotal: number; discount: number; deliveryCharge: number; tax: number;
   walletUsed: number; total: number; status: string; deliverySlot: string;
   deliveryPartnerId: number; placedAt: string; updatedAt: string;
+  customerName?: string | null; customerMobile?: string | null; deliveryAddress?: string | null;
 }
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
