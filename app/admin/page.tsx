@@ -2242,7 +2242,7 @@ function Orders({ showToast }: { showToast: (m: string) => void }) {
               : filtered.map(o => (
                 <tr key={o.id}>
                   <td style={td}><b>{o.orderNumber}</b></td>
-                  <td style={td}>User #{o.userId}</td>
+                  <td style={td}>{o.customerName || `User #${o.userId}`}{o.customerMobile ? <><br /><small style={{ color: C.muted }}>{o.customerMobile}</small></> : null}</td>
                   <td style={td}><b>{money(o.total)}</b></td>
                   <td style={td}>{orderStatusPill(o.status)}</td>
                   <td style={td}><small>{o.placedAt ? new Date(o.placedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</small></td>
@@ -2391,7 +2391,7 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
   return (
     <Modal title={`Order ${order.orderNumber}`} onClose={onClose}>
       <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-        <div><small style={{ color: C.muted }}>CUSTOMER</small><br /><b>User #{order.userId}</b></div>
+        <div><small style={{ color: C.muted }}>CUSTOMER</small><br /><b>{order.customerName || `User #${order.userId}`}</b>{order.customerMobile ? <> · {order.customerMobile}</> : null}</div>
         <div style={{ textAlign: 'right' }}><small style={{ color: C.muted }}>TOTAL</small><br /><b style={{ fontSize: 17 }}>{money(order.total)}</b></div>
       </div>
       {isCancelled && <div style={{ marginBottom: 14 }}>{orderStatusPill('cancelled')}</div>}
