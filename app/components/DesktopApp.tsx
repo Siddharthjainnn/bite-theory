@@ -41,7 +41,7 @@ export default function DesktopApp({
   const [q, setQ] = useState('');
 
   const shown = useMemo(() => {
-    let list = products.filter((p) => (p.stockStatus ?? 'in_stock') !== 'out_of_stock');
+    let list = products.slice();
     if (vegOnly) list = list.filter((p) => p.isVeg);
     if (activeCat !== 'all') list = list.filter((p) => p.categoryId === activeCat);
     if (q.trim()) {
@@ -52,6 +52,12 @@ export default function DesktopApp({
     if (sort === 'protein') arr.sort((a, b) => (b.protein || 0) - (a.protein || 0));
     else if (sort === 'lowcal') arr.sort((a, b) => (a.calories || 0) - (b.calories || 0));
     else if (sort === 'cheap') arr.sort((a, b) => effectivePrice(a) - effectivePrice(b));
+    // Sold-out items sink to the bottom of every list (still visible, just greyed).
+    arr.sort((a, b) => {
+      const aOut = (a.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
+      const bOut = (b.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
+      return aOut - bOut;
+    });
     return arr;
   }, [products, vegOnly, activeCat, q, sort]);
 

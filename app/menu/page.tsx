@@ -41,6 +41,14 @@ function MenuInner() {
       if (!map.has(p.categoryId)) map.set(p.categoryId, []);
       map.get(p.categoryId)!.push(p);
     }
+    // within each category, push sold-out items to the bottom (still shown, greyed)
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        const aOut = (a.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
+        const bOut = (b.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
+        return aOut - bOut;
+      });
+    }
     return map;
   }, [filtered, categories]);
 
