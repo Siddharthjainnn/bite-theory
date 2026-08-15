@@ -164,8 +164,7 @@ export function customerInvoice(
     ${cfg.showPaymentMethod && order.paymentMethod ? `<div class="meta"><b>Payment:</b> ${esc((order.paymentMethod || '').toUpperCase())}</div>` : ''}
     ${cfg.showCustomer && (order.customerName || order.deliveryAddress) ? `
       <hr class="rule">
-      ${order.customerName ? `<div class="meta"><b>${esc(order.customerName)}</b></div>` : ''}
-      ${order.customerMobile ? `<div class="meta">${esc(order.customerMobile)}</div>` : ''}
+      ${order.customerName ? `<div class="meta"><b>${esc(order.customerName)}</b>${order.customerMobile ? ` &nbsp;·&nbsp; ${esc(order.customerMobile)}` : ''}</div>` : (order.customerMobile ? `<div class="meta">${esc(order.customerMobile)}</div>` : '')}
       ${order.deliveryAddress ? `<div class="meta">${esc(order.deliveryAddress)}</div>` : ''}
     ` : ''}
     <hr class="rule">`;

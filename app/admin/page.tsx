@@ -17,7 +17,7 @@ import StoreSettingsPanel from '../components/StoreSettingsPanel';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
 import ThaliAdminPanel from '../components/ThaliAdminPanel';
 import {
-  fetchStoreSettings, InvoiceConfig as InvoiceConfigT, DEFAULT_INVOICE_CONFIG,
+  fetchStoreSettings, InvoiceConfig as InvoiceConfigT,
   fetchCouponAssignments, assignCoupon, deleteCouponAssignment,
 } from '../lib/bite';
 import {
@@ -1284,6 +1284,24 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
               {alertOrder.orderNumber} · <b style={{ color: C.ink }}>{money(Number(alertOrder.total))}</b>
             </div>
 
+            {(alertOrder.customerName || alertOrder.deliveryAddress) && (
+              <div style={{
+                marginTop: 12, background: C.bg, borderRadius: 12, padding: '10px 12px',
+                textAlign: 'left', fontSize: 12.5, color: C.ink, lineHeight: 1.5,
+                border: `1px solid ${C.line}`,
+              }}>
+                {alertOrder.customerName && (
+                  <div style={{ fontWeight: 800 }}>
+                    👤 {alertOrder.customerName}
+                    {alertOrder.customerMobile ? ` · ${alertOrder.customerMobile}` : ''}
+                  </div>
+                )}
+                {alertOrder.deliveryAddress && (
+                  <div style={{ marginTop: 4, color: C.muted }}>📍 {alertOrder.deliveryAddress}</div>
+                )}
+              </div>
+            )}
+
             {newOrders.length > 1 && (
               <div style={{
                 marginTop: 10, fontSize: 11.5, fontWeight: 800, color: '#8a5a00',
@@ -2297,23 +2315,19 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
     };
   }
   function printChef() { printHtml(chefTicket(buildInvoiceOrder(), invoiceCfg)); }
-  // Merge the saved (DB) config over the defaults. Older store-settings rows
-  // predate the QR fields, so reading invoiceCfg alone leaves websiteUrl /
-  // showReorderQr undefined and the QR never renders. Defaults fill the gaps.
-  const mergedCfg = (): InvoiceConfigT => ({ ...DEFAULT_INVOICE_CONFIG, ...(invoiceCfg || {}) });
   async function buildQrs() {
-    const cfg = mergedCfg();
-    const reorder = cfg.showReorderQr && cfg.websiteUrl
+    const cfg = invoiceCfg || undefined;
+    const reorder = cfg?.showReorderQr && cfg?.websiteUrl
       ? await qrSvg(cfg.websiteUrl, { scale: 4 }) : '';
     return { reorder, insta: '' };
   }
   async function printCustomer() {
     const qr = await buildQrs();
-    printHtml(customerInvoice(buildInvoiceOrder(), mergedCfg(), false, qr));
+    printHtml(customerInvoice(buildInvoiceOrder(), invoiceCfg, false, qr));
   }
   async function previewCustomer() {
     const qr = await buildQrs();
-    openHtmlPreview(customerInvoice(buildInvoiceOrder(), mergedCfg(), false, qr));
+    openHtmlPreview(customerInvoice(buildInvoiceOrder(), invoiceCfg, false, qr));
   }
 
   const load = useCallback(async () => {
