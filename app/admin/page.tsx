@@ -2309,6 +2309,7 @@ function OrderDetail({ order, onClose, onChanged, showToast }:
       total: Number(src.total),
       deliveryAddress: src.deliveryAddress,
       customerName: src.customerName || `User #${src.userId}`,
+      customerMobile: src.customerMobile,
       paymentMethod: src.paymentMethod,
       cookingNote: src.cookingNote,
       deliveryInstructions: src.deliveryInstructions,
