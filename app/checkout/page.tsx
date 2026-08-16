@@ -20,6 +20,7 @@ import { useCatalog } from '../lib/useCatalog';
 import {
   C, money, effectivePrice,
   SavedAddress, fetchAddresses, createAddress, validateCoupon, checkoutOrder, createPaymentOrder,
+  fetchDeliveryQuote, DeliveryQuote,
 } from '../lib/bite';
 import { openRazorpay } from '../lib/razorpay';
 import { useStoreSettings } from '../lib/useStoreSettings';
@@ -52,6 +53,8 @@ export default function CheckoutPage() {
   /* ── addresses ── */
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddr, setSelectedAddr] = useState<number | null>(null);
+  const [quote, setQuote] = useState<DeliveryQuote | null>(null);
+  const [quoting, setQuoting] = useState(false);
   const [addingNew, setAddingNew] = useState(false);
   const [picked, setPicked] = useState<PickedLocation | null>(null);
   const [newAddr, setNewAddr] = useState({ label: 'Home', fullAddress: '', landmark: '' });
@@ -73,6 +76,24 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (picked) setNewAddr((f) => ({ ...f, fullAddress: picked.address }));
   }, [picked]);
+
+  /* Live delivery quote — refetch whenever the address or cart value changes,
+     so the charge shown is exactly what the server will charge. */
+  useEffect(() => {
+    const hasDest = selectedAddr || (picked?.lat != null && picked?.lng != null);
+    if (!hasDest || subtotal === 0) { setQuote(null); return; }
+    let alive = true;
+    setQuoting(true);
+    fetchDeliveryQuote({
+      addressId: selectedAddr && !addingNew ? selectedAddr : undefined,
+      deliveryLat: addingNew ? picked?.lat : undefined,
+      deliveryLng: addingNew ? picked?.lng : undefined,
+      subtotal,
+    })
+      .then((q) => { if (alive) setQuote(q); })
+      .finally(() => { if (alive) setQuoting(false); });
+    return () => { alive = false; };
+  }, [selectedAddr, addingNew, picked?.lat, picked?.lng, subtotal]);
 
   async function saveNewAddress() {
     if (!userId) return;
@@ -143,9 +164,15 @@ export default function CheckoutPage() {
   const flashDeal = useFlashDeal();
   const flashOff = flashDeal ? Math.round(subtotal * Number(flashDeal.discountPct)) / 100 : 0;
   const discount = (coupon?.discount || 0) + flashOff;
-  const delivery =
-    subtotal - discount >= settings.freeDeliveryAbove || subtotal === 0
-      ? 0 : settings.deliveryCharge;
+
+  // Live delivery charge: prefer the server quote (real distance-based amount so
+  // the number never jumps at checkout). Fall back to flat rate only while the
+  // quote is loading or unavailable.
+  const netSubtotal = subtotal - discount;
+  const freeByCart = netSubtotal >= settings.freeDeliveryAbove || subtotal === 0;
+  const delivery = freeByCart
+    ? 0
+    : (quote ? quote.deliveryCharge : settings.deliveryCharge);
   const belowMin = subtotal > 0 && subtotal < settings.minOrderAmount;
   const aboveMax = settings.maxOrderAmount > 0 && subtotal > settings.maxOrderAmount;
   const beforeWallet = Math.max(0, subtotal - discount + delivery);
@@ -603,7 +630,12 @@ export default function CheckoutPage() {
                   ? [[`Coupon ${coupon.code}`, `− ${money(coupon.discount)}`]] : []),
                 ...(flashOff > 0
                   ? [[`Flash deal (${Number(flashDeal?.discountPct || 0)}% OFF)`, `− ${money(flashOff)}`]] : []),
-                ['Delivery fee', delivery === 0 ? 'FREE' : money(delivery)],
+                [
+                  quoting
+                    ? 'Delivery fee (calculating…)'
+                    : (quote?.distanceKm != null ? `Delivery fee (${quote.distanceKm} km)` : 'Delivery fee'),
+                  delivery === 0 ? 'FREE' : money(delivery),
+                ],
                 ...(tip > 0 ? [['Rider tip', money(tip)]] : []),
                 ...(walletUsed > 0 ? [['Wallet used', `− ${money(walletUsed)}`]] : []),
               ].map(([k, v]) => (
@@ -617,6 +649,18 @@ export default function CheckoutPage() {
               {delivery > 0 && (
                 <div style={{ fontSize: 11.5, color: C.orangeDeep, marginTop: 6 }}>
                   Add {money(settings.freeDeliveryAbove - (subtotal - discount))} more for FREE delivery
+                </div>
+              )}
+              {quote && quote.deliverable && (
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>
+                  📍 {quote.zone}{quote.etaMinutes ? ` · approx ${quote.etaMinutes} min` : ''}
+                </div>
+              )}
+              {quote && !quote.deliverable && (
+                <div style={{ fontSize: 12, color: '#C0392B', marginTop: 8, fontWeight: 700 }}>
+                  {quote.reason === 'out_of_range'
+                    ? '⚠️ This address is outside our delivery area.'
+                    : '⚠️ Please drop a pin on the map so we can calculate delivery.'}
                 </div>
               )}
             </div>

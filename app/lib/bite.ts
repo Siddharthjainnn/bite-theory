@@ -265,6 +265,33 @@ export async function fetchOrderTrack(orderId: number | string): Promise<ApiOrde
     { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
+export interface DeliveryQuote {
+  deliveryCharge: number;
+  distanceKm: number | null;
+  etaMinutes: number;
+  zone: string;
+  pincode: string | null;
+  freeAbove: number;
+  deliverable: boolean;
+  reason: 'ok' | 'no_pin' | 'out_of_range';
+}
+
+export async function fetchDeliveryQuote(args: {
+  addressId?: number; deliveryLat?: number; deliveryLng?: number; subtotal: number;
+}): Promise<DeliveryQuote | null> {
+  try {
+    const res = await fetch(`${API_BASE}/orders/delivery-quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchAddresses(userId: number): Promise<SavedAddress[]> {
   const res = await fetch(`${API_BASE}/addresses?userId=${userId}`, { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);

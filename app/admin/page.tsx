@@ -44,7 +44,7 @@ interface Order {
   subtotal: number; discount: number; deliveryCharge: number; tax: number;
   walletUsed: number; total: number; status: string; deliverySlot: string;
   deliveryPartnerId: number; placedAt: string; updatedAt: string;
-  customerName?: string | null; customerMobile?: string | null; deliveryAddress?: string | null;
+  customerName?: string | null; customerMobile?: string | null; deliveryAddress?: string | null; zone?: string | null;
 }
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
@@ -1300,6 +1300,9 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
                 {alertOrder.deliveryAddress && (
                   <div style={{ marginTop: 4, color: C.muted }}>📍 {alertOrder.deliveryAddress}</div>
                 )}
+                {alertOrder.zone && (
+                  <div style={{ marginTop: 4, fontWeight: 800, color: C.darkGreen }}>🗺️ Zone: {alertOrder.zone}</div>
+                )}
               </div>
             )}
 
@@ -2236,7 +2239,7 @@ function Orders({ showToast }: { showToast: (m: string) => void }) {
       </div>
       <div style={{ ...cardStyle, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 600 }}>
-          <thead><tr><th style={th}>Order #</th><th style={th}>Customer</th><th style={th}>Total</th><th style={th}>Status</th><th style={th}>Placed</th><th style={th}></th></tr></thead>
+          <thead><tr><th style={th}>Order #</th><th style={th}>Customer</th><th style={th}>Zone</th><th style={th}>Total</th><th style={th}>Status</th><th style={th}>Placed</th><th style={th}></th></tr></thead>
           <tbody>
             {loading ? <tr><td style={td} colSpan={7}>Loading…</td></tr>
               : filtered.length === 0 ? <tr><td style={{ ...td, textAlign: 'center', padding: 50, color: C.muted }} colSpan={6}>No orders yet. Orders placed by customers will appear here.</td></tr>
@@ -2244,6 +2247,7 @@ function Orders({ showToast }: { showToast: (m: string) => void }) {
                 <tr key={o.id}>
                   <td style={td}><b>{o.orderNumber}</b></td>
                   <td style={td}>{o.customerName || `User #${o.userId}`}{o.customerMobile ? <><br /><small style={{ color: C.muted }}>{o.customerMobile}</small></> : null}</td>
+                  <td style={td}><span style={{ fontSize: 12, fontWeight: 700, color: C.darkGreen }}>{o.zone || '—'}</span></td>
                   <td style={td}><b>{money(o.total)}</b></td>
                   <td style={td}>{orderStatusPill(o.status)}</td>
                   <td style={td}><small>{o.placedAt ? new Date(o.placedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</small></td>
