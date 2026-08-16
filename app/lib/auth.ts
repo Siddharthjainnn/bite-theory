@@ -109,6 +109,9 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      // Always show the account chooser so a shared/previous Google session
+      // can never silently sign a new person in as the wrong user.
+      authorization: { params: { prompt: 'select_account' } },
     }),
   ],
   session: { strategy: 'jwt' },
