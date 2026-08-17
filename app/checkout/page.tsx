@@ -169,7 +169,10 @@ export default function CheckoutPage() {
   // the number never jumps at checkout). Fall back to flat rate only while the
   // quote is loading or unavailable.
   const netSubtotal = subtotal - discount;
-  const freeByCart = netSubtotal >= settings.freeDeliveryAbove || subtotal === 0;
+  // Use the distance-based free threshold from the live quote when we have it,
+  // so the "free delivery" logic matches the backend's per-distance tiers.
+  const freeThreshold = quote?.freeAbove ?? settings.freeDeliveryAbove;
+  const freeByCart = netSubtotal >= freeThreshold || subtotal === 0;
   const delivery = freeByCart
     ? 0
     : (quote ? quote.deliveryCharge : settings.deliveryCharge);
@@ -648,7 +651,7 @@ export default function CheckoutPage() {
               </div>
               {delivery > 0 && (
                 <div style={{ fontSize: 11.5, color: C.orangeDeep, marginTop: 6 }}>
-                  Add {money(settings.freeDeliveryAbove - (subtotal - discount))} more for FREE delivery
+                  Add {money(freeThreshold - (subtotal - discount))} more for FREE delivery
                 </div>
               )}
               {quote && quote.deliverable && (
