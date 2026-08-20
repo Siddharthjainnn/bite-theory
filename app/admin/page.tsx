@@ -834,6 +834,7 @@ const NAV: NavGroup[] = [
   { title: 'Orders', items: [
     { key: 'orders', label: 'Orders', icon: '🧾' },
     { key: 'order_items', label: 'Order Items', icon: '🍽️' },
+    { key: 'pos', label: 'Counter / POS', icon: '🛒' },
   ]},
   { title: 'Catalog', items: [
     { key: 'products', label: 'Products', icon: '🍱' },
@@ -1555,7 +1556,10 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             <div key={group.title} style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6f9484', margin: '14px 10px 5px', fontWeight: 700 }}>{group.title}</div>
               {group.items.map(item => (
-                <div key={item.key} onClick={() => { setPage(item.key); setDrawerOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 9, cursor: 'pointer', marginBottom: 1, fontWeight: 500, fontSize: 13.5, background: page === item.key ? C.green : 'transparent', color: page === item.key ? '#fff' : '#cfe3d8' }}>
+                <div key={item.key} onClick={() => {
+                  if (item.key === 'pos') { window.location.href = '/admin/pos'; return; }
+                  setPage(item.key); setDrawerOpen(false);
+                }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 9, cursor: 'pointer', marginBottom: 1, fontWeight: 500, fontSize: 13.5, background: page === item.key ? C.green : 'transparent', color: page === item.key ? '#fff' : '#cfe3d8' }}>
                   <span style={{ width: 17, textAlign: 'center', fontSize: 14 }}>{item.icon}</span>{item.label}
                 </div>
               ))}
