@@ -1516,7 +1516,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1556,10 +1556,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             <div key={group.title} style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6f9484', margin: '14px 10px 5px', fontWeight: 700 }}>{group.title}</div>
               {group.items.map(item => (
-                <div key={item.key} onClick={() => {
-                  if (item.key === 'pos') { window.location.href = '/admin/pos'; return; }
-                  setPage(item.key); setDrawerOpen(false);
-                }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 9, cursor: 'pointer', marginBottom: 1, fontWeight: 500, fontSize: 13.5, background: page === item.key ? C.green : 'transparent', color: page === item.key ? '#fff' : '#cfe3d8' }}>
+                <div key={item.key} onClick={() => { setPage(item.key); setDrawerOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 9, cursor: 'pointer', marginBottom: 1, fontWeight: 500, fontSize: 13.5, background: page === item.key ? C.green : 'transparent', color: page === item.key ? '#fff' : '#cfe3d8' }}>
                   <span style={{ width: 17, textAlign: 'center', fontSize: 14 }}>{item.icon}</span>{item.label}
                 </div>
               ))}
@@ -1592,6 +1589,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'campaigns_new' && <Campaigns showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
             {effectivePage === 'orders' && <Orders showToast={showToast} />}
+            {effectivePage === 'pos' && <PosCounter showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
             {effectivePage === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
@@ -2637,7 +2635,190 @@ function CouponAssignments({ showToast }: { showToast: (m: string) => void }) {
 }
 
 /* ============ ORDER ITEMS (live) ============ */
+/* ============ COUNTER / POS ============
+   Native admin section: staff picks items, enters the customer's phone (name
+   auto-fills for existing customers), then generates + prints the invoice.
+   Saved as a real order so it shows in reports. Payment taken at counter. */
+function PosCounter({ showToast }: { showToast: (m: string) => void }) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cats, setCats] = useState<{ id: number; name: string }[]>([]);
+  const [q, setQ] = useState('');
+  const [activeCat, setActiveCat] = useState<number | 'all'>('all');
+  const [cart, setCart] = useState<Record<number, { product: Product; qty: number }>>({});
+  const [mobile, setMobile] = useState('');
+  const [name, setName] = useState('');
+  const [lookup, setLookup] = useState<'idle' | 'looking' | 'found' | 'new'>('idle');
+  const [payMethod, setPayMethod] = useState<'cash' | 'upi'>('cash');
+  const [invoiceCfg, setInvoiceCfg] = useState<any>(null);
+  const [placing, setPlacing] = useState(false);
+
+  const priceOf = (p: Product) =>
+    p.offerPrice && Number(p.offerPrice) > 0 && Number(p.offerPrice) < Number(p.price)
+      ? Number(p.offerPrice) : Number(p.price);
+
+  useEffect(() => {
+    Promise.all([api.listProducts(), api.listCategories().catch(() => [])])
+      .then(([p, c]: any) => {
+        setProducts((p || []).filter((x: Product) => x.status === 'active'));
+        setCats((c || []).map((x: any) => ({ id: x.id, name: x.name })));
+      })
+      .catch((e: any) => showToast(e.message || 'Load failed'));
+    fetchStoreSettings().then((s: any) => setInvoiceCfg(s?.invoiceConfig || null)).catch(() => {});
+  }, [showToast]);
+
+  useEffect(() => {
+    const m = mobile.replace(/\D/g, '');
+    if (m.length !== 10) { setLookup('idle'); return; }
+    let alive = true; setLookup('looking');
+    fetch(`${API_BASE}/orders/pos/customer/${m}`, { headers: ADMIN_KEY_HEADER() })
+      .then((r) => r.json())
+      .then((d) => { if (!alive) return; if (d?.found) { setName(d.name || ''); setLookup('found'); } else setLookup('new'); })
+      .catch(() => { if (alive) setLookup('new'); });
+    return () => { alive = false; };
+  }, [mobile]);
+
+  const shown = useMemo(() => {
+    let list = products;
+    if (activeCat !== 'all') list = list.filter((p) => p.categoryId === activeCat);
+    const t = q.trim().toLowerCase();
+    if (t) list = list.filter((p) => p.name.toLowerCase().includes(t));
+    return list;
+  }, [products, q, activeCat]);
+
+  const lines = Object.values(cart);
+  const subtotal = lines.reduce((s, l) => s + priceOf(l.product) * l.qty, 0);
+  const count = lines.reduce((s, l) => s + l.qty, 0);
+
+  const add = (p: Product) => setCart((c) => ({ ...c, [p.id]: { product: p, qty: (c[p.id]?.qty || 0) + 1 } }));
+  const setQty = (id: number, qty: number) => setCart((c) => {
+    if (qty <= 0) { const n = { ...c }; delete n[id]; return n; }
+    return { ...c, [id]: { ...c[id], qty } };
+  });
+
+  async function generate() {
+    const m = mobile.replace(/\D/g, '');
+    if (m.length !== 10) { showToast('Enter a valid 10-digit mobile'); return; }
+    if (!lines.length) { showToast('Add at least one item'); return; }
+    setPlacing(true);
+    try {
+      const res = await fetch(`${API_BASE}/orders/pos/order`, {
+        method: 'POST', headers: ADMIN_KEY_HEADER(),
+        body: JSON.stringify({
+          items: lines.map((l) => ({ productId: l.product.id, quantity: l.qty })),
+          mobile: m, customerName: name.trim() || undefined, paymentMethod: payMethod,
+        }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.message || 'Failed'); }
+      const order = await res.json();
+      const inv: InvoiceOrder = {
+        orderNumber: order.orderNumber, placedAt: order.placedAt || new Date().toISOString(),
+        items: order.items, subtotal: order.subtotal, discount: 0, deliveryCharge: 0,
+        total: order.total, customerName: order.customerName, customerMobile: order.customerMobile,
+        paymentMethod: order.paymentMethod, status: 'order_received',
+      } as InvoiceOrder;
+      if (invoiceCfg) printHtml(customerInvoice(inv, invoiceCfg));
+      showToast(`Order ${order.orderNumber} created & printed`);
+      setCart({}); setMobile(''); setName(''); setLookup('idle');
+    } catch (e: any) { showToast(e?.message || 'Something went wrong'); }
+    finally { setPlacing(false); }
+  }
+
+  const chip = (active: boolean): React.CSSProperties => ({
+    padding: '6px 13px', borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+    border: `1px solid ${active ? C.green : C.line}`, background: active ? C.green : '#fff', color: active ? '#fff' : C.ink,
+  });
+  const qtyBtn: React.CSSProperties = { width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', fontWeight: 800, color: C.darkGreen, fontSize: 15 };
+
+  return (
+    <>
+      <PageHead title="Counter / POS" sub="Walk-in orders — pick items, add customer, print invoice." />
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(320px,1fr)', gap: 16, alignItems: 'start' }}>
+        {/* LEFT: products */}
+        <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.line}` }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Search items…"
+            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
+          <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 10, marginBottom: 4 }}>
+            <div style={chip(activeCat === 'all')} onClick={() => setActiveCat('all')}>All</div>
+            {cats.map((c) => <div key={c.id} style={chip(activeCat === c.id)} onClick={() => setActiveCat(c.id)}>{c.name}</div>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10, maxHeight: '62vh', overflowY: 'auto', paddingTop: 6 }}>
+            {shown.map((p) => {
+              const inCart = cart[p.id]?.qty || 0;
+              return (
+                <button key={p.id} onClick={() => add(p)}
+                  style={{ position: 'relative', textAlign: 'left', padding: '12px 12px', borderRadius: 13, cursor: 'pointer',
+                    border: `1.5px solid ${inCart ? C.green : C.line}`, background: inCart ? C.greenSoft : '#fff', transition: 'all .12s' }}>
+                  <div style={{ fontWeight: 700, color: C.ink, fontSize: 13.5, marginBottom: 6, lineHeight: 1.3 }}>{p.name}</div>
+                  <div style={{ color: C.green, fontWeight: 800, fontSize: 15 }}>{money(priceOf(p))}</div>
+                  {inCart > 0 && <div style={{ position: 'absolute', top: 8, right: 8, background: C.green, color: '#fff', borderRadius: 999, minWidth: 20, height: 20, fontSize: 12, fontWeight: 800, display: 'grid', placeItems: 'center', padding: '0 5px' }}>{inCart}</div>}
+                </button>
+              );
+            })}
+            {!shown.length && <div style={{ color: C.muted, padding: 20, gridColumn: '1/-1', textAlign: 'center' }}>No items found.</div>}
+          </div>
+        </div>
+
+        {/* RIGHT: bill */}
+        <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.line}`, position: 'sticky', top: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <b style={{ fontSize: 16, color: C.darkGreen }}>🧾 Bill</b>
+            {count > 0 && <span style={{ fontSize: 12.5, color: C.muted }}>{count} item{count > 1 ? 's' : ''}</span>}
+          </div>
+
+          {!lines.length && <div style={{ color: C.muted, fontSize: 13.5, padding: '20px 0', textAlign: 'center', background: C.bg, borderRadius: 11, marginBottom: 14 }}>Tap items on the left to add them.</div>}
+
+          {lines.length > 0 && (
+            <div style={{ display: 'grid', gap: 9, marginBottom: 14, maxHeight: '34vh', overflowY: 'auto' }}>
+              {lines.map((l) => (
+                <div key={l.product.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1, fontSize: 13.5, color: C.ink, fontWeight: 500 }}>{l.product.name}</span>
+                  <button onClick={() => setQty(l.product.id, l.qty - 1)} style={qtyBtn}>−</button>
+                  <span style={{ width: 24, textAlign: 'center', fontWeight: 800 }}>{l.qty}</span>
+                  <button onClick={() => setQty(l.product.id, l.qty + 1)} style={qtyBtn}>+</button>
+                  <span style={{ width: 56, textAlign: 'right', fontWeight: 700, color: C.ink, fontSize: 13.5 }}>{money(priceOf(l.product) * l.qty)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ borderTop: `1px dashed ${C.line}`, paddingTop: 12, marginBottom: 14, display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 20, color: C.darkGreen }}>
+            <span>Total</span><span>{money(subtotal)}</span>
+          </div>
+
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <input value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="Customer mobile (10-digit)" inputMode="numeric"
+              style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${lookup === 'found' ? C.green : C.line}`, fontSize: 14, boxSizing: 'border-box' }} />
+            {lookup === 'looking' && <span style={{ position: 'absolute', right: 12, top: 12, fontSize: 12, color: C.muted }}>…</span>}
+            {lookup === 'found' && <span style={{ position: 'absolute', right: 12, top: 11, fontSize: 12, color: C.green, fontWeight: 700 }}>✓ found</span>}
+          </div>
+          {lookup === 'new' && <div style={{ fontSize: 12, color: C.orange, marginBottom: 8, fontWeight: 600 }}>New customer — enter name below</div>}
+
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Customer name"
+            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            {(['cash', 'upi'] as const).map((m) => (
+              <button key={m} onClick={() => setPayMethod(m)}
+                style={{ flex: 1, padding: '10px 0', borderRadius: 11, fontWeight: 700, cursor: 'pointer', fontSize: 13.5,
+                  border: `1.5px solid ${payMethod === m ? C.green : C.line}`, background: payMethod === m ? C.greenSoft : '#fff', color: payMethod === m ? C.darkGreen : C.ink }}>
+                {m === 'cash' ? '💵 Cash' : '📱 UPI'}
+              </button>
+            ))}
+          </div>
+
+          <button onClick={generate} disabled={placing || !lines.length}
+            style={{ width: '100%', padding: '14px 0', borderRadius: 13, border: 'none', fontWeight: 800, fontSize: 15.5, cursor: placing || !lines.length ? 'not-allowed' : 'pointer',
+              background: placing || !lines.length ? C.muted : C.green, color: '#fff' }}>
+            {placing ? 'Generating…' : '🖨️ Generate & Print Invoice'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function OrderItemsPage({ showToast }: { showToast: (m: string) => void }) {
+
   const [items, setItems] = useState<OrderItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
