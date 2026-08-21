@@ -2702,7 +2702,7 @@ function PosCounter({ showToast }: { showToast: (m: string) => void }) {
     setPlacing(true);
     try {
       const res = await fetch(`${API_BASE}/orders/pos/order`, {
-        method: 'POST', headers: ADMIN_KEY_HEADER(),
+        method: 'POST', headers: { ...ADMIN_KEY_HEADER(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: lines.map((l) => ({ productId: l.product.id, quantity: l.qty })),
           mobile: m, customerName: name.trim() || undefined, paymentMethod: payMethod,
