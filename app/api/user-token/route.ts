@@ -3,6 +3,13 @@ import { getServerSession } from 'next-auth';
 import crypto from 'crypto';
 import { authOptions } from '../../lib/auth';
 
+// This response identifies the logged-in user, so it must NEVER be cached —
+// a cached token would be served to other users and log them into the wrong
+// account. force-dynamic + no-store guarantees a fresh per-request token.
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+
 /**
  * GET /api/user-token
  * Mints a short-lived token proving "this browser is logged in as user X",
@@ -26,5 +33,8 @@ export async function GET() {
     JSON.stringify({ uid: Number(uid), exp: Math.floor(Date.now() / 1000) + 60 * 30 }), // 30 min
   ).toString('base64url');
   const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-  return NextResponse.json({ token: `${payload}.${sig}` });
+  return NextResponse.json(
+    { token: `${payload}.${sig}` },
+    { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' } },
+  );
 }

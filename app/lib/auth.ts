@@ -114,7 +114,28 @@ export const authOptions: NextAuthOptions = {
       authorization: { params: { prompt: 'select_account' } },
     }),
   ],
-  session: { strategy: 'jwt' },
+  session: {
+    strategy: 'jwt',
+    maxAge: 24 * 60 * 60,      // 1 day — user must log in again after 24h
+    updateAge: 24 * 60 * 60,   // don't silently extend; re-auth daily
+  },
+  jwt: {
+    maxAge: 24 * 60 * 60,      // token itself also expires in 1 day
+  },
+  // Harden the session cookie so a token can't be shared/leaked across users.
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === 'production'
+        ? '__Secure-next-auth.session-token'
+        : 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
+  },
   pages: {
     signIn: '/login',
   },
