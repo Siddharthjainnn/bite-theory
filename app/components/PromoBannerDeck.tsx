@@ -31,6 +31,22 @@ export default function PromoBannerDeck({
     now >= new Date('2026-08-12T00:00:00+05:30') &&
     now <= new Date('2026-08-26T23:59:59+05:30');
 
+  // Sawan Somwar (Shravan) vrat-special promo window.
+  const showSawan =
+    now >= new Date('2026-08-20T00:00:00+05:30') &&
+    now <= new Date('2026-09-08T23:59:59+05:30');
+
+  const sawanSlide = {
+    key: 'sawan',
+    cls: 'pbd--green pbd--launch',
+    eyebrow: '🕉️ SAWAN SOMWAR SPECIAL',
+    big: 'VRAT THALI @ ₹70',
+    sub: <>Sabudana Khichdi · Sabudana Vada · Dahi · Farali Mixture — fasting-friendly</>,
+    cta: 'Order vrat thali',
+    href: '/menu?cat=launch49',
+    art: '🥣',
+  };
+
   const launchSlide = {
     key: 'launch49',
     cls: 'pbd--gold pbd--launch',
@@ -86,7 +102,11 @@ export default function PromoBannerDeck({
     },
   ];
 
-  const slides = showLaunch ? [launchSlide, ...baseSlides] : baseSlides;
+  const slides = [
+    ...(showSawan ? [sawanSlide] : []),
+    ...(showLaunch ? [launchSlide] : []),
+    ...baseSlides,
+  ];
 
   // auto-advance every 3.8s
   useEffect(() => {
