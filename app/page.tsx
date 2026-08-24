@@ -218,10 +218,27 @@ export default function HomePage() {
   }, [products, activeCat, sort, vegOnly, quick]);
 
   const recommended = useMemo(
-    () => products
-      .filter((p) => (!vegOnly || p.isVeg) && !p.isTodaysSpecial && p.stockStatus !== 'out_of_stock')
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 10),
+    () => {
+      // Combos we want to feature in "Recommended for you", in this order.
+      const featuredSlugs = [
+        'fruit-chaat',
+        'paneer-sabzi-4-rotis-salad',
+        'rajma-rice-salad',
+        'chole-rice-salad',
+        'special-thali-79',
+        'sawan-somwar-special-combo',
+      ];
+      const pool = products.filter(
+        (p) => (!vegOnly || p.isVeg) && p.stockStatus !== 'out_of_stock',
+      );
+      const featured = featuredSlugs
+        .map((s) => pool.find((p) => p.slug === s))
+        .filter(Boolean) as typeof products;
+      const rest = pool
+        .filter((p) => !p.isTodaysSpecial && !featuredSlugs.includes(p.slug))
+        .sort((a, b) => b.rating - a.rating);
+      return [...featured, ...rest].slice(0, 10);
+    },
     [products, vegOnly],
   );
 

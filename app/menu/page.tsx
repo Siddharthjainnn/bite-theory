@@ -41,12 +41,17 @@ function MenuInner() {
       if (!map.has(p.categoryId)) map.set(p.categoryId, []);
       map.get(p.categoryId)!.push(p);
     }
-    // within each category, push sold-out items to the bottom (still shown, greyed)
+    // within each category: sold-out to the bottom, then today's-specials and
+    // newest items to the top so fresh combos lead the list.
     for (const list of map.values()) {
       list.sort((a, b) => {
         const aOut = (a.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
         const bOut = (b.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
-        return aOut - bOut;
+        if (aOut !== bOut) return aOut - bOut;
+        const aSp = (a as any).isTodaysSpecial ? 1 : 0;
+        const bSp = (b as any).isTodaysSpecial ? 1 : 0;
+        if (aSp !== bSp) return bSp - aSp;         // specials first
+        return Number(b.id) - Number(a.id);        // then newest first
       });
     }
     return map;
