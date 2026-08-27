@@ -2647,10 +2647,7 @@ function PosCounter({ showToast }: { showToast: (m: string) => void }) {
   const [cart, setCart] = useState<Record<number, { product: Product; qty: number }>>({});
   const [mobile, setMobile] = useState('');
   const [name, setName] = useState('');
-  const [lookup, setLookup] = useState<'idle' | 'looking' | 'found' | 'new'>('idle');
-  const [payMethod, setPayMethod] = useState<'cash' | 'upi'>('cash');
   const [invoiceCfg, setInvoiceCfg] = useState<any>(null);
-  const [placing, setPlacing] = useState(false);
 
   const priceOf = (p: Product) =>
     p.offerPrice && Number(p.offerPrice) > 0 && Number(p.offerPrice) < Number(p.price)
@@ -2665,17 +2662,6 @@ function PosCounter({ showToast }: { showToast: (m: string) => void }) {
       .catch((e: any) => showToast(e.message || 'Load failed'));
     fetchStoreSettings().then((s: any) => setInvoiceCfg(s?.invoiceConfig || null)).catch(() => {});
   }, [showToast]);
-
-  useEffect(() => {
-    const m = mobile.replace(/\D/g, '');
-    if (m.length !== 10) { setLookup('idle'); return; }
-    let alive = true; setLookup('looking');
-    fetch(`${API_BASE}/orders/pos/customer/${m}`, { headers: ADMIN_KEY_HEADER() })
-      .then((r) => r.json())
-      .then((d) => { if (!alive) return; if (d?.found) { setName(d.name || ''); setLookup('found'); } else setLookup('new'); })
-      .catch(() => { if (alive) setLookup('new'); });
-    return () => { alive = false; };
-  }, [mobile]);
 
   const shown = useMemo(() => {
     let list = products;
@@ -2695,32 +2681,27 @@ function PosCounter({ showToast }: { showToast: (m: string) => void }) {
     return { ...c, [id]: { ...c[id], qty } };
   });
 
-  async function generate() {
-    const m = mobile.replace(/\D/g, '');
-    if (m.length !== 10) { showToast('Enter a valid 10-digit mobile'); return; }
+  /* Print-only: build a slip locally and print it. Nothing is saved to the
+     server, no customer lookup, no order created. */
+  function printSlip() {
     if (!lines.length) { showToast('Add at least one item'); return; }
-    setPlacing(true);
-    try {
-      const res = await fetch(`${API_BASE}/orders/pos/order`, {
-        method: 'POST', headers: { ...ADMIN_KEY_HEADER(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: lines.map((l) => ({ productId: l.product.id, quantity: l.qty })),
-          mobile: m, customerName: name.trim() || undefined, paymentMethod: payMethod,
-        }),
-      });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.message || 'Failed'); }
-      const order = await res.json();
-      const inv: InvoiceOrder = {
-        orderNumber: order.orderNumber, placedAt: order.placedAt || new Date().toISOString(),
-        items: order.items, subtotal: order.subtotal, discount: 0, deliveryCharge: 0,
-        total: order.total, customerName: order.customerName, customerMobile: order.customerMobile,
-        paymentMethod: order.paymentMethod, status: 'order_received',
-      } as InvoiceOrder;
-      if (invoiceCfg) printHtml(customerInvoice(inv, invoiceCfg));
-      showToast(`Order ${order.orderNumber} created & printed`);
-      setCart({}); setMobile(''); setName(''); setLookup('idle');
-    } catch (e: any) { showToast(e?.message || 'Something went wrong'); }
-    finally { setPlacing(false); }
+    const slipNo = 'SLIP' + Date.now().toString(36).toUpperCase().slice(-6);
+    const inv: InvoiceOrder = {
+      orderNumber: slipNo,
+      placedAt: new Date().toISOString(),
+      items: lines.map((l) => ({
+        productName: l.product.name, quantity: l.qty,
+        unitPrice: priceOf(l.product), lineTotal: priceOf(l.product) * l.qty,
+      })),
+      subtotal, discount: 0, deliveryCharge: 0, total: subtotal,
+      customerName: name.trim() || undefined,
+      customerMobile: mobile.trim() || undefined,
+      status: 'order_received',
+    } as InvoiceOrder;
+    if (invoiceCfg) printHtml(customerInvoice(inv, invoiceCfg));
+    else showToast('Invoice layout not loaded yet — try again in a moment');
+    showToast('Slip printed');
+    setCart({}); setMobile(''); setName('');
   }
 
   const chip = (active: boolean): React.CSSProperties => ({
@@ -2731,7 +2712,7 @@ function PosCounter({ showToast }: { showToast: (m: string) => void }) {
 
   return (
     <>
-      <PageHead title="Counter / POS" sub="Walk-in orders — pick items, add customer, print invoice." />
+      <PageHead title="Counter / POS" sub="Pick items, print the slip. Phone & name optional." />
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(320px,1fr)', gap: 16, alignItems: 'start' }}>
         {/* LEFT: products */}
         <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.line}` }}>
@@ -2758,17 +2739,17 @@ function PosCounter({ showToast }: { showToast: (m: string) => void }) {
           </div>
         </div>
 
-        {/* RIGHT: bill */}
+        {/* RIGHT: slip */}
         <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.line}`, position: 'sticky', top: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <b style={{ fontSize: 16, color: C.darkGreen }}>🧾 Bill</b>
+            <b style={{ fontSize: 16, color: C.darkGreen }}>🧾 Slip</b>
             {count > 0 && <span style={{ fontSize: 12.5, color: C.muted }}>{count} item{count > 1 ? 's' : ''}</span>}
           </div>
 
           {!lines.length && <div style={{ color: C.muted, fontSize: 13.5, padding: '20px 0', textAlign: 'center', background: C.bg, borderRadius: 11, marginBottom: 14 }}>Tap items on the left to add them.</div>}
 
           {lines.length > 0 && (
-            <div style={{ display: 'grid', gap: 9, marginBottom: 14, maxHeight: '34vh', overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gap: 9, marginBottom: 14, maxHeight: '40vh', overflowY: 'auto' }}>
               {lines.map((l) => (
                 <div key={l.product.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ flex: 1, fontSize: 13.5, color: C.ink, fontWeight: 500 }}>{l.product.name}</span>
@@ -2785,31 +2766,15 @@ function PosCounter({ showToast }: { showToast: (m: string) => void }) {
             <span>Total</span><span>{money(subtotal)}</span>
           </div>
 
-          <div style={{ position: 'relative', marginBottom: 8 }}>
-            <input value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="Customer mobile (10-digit)" inputMode="numeric"
-              style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${lookup === 'found' ? C.green : C.line}`, fontSize: 14, boxSizing: 'border-box' }} />
-            {lookup === 'looking' && <span style={{ position: 'absolute', right: 12, top: 12, fontSize: 12, color: C.muted }}>…</span>}
-            {lookup === 'found' && <span style={{ position: 'absolute', right: 12, top: 11, fontSize: 12, color: C.green, fontWeight: 700 }}>✓ found</span>}
-          </div>
-          {lookup === 'new' && <div style={{ fontSize: 12, color: C.orange, marginBottom: 8, fontWeight: 600 }}>New customer — enter name below</div>}
+          <input value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="Phone (optional)" inputMode="numeric"
+            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 8, boxSizing: 'border-box' }} />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)"
+            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 14, boxSizing: 'border-box' }} />
 
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Customer name"
-            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            {(['cash', 'upi'] as const).map((m) => (
-              <button key={m} onClick={() => setPayMethod(m)}
-                style={{ flex: 1, padding: '10px 0', borderRadius: 11, fontWeight: 700, cursor: 'pointer', fontSize: 13.5,
-                  border: `1.5px solid ${payMethod === m ? C.green : C.line}`, background: payMethod === m ? C.greenSoft : '#fff', color: payMethod === m ? C.darkGreen : C.ink }}>
-                {m === 'cash' ? '💵 Cash' : '📱 UPI'}
-              </button>
-            ))}
-          </div>
-
-          <button onClick={generate} disabled={placing || !lines.length}
-            style={{ width: '100%', padding: '14px 0', borderRadius: 13, border: 'none', fontWeight: 800, fontSize: 15.5, cursor: placing || !lines.length ? 'not-allowed' : 'pointer',
-              background: placing || !lines.length ? C.muted : C.green, color: '#fff' }}>
-            {placing ? 'Generating…' : '🖨️ Generate & Print Invoice'}
+          <button onClick={printSlip} disabled={!lines.length}
+            style={{ width: '100%', padding: '14px 0', borderRadius: 13, border: 'none', fontWeight: 800, fontSize: 15.5, cursor: !lines.length ? 'not-allowed' : 'pointer',
+              background: !lines.length ? C.muted : C.green, color: '#fff' }}>
+            🖨️ Print Slip
           </button>
         </div>
       </div>
