@@ -30,7 +30,6 @@ import DesktopLanding from './components/DesktopLanding';
 import DesktopApp from './components/DesktopApp';
 import RecommendedRow from './components/RecommendedRow';
 import TodaysSpecialModal from './components/TodaysSpecialModal';
-import PromoBannerDeck from './components/PromoBannerDeck';
 import HomeServices from './components/HomeServices';
 import LiveOrderCard from './components/LiveOrderCard';
 import OfferStrip from './components/OfferStrip';
@@ -387,15 +386,15 @@ export default function HomePage() {
       {/* timed campaigns — renders nothing when none are live */}
       <OfferStrip />
 
-      {/* animated promo deck — shows until real banners are uploaded */}
-      {banners.length === 0 && !loading && (
-        <PromoBannerDeck coupon={featuredCoupon} />
-      )}
+      {/* The PromoBannerDeck carousel was removed from the home page: the
+         HomeServices block below already carries Swiggy (with its countdown),
+         the tiffin plan and the direct menu, so the deck was saying the same
+         things twice directly above it. The component file is kept so it can
+         be dropped back in if the carousel is wanted again. */}
 
       {/* The three ways to buy — tiffin (primary), Swiggy, direct menu.
-          Sits OUTSIDE the banner conditional so it shows whether or not the
-          admin has uploaded banners, and directly under the hero carousel
-          because ad traffic decides within the first screen. */}
+          Now the first thing under the hero, since ad traffic decides within
+          the first screen. Shows whether or not banners are uploaded. */}
       <HomeServices />
 
       {/* banners (admin-managed) */}
