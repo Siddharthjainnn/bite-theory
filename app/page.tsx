@@ -31,7 +31,7 @@ import DesktopApp from './components/DesktopApp';
 import RecommendedRow from './components/RecommendedRow';
 import TodaysSpecialModal from './components/TodaysSpecialModal';
 import PromoBannerDeck from './components/PromoBannerDeck';
-import TiffinPrompt from './components/TiffinPrompt';
+import HomeServices from './components/HomeServices';
 import LiveOrderCard from './components/LiveOrderCard';
 import OfferStrip from './components/OfferStrip';
 import { useDesktopLanding } from './lib/useDesktopLanding';
@@ -392,9 +392,11 @@ export default function HomePage() {
         <PromoBannerDeck coupon={featuredCoupon} />
       )}
 
-      {/* Meta-ad landing hook: the tiffin funnel. Sits OUTSIDE the banner
-          conditional above so it shows whether or not banners are uploaded. */}
-      <TiffinPrompt />
+      {/* The three ways to buy — tiffin (primary), Swiggy, direct menu.
+          Sits OUTSIDE the banner conditional so it shows whether or not the
+          admin has uploaded banners, and directly under the hero carousel
+          because ad traffic decides within the first screen. */}
+      <HomeServices />
 
       {/* banners (admin-managed) */}
       {banners.length > 0 && (

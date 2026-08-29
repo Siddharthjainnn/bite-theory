@@ -913,6 +913,78 @@ a{text-decoration:none;color:inherit}
 .ot-step-active{animation:otRing 1.8s ease-out infinite}
 @keyframes otRing{0%{box-shadow:0 0 0 0 rgba(76,175,80,.45)}70%{box-shadow:0 0 0 9px rgba(76,175,80,0)}100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}}
 
+
+/* ── HomeServices: the three-ways-to-buy bento block ──────────────────────
+   Primary tiffin tile + a Swiggy / full-menu pair beneath it. All motion is
+   wrapped in prefers-reduced-motion at the bottom of this block. */
+.hsv{padding:16px 14px 4px}
+.hsv-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:11px;gap:10px}
+.hsv-title{font-size:16.5px;font-weight:900;color:var(--bt-ink,#0D3B2E);letter-spacing:-.3px;margin:0}
+.hsv-sub{font-size:11.5px;color:#6b7d74;font-weight:700;white-space:nowrap}
+
+/* primary tile */
+.hsv-hero{position:relative;overflow:hidden;cursor:pointer;border-radius:22px;
+  padding:18px 17px 17px;color:#fff;
+  background:radial-gradient(125% 150% at 88% -15%,#F59E0B 0%,#b76e00 40%,#0D3B2E 100%);
+  box-shadow:0 10px 30px rgba(183,110,0,.3);
+  animation:hsvRise .55s cubic-bezier(.34,1.3,.64,1) both}
+.hsv-hero:active{transform:scale(.988)}
+.hsv-glow{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);
+  transform:translateX(-120%);animation:hsvSheen 4.2s ease-in-out infinite}
+.hsv-hero-art{position:absolute;right:12px;bottom:-8px;font-size:74px;line-height:1;
+  opacity:.92;animation:hsvFloat 3.6s ease-in-out infinite}
+.hsv-hero-body{position:relative;z-index:2;max-width:76%}
+.hsv-chip{display:inline-block;font-size:10.5px;font-weight:900;letter-spacing:.6px;
+  background:rgba(0,0,0,.26);border:1px solid rgba(255,255,255,.3);
+  padding:4px 10px;border-radius:99px}
+.hsv-hero-h{font-size:20px;font-weight:900;letter-spacing:-.5px;line-height:1.13;margin:10px 0 5px}
+.hsv-hero-p{font-size:12.5px;opacity:.95;line-height:1.48;margin:0 0 10px}
+.hsv-price{display:flex;align-items:baseline;gap:6px;margin-bottom:12px}
+.hsv-price b{font-size:26px;font-weight:900;letter-spacing:-.8px}
+.hsv-price span{font-size:12px;font-weight:700;opacity:.9}
+.hsv-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hsv-btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:22px;
+  font-size:12.5px;font-weight:900;text-decoration:none;white-space:nowrap}
+.hsv-btn--solid{background:#fff;color:#0D3B2E}
+.hsv-btn--solid i{font-style:normal;transition:transform .2s}
+.hsv-hero:hover .hsv-btn--solid i{transform:translateX(3px)}
+.hsv-btn--ghost{border:1px solid rgba(255,255,255,.5);color:#fff}
+
+/* secondary pair */
+.hsv-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.hsv-tile{position:relative;overflow:hidden;cursor:pointer;border-radius:18px;
+  padding:14px 13px 13px;min-height:126px;display:flex;flex-direction:column;
+  align-items:flex-start;color:#fff;
+  animation:hsvRise .55s cubic-bezier(.34,1.3,.64,1) both}
+.hsv-tile:nth-child(1){animation-delay:.07s}
+.hsv-tile:nth-child(2){animation-delay:.13s}
+.hsv-tile:active{transform:scale(.985)}
+.hsv-tile--swiggy{background:linear-gradient(150deg,#FC8019 0%,#e06a05 55%,#0D3B2E 100%);
+  box-shadow:0 8px 22px rgba(252,128,25,.32)}
+.hsv-tile--menu{background:linear-gradient(150deg,#4CAF50 0%,#2e7d32 55%,#0D3B2E 100%);
+  box-shadow:0 8px 22px rgba(46,125,50,.3)}
+.hsv-tile-art{position:absolute;right:6px;bottom:-4px;font-size:46px;line-height:1;opacity:.85;
+  animation:hsvFloat 4.1s ease-in-out infinite}
+.hsv-tile-eyebrow{font-size:9.5px;font-weight:900;letter-spacing:.7px;opacity:.92}
+.hsv-tile-h{font-size:17px;font-weight:900;letter-spacing:-.4px;margin-top:3px}
+.hsv-tile-p{font-size:11px;opacity:.93;line-height:1.35;margin-top:3px;position:relative;z-index:2}
+.hsv-timer{margin-top:auto;padding-top:9px;font-size:10.5px;font-weight:900;
+  background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.28);border-radius:99px;
+  padding:4px 9px;font-variant-numeric:tabular-nums;position:relative;z-index:2;
+  animation:hsvBlink 2.2s ease-in-out infinite}
+.hsv-timer--calm{animation:none;background:rgba(0,0,0,.24)}
+
+@keyframes hsvRise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes hsvSheen{0%{transform:translateX(-120%)}55%,100%{transform:translateX(120%)}}
+@keyframes hsvFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes hsvBlink{0%,100%{opacity:1}50%{opacity:.62}}
+
+@media (prefers-reduced-motion:reduce){
+  .hsv-hero,.hsv-tile{animation:none}
+  .hsv-glow,.hsv-hero-art,.hsv-tile-art,.hsv-timer{animation:none}
+}
+
 /* ── PromoBannerDeck: code-built animated banners (no images needed) ── */
 .pbd-wrap{padding:14px 14px 0}
 .pbd{position:relative;overflow:hidden;border-radius:20px;cursor:pointer;
