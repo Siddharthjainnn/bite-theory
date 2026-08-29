@@ -746,3 +746,47 @@ export async function fetchMySupportTickets(userId: number): Promise<SupportTick
     { cache: 'no-store', headers: await authHeaders() });
   return jsonOrThrow(res);
 }
+
+/* ───────────── Tiffin / daily-meal enrolment ─────────────
+   Public funnel for the Meta ad campaign. Deliberately does NOT send auth
+   headers: a visitor arriving from an ad has no account yet, and forcing a
+   login before we even know what they want kills the conversion. */
+
+export type TiffinDay = {
+  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+  enabled: boolean;
+  address: string;
+  landmark?: string;
+  slot: string;
+};
+
+export type TiffinLeadPayload = {
+  name: string;
+  phone: string;
+  email?: string;
+  area?: string;
+  planKey?: string;
+  planLabel?: string;
+  planPrice?: number;
+  schedule: TiffinDay[];
+  notes?: string;
+  source?: string;
+};
+
+export async function submitTiffinLead(
+  payload: TiffinLeadPayload,
+): Promise<{ id: number; status: string }> {
+  const res = await fetch(`${API_BASE}/tiffin/leads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    // Surface Nest's validation message ("Enter a valid 10-digit ...") to the
+    // form instead of a generic failure, so the user can actually fix it.
+    const err = await res.json().catch(() => null);
+    const msg = Array.isArray(err?.message) ? err.message[0] : err?.message;
+    throw new Error(msg || 'Could not submit. Please try again.');
+  }
+  return res.json();
+}

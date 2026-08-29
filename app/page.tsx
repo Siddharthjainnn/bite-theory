@@ -31,6 +31,7 @@ import DesktopApp from './components/DesktopApp';
 import RecommendedRow from './components/RecommendedRow';
 import TodaysSpecialModal from './components/TodaysSpecialModal';
 import PromoBannerDeck from './components/PromoBannerDeck';
+import TiffinPrompt from './components/TiffinPrompt';
 import LiveOrderCard from './components/LiveOrderCard';
 import OfferStrip from './components/OfferStrip';
 import { useDesktopLanding } from './lib/useDesktopLanding';
@@ -390,6 +391,10 @@ export default function HomePage() {
       {banners.length === 0 && !loading && (
         <PromoBannerDeck coupon={featuredCoupon} />
       )}
+
+      {/* Meta-ad landing hook: the tiffin funnel. Sits OUTSIDE the banner
+          conditional above so it shows whether or not banners are uploaded. */}
+      <TiffinPrompt />
 
       {/* banners (admin-managed) */}
       {banners.length > 0 && (
