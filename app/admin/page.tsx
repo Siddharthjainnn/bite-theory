@@ -14,6 +14,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo} from 'react';
 
 import StoreSettingsPanel from '../components/StoreSettingsPanel';
+import TiffinLeadsPanel from '../components/TiffinLeadsPanel';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
 import ThaliAdminPanel from '../components/ThaliAdminPanel';
 import {
@@ -863,6 +864,7 @@ const NAV: NavGroup[] = [
     { key: 'refunds', label: 'Refunds', icon: '↩️' },
     { key: 'wallet_transactions', label: 'Wallet Transactions', icon: '👛' },
   ]},
+  { title: 'Tiffin', items: [{ key: 'tiffin_leads', label: 'Tiffin Leads', icon: '🍱' }] },
   { title: 'Delivery', items: [{ key: 'delivery_partners', label: 'Delivery Partners', icon: '🛵' }] },
   { title: 'Support', items: [
     { key: 'support_tickets', label: 'Support Tickets', icon: '🎧' },
@@ -1592,6 +1594,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'pos' && <PosCounter showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
             {effectivePage === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
+            {effectivePage === 'tiffin_leads' && <TiffinLeadsPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {effectivePage === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
             {effectivePage === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'thali' && <ThaliAdminPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
