@@ -933,6 +933,23 @@ a{text-decoration:none;color:inherit}
 @keyframes launchPulse{0%,100%{box-shadow:0 0 0 2px #EF9F27,0 8px 26px rgba(239,159,39,.35)}
   50%{box-shadow:0 0 0 3px #EF9F27,0 10px 32px rgba(239,159,39,.6)}}
 
+/* Swiggy cross-sell slide — Swiggy orange (#FC8019) over brand deep green,
+   with the same attention-pulse the launch slide uses. */
+.pbd--swiggy{background:
+  radial-gradient(130% 160% at 85% -20%, #ffb066 0%, #FC8019 34%, var(--bt-deep) 100%);
+  animation:pbdIn .5s cubic-bezier(.34,1.3,.64,1) both,
+            swiggyPulse 2.4s ease-in-out infinite}
+@keyframes swiggyPulse{0%,100%{box-shadow:0 0 0 2px #FC8019,0 8px 26px rgba(252,128,25,.35)}
+  50%{box-shadow:0 0 0 3px #FC8019,0 10px 32px rgba(252,128,25,.6)}}
+
+/* live countdown pill — tabular numerals so the digits don't jitter each tick */
+.pbd-timer{display:inline-flex;align-items:center;gap:6px;margin-top:8px;width:max-content;
+  background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.32);
+  color:#fff;font-size:11.5px;font-weight:800;padding:4px 11px;border-radius:999px;
+  font-variant-numeric:tabular-nums}
+.pbd-timer b{font-size:12.5px;letter-spacing:.4px;font-variant-numeric:tabular-nums}
+.pbd-timer i{font-style:normal;animation:pbdTwinkle 1.6s ease-in-out infinite}
+
 /* rotating starburst rays */
 .pbd-rays{position:absolute;inset:-40%;pointer-events:none;opacity:.5;
   background:conic-gradient(from 0deg,

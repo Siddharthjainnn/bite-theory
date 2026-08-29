@@ -217,34 +217,19 @@ export default function HomePage() {
     return arr;
   }, [products, activeCat, sort, vegOnly, quick]);
 
-  const recommended = useMemo(
-    () => {
-      // Combos we want to feature in "Recommended for you", in this order.
-      const featuredSlugs = [
-        'fruit-chaat',
-        'paneer-sabzi-4-rotis-salad',
-        'rajma-rice-salad',
-        'chole-rice-salad',
-        'special-thali-79',
-        'sawan-somwar-special-combo',
-      ];
-      const pool = products.filter(
-        (p) => (!vegOnly || p.isVeg) && p.stockStatus !== 'out_of_stock',
-      );
-      const featured = featuredSlugs
-        .map((s) => pool.find((p) => p.slug === s))
-        .filter(Boolean) as typeof products;
-      const rest = pool
-        .filter((p) => !p.isTodaysSpecial && !featuredSlugs.includes(p.slug))
-        .sort((a, b) => b.rating - a.rating);
-      return [...featured, ...rest].slice(0, 10);
-    },
-    [products, vegOnly],
-  );
-
   const specials = useMemo(
     () => products.filter((p) => p.isTodaysSpecial && (!vegOnly || p.isVeg)),
     [products, vegOnly],
+  );
+
+  /* The home row now shows ONLY today's specials — every one of them, in the
+     order the admin set in the catalog (no rating re-sort, no cap). The old
+     hand-written featuredSlugs list is gone; what shows here is now controlled
+     entirely by the "Today's Special" flag in Admin → Products.
+     Sold-out items are dropped here but still appear in the Special modal. */
+  const recommended = useMemo(
+    () => specials.filter((p) => p.stockStatus !== 'out_of_stock'),
+    [specials],
   );
 
   if (showLanding) {
@@ -451,7 +436,12 @@ export default function HomePage() {
 
       {/* recommended for you */}
       {activeCat === 'all' && recommended.length > 0 && (
-        <RecommendedRow products={recommended} />
+        <RecommendedRow
+          products={recommended}
+          title="Today's Special"
+          subtitle="Fresh today, only today"
+          badge="Today's Special"
+        />
       )}
 
       {/* categories */}

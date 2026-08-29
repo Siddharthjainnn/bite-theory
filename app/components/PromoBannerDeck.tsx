@@ -1,20 +1,53 @@
 'use client';
 
 /**
- * PromoBannerDeck — three fully-animated, code-built promo banners
+ * PromoBannerDeck — fully-animated, code-built promo banners
  * (Swiggy/Zomato energy, zero image uploads needed, Bite Theory brand).
  *
  * Shown when the admin hasn't uploaded banner images; the moment real
  * banners exist in Admin → Banners, those take over automatically.
  *
  * Slides are wired to REAL data:
- *   1. Featured coupon (live code + label)      → /menu
- *   2. Build-your-own Thali                     → /thali
- *   3. High-protein / healthy pitch             → /menu (protein filter)
+ *   0. Swiggy launch + 3-day countdown (external)  → Swiggy menu
+ *   1. Featured coupon (live code + label)         → /menu
+ *   2. Build-your-own Thali                        → /thali
+ *   3. High-protein / healthy pitch                → /menu (protein filter)
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+
+/* ── Swiggy promo: edit these two lines to retime or retarget the offer ──
+   SWIGGY_OFFER_ENDS is the hard cut-off. When the clock passes it the slide
+   removes itself from the deck on its own — no deploy needed to take it down. */
+const SWIGGY_URL = 'https://www.swiggy.com/menu/1429311?source=sharing';
+const SWIGGY_OFFER_ENDS = new Date('2026-09-01T23:59:59+05:30');
+
+type Slide = {
+  key: string;
+  cls: string;
+  eyebrow: string;
+  big: string;
+  sub: ReactNode;
+  cta: string;
+  href: string;
+  art: string;
+  external?: boolean;
+  countdown?: boolean;
+};
+
+/** ms → "2d 13:45:09" (or "13:45:09" inside the last day). */
+function fmtLeft(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return d > 0
+    ? `${d}d ${pad(h)}:${pad(m)}:${pad(sec)}`
+    : `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
 
 export default function PromoBannerDeck({
   coupon,
@@ -24,30 +57,44 @@ export default function PromoBannerDeck({
   const router = useRouter();
   const [idx, setIdx] = useState(0);
 
+  /* Countdown ticks client-side only. It stays null through the server render
+     AND the hydration render, so both agree; the first effect pass fills it in.
+     Reading the clock during render instead would mismatch every second. */
+  const [left, setLeft] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setLeft(SWIGGY_OFFER_ENDS.getTime() - Date.now());
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const now = new Date();
+
   // Launch-combos slide leads the carousel through the promo window (Aug 12-26 2026),
   // then drops off automatically.
-  const now = new Date();
   const showLaunch =
     now >= new Date('2026-08-12T00:00:00+05:30') &&
     now <= new Date('2026-08-26T23:59:59+05:30');
 
-  // Sawan Somwar (Shravan) vrat-special promo window.
-  const showSawan =
-    now >= new Date('2026-08-20T00:00:00+05:30') &&
-    now <= new Date('2026-09-08T23:59:59+05:30');
+  // Before the countdown has ticked once we fall back to a plain date compare,
+  // which server and client both agree on.
+  const showSwiggy =
+    left !== null ? left > 0 : now.getTime() < SWIGGY_OFFER_ENDS.getTime();
 
-  const sawanSlide = {
-    key: 'sawan',
-    cls: 'pbd--green pbd--launch',
-    eyebrow: '🕉️ SAWAN SOMWAR SPECIAL',
-    big: 'VRAT THALI @ ₹70',
-    sub: <>Sabudana Khichdi · Sabudana Vada · Dahi · Farali Mixture — fasting-friendly</>,
-    cta: 'Order vrat thali',
-    href: '/menu?cat=launch49',
-    art: '🥣',
+  const swiggySlide: Slide = {
+    key: 'swiggy',
+    cls: 'pbd--swiggy',
+    eyebrow: '🛵 NOW LIVE ON SWIGGY',
+    big: 'ORDER US ON SWIGGY',
+    sub: <>Bites Theory is live on Swiggy — same kitchen, same menu, delivered to your door</>,
+    cta: 'Order on Swiggy',
+    href: SWIGGY_URL,
+    art: '🛵',
+    external: true,
+    countdown: true,
   };
 
-  const launchSlide = {
+  const launchSlide: Slide = {
     key: 'launch49',
     cls: 'pbd--gold pbd--launch',
     eyebrow: '🎉 GRAND OPENING · 12 AUG',
@@ -58,7 +105,7 @@ export default function PromoBannerDeck({
     art: '🍱',
   };
 
-  const baseSlides = [
+  const baseSlides: Slide[] = [
     coupon
       ? {
           key: 'coupon',
@@ -102,8 +149,8 @@ export default function PromoBannerDeck({
     },
   ];
 
-  const slides = [
-    ...(showSawan ? [sawanSlide] : []),
+  const slides: Slide[] = [
+    ...(showSwiggy ? [swiggySlide] : []),
     ...(showLaunch ? [launchSlide] : []),
     ...baseSlides,
   ];
@@ -114,11 +161,20 @@ export default function PromoBannerDeck({
     return () => clearInterval(t);
   }, [slides.length]);
 
-  const s = slides[idx];
+  const s = slides[Math.min(idx, slides.length - 1)];
+  if (!s) return null;
+
+  const go = () => {
+    if (s.external) {
+      window.open(s.href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    router.push(s.href);
+  };
 
   return (
     <section className="pbd-wrap">
-      <div key={s.key} className={`pbd ${s.cls}`} onClick={() => router.push(s.href)} role="button" tabIndex={0}>
+      <div key={s.key} className={`pbd ${s.cls}`} onClick={go} role="button" tabIndex={0}>
         {/* animated background layers */}
         <span className="pbd-rays" aria-hidden />
         <span className="pbd-sheen" aria-hidden />
@@ -130,6 +186,11 @@ export default function PromoBannerDeck({
           <span className="pbd-eyebrow">{s.eyebrow}</span>
           <span className="pbd-big">{s.big}</span>
           <span className="pbd-sub">{s.sub}</span>
+          {s.countdown && left !== null && left > 0 && (
+            <span className="pbd-timer">
+              <i aria-hidden>⏱</i> Offer ends in <b>{fmtLeft(left)}</b>
+            </span>
+          )}
           <span className="pbd-cta">{s.cta} <i>→</i></span>
         </div>
         <span className="pbd-art" aria-hidden>{s.art}</span>

@@ -17,15 +17,27 @@ import {
 import { useCart } from '../providers/CartProvider';
 import FoodImage from './FoodImage';
 
-export default function RecommendedRow({ products }: { products: Product[] }) {
+export default function RecommendedRow({
+  products,
+  title = 'Recommended for you',
+  subtitle = 'Top-rated, freshly made',
+  badge = 'Bestseller',
+}: {
+  products: Product[];
+  /** Heading copy — overridden when the row is used for Today's Special. */
+  title?: string;
+  subtitle?: string;
+  /** Ribbon on the first card when it has no % discount of its own. */
+  badge?: string;
+}) {
   const { cart, add, sub } = useCart();
   if (!products.length) return null;
 
   return (
     <section className="rec-wrap">
       <div className="rec-head">
-        <h2 className="rec-title">Recommended for you</h2>
-        <span className="rec-sub">Top-rated, freshly made</span>
+        <h2 className="rec-title">{title}</h2>
+        <span className="rec-sub">{subtitle}</span>
       </div>
 
       <div className="rec-row">
@@ -38,7 +50,7 @@ export default function RecommendedRow({ products }: { products: Product[] }) {
               <Link href={`/product/${p.id}`} className="rec-img">
                 <FoodImage src={p.image} alt={p.name} emoji={catEmoji(p.name)} />
                 {off && <span className="rec-ribbon">{offerPct(p)}% OFF</span>}
-                {i === 0 && !off && <span className="rec-ribbon rec-ribbon--gold">Bestseller</span>}
+                {i === 0 && !off && <span className="rec-ribbon rec-ribbon--gold">{badge}</span>}
                 {p.rating > 0 && (
                   <span className="rec-rating">★ {p.rating.toFixed(1)}</span>
                 )}
