@@ -155,9 +155,9 @@ export default function PromoBannerDeck({
     ...baseSlides,
   ];
 
-  // auto-advance every 3.8s
+  // auto-advance every 6s
   useEffect(() => {
-    const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 3800);
+    const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 6000);
     return () => clearInterval(t);
   }, [slides.length]);
 
