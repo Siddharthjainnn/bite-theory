@@ -213,6 +213,9 @@ export default function TiffinPage() {
               {TIFFIN_PLAN.duration}
             </span>
           </div>
+          <div style={{ fontSize: 12, opacity: .92, marginTop: 4, fontWeight: 700 }}>
+            {TIFFIN_PLAN.note}
+          </div>
           <div style={{ fontSize: 12.5, opacity: .92, marginTop: 6 }}>
             Every tiffin: {TIFFIN_PLAN.includes.join(' · ')}
           </div>

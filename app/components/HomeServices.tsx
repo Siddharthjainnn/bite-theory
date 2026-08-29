@@ -80,6 +80,7 @@ export default function HomeServices() {
             <b>{money(TIFFIN_PLAN.price)}</b>
             <span>{TIFFIN_PLAN.duration}</span>
           </div>
+          <div className="hsv-note">{TIFFIN_PLAN.note}</div>
 
           <div className="hsv-actions">
             <span className="hsv-btn hsv-btn--solid">Enrol now <i>→</i></span>

@@ -12,12 +12,16 @@ export const TIFFIN_PHONE = '999306022';
 export const TIFFIN_PHONE_PRETTY = '+91 999306022';
 
 export const TIFFIN_PLAN = {
-  key: 'monthly-1500',
+  key: 'monthly-1750',
   label: 'Daily Tiffin Plan',
-  price: 1500,
-  /* ⚠️ VERIFY: "1500 for 6 days" was ambiguous. Set the real duration + what a
-     tiffin contains. Customers will hold you to whatever this says. */
+  price: 1750,
   duration: 'per month',
+  /* One-time payment for the month — no auto-renewal, no saved card. Said
+     plainly on both the home tile and /tiffin, because "subscription" makes
+     people assume recurring billing and hesitate. */
+  note: 'One-time payment · no auto-renewal',
+  /* ⚠️ VERIFY: what a single tiffin actually contains. Customers will hold
+     you to whatever this says. */
   includes: ['4 Roti', 'Sabzi', 'Dal / Kadhi', 'Rice', 'Salad'],
 };
 

@@ -943,6 +943,7 @@ a{text-decoration:none;color:inherit}
 .hsv-price{display:flex;align-items:baseline;gap:6px;margin-bottom:12px}
 .hsv-price b{font-size:26px;font-weight:900;letter-spacing:-.8px}
 .hsv-price span{font-size:12px;font-weight:700;opacity:.9}
+.hsv-note{font-size:11px;font-weight:700;opacity:.9;margin:-6px 0 11px}
 .hsv-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .hsv-btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:22px;
   font-size:12.5px;font-weight:900;text-decoration:none;white-space:nowrap}
