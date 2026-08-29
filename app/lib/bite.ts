@@ -758,6 +758,11 @@ export type TiffinDay = {
   address: string;
   landmark?: string;
   slot: string;
+  /* Captured when the customer picks a Google Places suggestion. Absent when
+     they typed a free-text address, so riders must still read the text. */
+  lat?: number;
+  lng?: number;
+  placeId?: string;
 };
 
 export type TiffinLeadPayload = {

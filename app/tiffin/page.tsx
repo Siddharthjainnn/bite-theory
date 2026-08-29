@@ -18,14 +18,19 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import AppShell from '../components/AppShell';
 import AppHeader from '../components/AppHeader';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 import { C, money, submitTiffinLead, TiffinDay } from '../lib/bite';
 import {
   TIFFIN_PHONE, TIFFIN_PHONE_PRETTY, TIFFIN_PLAN, TIFFIN_AREAS, TIFFIN_SLOTS, DAYS,
 } from './config';
 
-type DayState = Record<string, { enabled: boolean; address: string; landmark: string; slot: string }>;
+type DayState = Record<string, {
+  enabled: boolean; address: string; landmark: string; slot: string;
+  lat?: number; lng?: number; placeId?: string;
+}>;
 
 const initialDays = (): DayState => {
   const out: DayState = {};
@@ -55,10 +60,15 @@ const card: React.CSSProperties = {
 
 export default function TiffinPage() {
   const router = useRouter();
+  const { data: session } = useSession();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  /* Prefill is derived during render, not in an effect. `seeded` records which
+     session we've already applied, so a customer's own typing is never
+     overwritten when the session object re-resolves. */
+  const [seeded, setSeeded] = useState<string | null>(null);
   const [area, setArea] = useState('');
   const [notes, setNotes] = useState('');
   const [days, setDays] = useState<DayState>(initialDays);
@@ -67,6 +77,17 @@ export default function TiffinPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState<number | null>(null);
+
+  /* Prefill for signed-in customers only. The funnel stays open to logged-out
+     ad traffic by design, so this is a convenience, never a requirement. */
+  const su = session?.user as
+    { name?: string | null; email?: string | null; mobile?: string | null } | undefined;
+  if (su?.email && seeded !== su.email) {
+    setSeeded(su.email);
+    if (!name) setName(su.name || '');
+    if (!email) setEmail(su.email || '');
+    if (!phone) setPhone((su.mobile || '').replace(/\D/g, '').slice(-10));
+  }
 
   const activeCount = useMemo(
     () => DAYS.filter((d) => days[d.key].enabled).length,
@@ -88,6 +109,7 @@ export default function TiffinPage() {
           next[d.key] = {
             ...next[d.key],
             address: source.address, landmark: source.landmark, slot: source.slot,
+            lat: source.lat, lng: source.lng, placeId: source.placeId,
           };
         }
       }
@@ -114,6 +136,9 @@ export default function TiffinPage() {
       address: days[d.key].address.trim(),
       landmark: days[d.key].landmark.trim() || undefined,
       slot: days[d.key].slot,
+      lat: days[d.key].lat,
+      lng: days[d.key].lng,
+      placeId: days[d.key].placeId,
     }));
 
     setBusy(true);
@@ -357,12 +382,17 @@ export default function TiffinPage() {
                 {open && (
                   <div style={{ padding: '2px 13px 13px', background: '#fbfcfb' }}>
                     <label style={label}>Full delivery address *</label>
-                    <textarea
-                      style={{ ...field, minHeight: 66, resize: 'vertical', marginBottom: 10 }}
-                      value={st.address}
-                      onChange={(e) => setDay(d.key, { address: e.target.value })}
-                      placeholder="Flat / office no., building, street, area, pincode"
-                    />
+                    <div style={{ marginBottom: 10 }}>
+                      <AddressAutocomplete
+                        value={st.address}
+                        onChange={(v, place) =>
+                          setDay(d.key, {
+                            address: v,
+                            lat: place?.lat, lng: place?.lng, placeId: place?.placeId,
+                          })
+                        }
+                      />
+                    </div>
                     <label style={label}>Landmark (optional)</label>
                     <input style={{ ...field, marginBottom: 10 }} value={st.landmark}
                       onChange={(e) => setDay(d.key, { landmark: e.target.value })}
