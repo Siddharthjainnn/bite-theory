@@ -175,7 +175,7 @@ export default function TiffinPage() {
         email: email.trim() || undefined,
         area: area || undefined,
         planKey: plan.key,
-        planLabel: `${plan.label} · ${plan.days} meal${plan.days === 1 ? '' : 's'} (${money(plan.price)} + ${money(plan.delivery)} delivery)`,
+        planLabel: `${plan.label} · ${plan.days} meal${plan.days === 1 ? '' : 's'}`,
         planPrice: plan.total,
         schedule,
         notes: notes.trim() || undefined,
@@ -265,7 +265,9 @@ export default function TiffinPage() {
             </span>
           </div>
           <div style={{ fontSize: 12, opacity: .92, marginTop: 3 }}>
-            {money(plan.price)} meals + {money(plan.delivery)} delivery
+            {plan.delivery > 0
+              ? `${money(plan.price)} meals + ${money(plan.delivery)} delivery`
+              : 'Delivery included'}
             {plan.days > 1 ? ` · about ${money(plan.perDay)} a meal` : ''}
           </div>
           <div style={{ fontSize: 12, opacity: .92, marginTop: 4, fontWeight: 700 }}>

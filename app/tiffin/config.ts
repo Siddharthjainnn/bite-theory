@@ -18,9 +18,14 @@ export const TIFFIN_PHONE_PRETTY = '+91 999306022';
    most expensive way to eat and monthly the cheapest — that gap is what
    moves people up the ladder.
 
-   ⚠️ ONLY the monthly figures are confirmed (Rs1999 + Rs300 delivery).
-   The trial and weekly numbers below are placeholders chosen to keep the
-   ladder consistent. Set them from your real food cost before advertising. */
+   Prices below are what the customer pays, delivery included — there is no
+   separate delivery line any more.
+
+   ⚠️ THE LADDER IS ALMOST FLAT at these numbers: Rs80 / Rs80 / Rs77 a meal.
+   Six single-day trials cost Rs480, exactly the same as the weekly plan, so
+   the weekly plan currently buys the customer nothing and there is no reason
+   to commit. Raising the trial (Rs99-Rs120) or cutting weekly to ~Rs430 would
+   restore a real reason to move up. Left as specified. */
 
 export type TiffinPlan = {
   key: string;
@@ -49,12 +54,12 @@ const mk = (
 });
 
 export const TIFFIN_PLANS: TiffinPlan[] = [
-  mk('trial-1', 'Try 1 Day', 1, 1, 99, 30, 'one meal',
+  mk('trial-1', 'Try 1 Day', 1, 1, 80, 0, 'one meal',
      'Taste it first. One tiffin, one day, no commitment.', 'START HERE'),
-  mk('weekly-6', 'Weekly', 6, 6, 549, 100, 'per week',
+  mk('weekly-6', 'Weekly', 6, 6, 480, 0, 'per week',
      'A full working week. See if the routine suits you.'),
-  mk('monthly-26', 'Monthly', 26, null, 1999, 300, 'per month',
-     'Best value. Cheapest per meal, one payment.', 'BEST VALUE'),
+  mk('monthly-26', 'Monthly', 26, null, 2000, 0, 'per month',
+     'Best value. One payment, delivery included.', 'BEST VALUE'),
 ];
 
 export const DEFAULT_PLAN_KEY = 'monthly-26';

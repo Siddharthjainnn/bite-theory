@@ -83,7 +83,7 @@ export default function HomeServices() {
           {/* The trial is the actual hook for cold ad traffic — the monthly
               number anchors the value, this line removes the risk. */}
           <div className="hsv-note">
-            or try 1 day for {money(TRIAL_PLAN.total)} · {TIFFIN_PLAN.note}
+            or try 1 day for {money(TRIAL_PLAN.total)} · delivery included
           </div>
 
           <div className="hsv-actions">
