@@ -21,7 +21,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { money } from '../lib/bite';
-import { TIFFIN_PHONE, TIFFIN_PLAN } from '../tiffin/config';
+import { TIFFIN_PHONE, TIFFIN_PLAN, MONTHLY_PLAN, TRIAL_PLAN } from '../tiffin/config';
 
 /* Kept in sync with PromoBannerDeck — both read the same offer window. */
 const SWIGGY_URL = 'https://www.swiggy.com/menu/1429311?source=sharing';
@@ -77,11 +77,13 @@ export default function HomeServices() {
           </p>
 
           <div className="hsv-price">
-            <b>{money(TIFFIN_PLAN.total)}</b>
-            <span>{TIFFIN_PLAN.duration}</span>
+            <b>{money(MONTHLY_PLAN.total)}</b>
+            <span>{MONTHLY_PLAN.duration}</span>
           </div>
+          {/* The trial is the actual hook for cold ad traffic — the monthly
+              number anchors the value, this line removes the risk. */}
           <div className="hsv-note">
-            {money(TIFFIN_PLAN.price)} + {money(TIFFIN_PLAN.delivery)} delivery · {TIFFIN_PLAN.note}
+            or try 1 day for {money(TRIAL_PLAN.total)} · {TIFFIN_PLAN.note}
           </div>
 
           <div className="hsv-actions">

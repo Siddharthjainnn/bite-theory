@@ -24,7 +24,8 @@ import AppHeader from '../components/AppHeader';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { C, money, submitTiffinLead, TiffinDay } from '../lib/bite';
 import {
-  TIFFIN_PHONE, TIFFIN_PHONE_PRETTY, TIFFIN_PLAN, TIFFIN_AREAS, TIFFIN_SLOTS, DAYS,
+  TIFFIN_PHONE, TIFFIN_PHONE_PRETTY, TIFFIN_PLAN, TIFFIN_PLANS, DEFAULT_PLAN_KEY,
+  TIFFIN_AREAS, TIFFIN_SLOTS, DAYS,
 } from './config';
 
 type DayState = Record<string, {
@@ -71,6 +72,7 @@ export default function TiffinPage() {
   const [seeded, setSeeded] = useState<string | null>(null);
   const [area, setArea] = useState('');
   const [notes, setNotes] = useState('');
+  const [planKey, setPlanKey] = useState(DEFAULT_PLAN_KEY);
   const [days, setDays] = useState<DayState>(initialDays);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -89,10 +91,32 @@ export default function TiffinPage() {
     if (!phone) setPhone((su.mobile || '').replace(/\D/g, '').slice(-10));
   }
 
+  const plan = useMemo(
+    () => TIFFIN_PLANS.find((p) => p.key === planKey) || TIFFIN_PLANS[0],
+    [planKey],
+  );
+
   const activeCount = useMemo(
     () => DAYS.filter((d) => days[d.key].enabled).length,
     [days],
   );
+
+  /* Switching to a shorter plan trims the day selection down to what that plan
+     allows, so the customer is never left holding an invalid week. */
+  const choosePlan = (key: string) => {
+    setPlanKey(key);
+    const next = TIFFIN_PLANS.find((p) => p.key === key);
+    const cap = next?.maxWeekdays;
+    if (!cap) return;
+    setDays((p) => {
+      const on = DAYS.filter((d) => p[d.key].enabled);
+      if (on.length <= cap) return p;
+      const keep = new Set(on.slice(0, cap).map((d) => d.key));
+      const out = { ...p };
+      for (const d of DAYS) out[d.key] = { ...out[d.key], enabled: keep.has(d.key) };
+      return out;
+    });
+  };
 
   const setDay = (key: string, patch: Partial<DayState[string]>) =>
     setDays((p) => ({ ...p, [key]: { ...p[key], ...patch } }));
@@ -123,6 +147,8 @@ export default function TiffinPage() {
     if (!/^[6-9]\d{9}$/.test(phone.trim()))
       return setErr('Enter a valid 10-digit mobile number.');
     if (!activeCount) return setErr('Pick at least one delivery day.');
+    if (plan.maxWeekdays && activeCount > plan.maxWeekdays)
+      return setErr(`${plan.label} covers ${plan.maxWeekdays} day${plan.maxWeekdays === 1 ? '' : 's'}.`);
 
     const missing = DAYS.find((d) => days[d.key].enabled && !days[d.key].address.trim());
     if (missing) {
@@ -148,9 +174,9 @@ export default function TiffinPage() {
         name: name.trim(), phone: phone.trim(),
         email: email.trim() || undefined,
         area: area || undefined,
-        planKey: TIFFIN_PLAN.key,
-        planLabel: `${TIFFIN_PLAN.label} (${money(TIFFIN_PLAN.price)} + ${money(TIFFIN_PLAN.delivery)} delivery)`,
-        planPrice: TIFFIN_PLAN.total,
+        planKey: plan.key,
+        planLabel: `${plan.label} · ${plan.days} meal${plan.days === 1 ? '' : 's'} (${money(plan.price)} + ${money(plan.delivery)} delivery)`,
+        planPrice: plan.total,
         schedule,
         notes: notes.trim() || undefined,
         source: params.get('utm_source') || params.get('source') || 'website',
@@ -232,14 +258,15 @@ export default function TiffinPage() {
           </p>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{ fontSize: 34, fontWeight: 900, letterSpacing: -1 }}>
-              {money(TIFFIN_PLAN.total)}
+              {money(plan.total)}
             </span>
             <span style={{ fontSize: 13, opacity: .9, fontWeight: 700 }}>
-              {TIFFIN_PLAN.duration}
+              {plan.duration}
             </span>
           </div>
           <div style={{ fontSize: 12, opacity: .92, marginTop: 3 }}>
-            {money(TIFFIN_PLAN.price)} meals + {money(TIFFIN_PLAN.delivery)} delivery
+            {money(plan.price)} meals + {money(plan.delivery)} delivery
+            {plan.days > 1 ? ` · about ${money(plan.perDay)} a meal` : ''}
           </div>
           <div style={{ fontSize: 12, opacity: .92, marginTop: 4, fontWeight: 700 }}>
             {TIFFIN_PLAN.note}
@@ -270,10 +297,60 @@ export default function TiffinPage() {
           </div>
         </div>
 
+        {/* ── plan picker ── */}
+        <div style={card}>
+          <h2 style={{ fontSize: 15, fontWeight: 900, color: C.ink, margin: '0 0 4px' }}>
+            Choose your plan
+          </h2>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 12px' }}>
+            Never tried us? Start with one day.
+          </p>
+
+          {TIFFIN_PLANS.map((p) => {
+            const on = p.key === planKey;
+            return (
+              <button
+                key={p.key}
+                onClick={() => choosePlan(p.key)}
+                style={{
+                  width: '100%', textAlign: 'left', cursor: 'pointer', display: 'block',
+                  marginBottom: 9, padding: '13px 14px', borderRadius: 14,
+                  fontFamily: 'inherit',
+                  border: on ? `2px solid ${C.green}` : `1px solid ${C.line}`,
+                  background: on ? C.greenSoft : '#fff',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                    <b style={{ fontSize: 14.5, color: C.ink }}>{p.label}</b>
+                    {p.badge && (
+                      <span style={{
+                        fontSize: 9.5, fontWeight: 900, letterSpacing: .4,
+                        background: C.orange, color: '#fff',
+                        padding: '2px 7px', borderRadius: 99,
+                      }}>{p.badge}</span>
+                    )}
+                  </span>
+                  <b style={{ fontSize: 16, color: C.ink, whiteSpace: 'nowrap' }}>
+                    {money(p.total)}
+                  </b>
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+                  {p.blurb}
+                </div>
+                <div style={{ fontSize: 11.5, color: C.greenDeep, fontWeight: 800, marginTop: 4 }}>
+                  {p.days} meal{p.days === 1 ? '' : 's'}
+                  {p.days > 1 ? ` · ${money(p.perDay)} each` : ''}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
         {/* ── form ── */}
         <div style={card}>
           <h2 style={{ fontSize: 15, fontWeight: 900, color: C.ink, margin: '0 0 13px' }}>
-            Enrol now — takes a minute
+            Your details
           </h2>
 
           <div style={{ marginBottom: 12 }}>
@@ -320,8 +397,10 @@ export default function TiffinPage() {
             </span>
           </div>
           <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
-            Tap a day to set its address and time. Fill one day, then use{' '}
-            <b>Copy to all days</b> — you can still change Saturday and Sunday after.
+            {plan.maxWeekdays === 1
+              ? 'Pick the one day you want to try, then set the address and time.'
+              : <>Tap a day to set its address and time. Fill one day, then use{' '}
+                 <b>Copy to all days</b> — you can still change Saturday and Sunday after.</>}
           </p>
 
           <div style={{ display: 'flex', gap: 6, marginBottom: 13, flexWrap: 'wrap' }}>
@@ -329,7 +408,14 @@ export default function TiffinPage() {
               const on = days[d.key].enabled;
               return (
                 <button key={d.key}
-                  onClick={() => setDay(d.key, { enabled: !on })}
+                  onClick={() => {
+                    if (!on && plan.maxWeekdays && activeCount >= plan.maxWeekdays) {
+                      setErr(`${plan.label} covers ${plan.maxWeekdays} day${plan.maxWeekdays === 1 ? '' : 's'}. Turn one off first, or pick a bigger plan.`);
+                      return;
+                    }
+                    setErr('');
+                    setDay(d.key, { enabled: !on });
+                  }}
                   style={{
                     flex: '1 0 42px', padding: '9px 0', borderRadius: 11, cursor: 'pointer',
                     fontSize: 12, fontWeight: 800, fontFamily: 'inherit',
@@ -435,7 +521,7 @@ export default function TiffinPage() {
           background: busy ? C.muted : C.dark, color: '#fff', fontSize: 15.5,
           fontWeight: 900, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit',
         }}>
-          {busy ? 'Submitting…' : `Enrol now · ${money(TIFFIN_PLAN.total)}`}
+          {busy ? 'Submitting…' : `${plan.days === 1 ? 'Book my trial' : 'Enrol now'} · ${money(plan.total)}`}
         </button>
         <p style={{
           fontSize: 11.5, color: C.muted, textAlign: 'center',

@@ -11,23 +11,61 @@
 export const TIFFIN_PHONE = '999306022';
 export const TIFFIN_PHONE_PRETTY = '+91 999306022';
 
-/* Base and delivery are separate so the breakdown can be shown honestly and
-   so the finance side can split them later without re-deriving from a total. */
-const TIFFIN_BASE = 1999;
-const TIFFIN_DELIVERY = 300;
+/* ── Plans ────────────────────────────────────────────────────────────────
+   A ladder, not a single price: a stranger from an ad will not commit to a
+   month of food they have never tasted, but they will risk one lunch. The
+   per-day rate falls as commitment rises, so the trial is deliberately the
+   most expensive way to eat and monthly the cheapest — that gap is what
+   moves people up the ladder.
 
+   ⚠️ ONLY the monthly figures are confirmed (Rs1999 + Rs300 delivery).
+   The trial and weekly numbers below are placeholders chosen to keep the
+   ladder consistent. Set them from your real food cost before advertising. */
+
+export type TiffinPlan = {
+  key: string;
+  label: string;
+  /** Deliveries included. Drives the day-picker limit on /tiffin. */
+  days: number;
+  /** Cap on distinct weekdays the customer may choose, null = no cap. */
+  maxWeekdays: number | null;
+  price: number;
+  delivery: number;
+  total: number;
+  perDay: number;
+  duration: string;
+  blurb: string;
+  badge?: string;
+};
+
+const mk = (
+  key: string, label: string, days: number, maxWeekdays: number | null,
+  price: number, delivery: number, duration: string, blurb: string, badge?: string,
+): TiffinPlan => ({
+  key, label, days, maxWeekdays, price, delivery,
+  total: price + delivery,
+  perDay: Math.round((price + delivery) / days),
+  duration, blurb, badge,
+});
+
+export const TIFFIN_PLANS: TiffinPlan[] = [
+  mk('trial-1', 'Try 1 Day', 1, 1, 99, 30, 'one meal',
+     'Taste it first. One tiffin, one day, no commitment.', 'START HERE'),
+  mk('weekly-6', 'Weekly', 6, 6, 549, 100, 'per week',
+     'A full working week. See if the routine suits you.'),
+  mk('monthly-26', 'Monthly', 26, null, 1999, 300, 'per month',
+     'Best value. Cheapest per meal, one payment.', 'BEST VALUE'),
+];
+
+export const DEFAULT_PLAN_KEY = 'monthly-26';
+export const TRIAL_PLAN = TIFFIN_PLANS[0];
+export const MONTHLY_PLAN = TIFFIN_PLANS[2];
+
+/** Kept for the shared copy that is not plan-specific. */
 export const TIFFIN_PLAN = {
-  key: 'monthly-1999',
   label: 'Daily Tiffin Plan',
-  price: TIFFIN_BASE,
-  delivery: TIFFIN_DELIVERY,
-  /* What the customer actually pays, and what gets stored on the lead — the
-     figure the team will collect on the callback. */
-  total: TIFFIN_BASE + TIFFIN_DELIVERY,
-  duration: 'per month',
-  /* One-time payment for the month — no auto-renewal, no saved card. Said
-     plainly on both the home tile and /tiffin, because "subscription" makes
-     people assume recurring billing and hesitate. */
+  /* One-time payment — no auto-renewal, no saved card. Said plainly, because
+     "subscription" reads as recurring billing and makes people hesitate. */
   note: 'One-time payment · no auto-renewal',
   /* ⚠️ VERIFY: what a single tiffin actually contains. Customers will hold
      you to whatever this says. */
