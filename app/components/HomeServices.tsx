@@ -21,7 +21,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { money } from '../lib/bite';
-import { TIFFIN_PHONE, TIFFIN_PLAN, MONTHLY_PLAN, TRIAL_PLAN } from '../tiffin/config';
+import { TIFFIN_PHONE_TEL, MONTHLY_PLAN, TRIAL_PLAN } from '../tiffin/config';
 
 /* Kept in sync with PromoBannerDeck — both read the same offer window. */
 const SWIGGY_URL = 'https://www.swiggy.com/menu/1429311?source=sharing';
@@ -89,7 +89,7 @@ export default function HomeServices() {
           <div className="hsv-actions">
             <span className="hsv-btn hsv-btn--solid">Enrol now <i>→</i></span>
             <a
-              href={`tel:${TIFFIN_PHONE}`}
+              href={`tel:${TIFFIN_PHONE_TEL}`}
               className="hsv-btn hsv-btn--ghost"
               onClick={(e) => e.stopPropagation()}
             >

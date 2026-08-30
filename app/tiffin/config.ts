@@ -3,13 +3,12 @@
  * so copy/price/area changes never require touching component code.
  */
 
-/* ⚠️ VERIFY BEFORE THE ADS GO LIVE.
-   The number supplied was 999306022 — that is NINE digits. Indian mobiles are
-   ten. It is almost certainly missing one. A wrong number on a paid campaign
-   means you pay for every click and lose every call, so this is left obviously
-   broken on purpose rather than silently guessed at. */
-export const TIFFIN_PHONE = '999306022';
-export const TIFFIN_PHONE_PRETTY = '+91 999306022';
+/* Enquiry line for the tiffin funnel. */
+export const TIFFIN_PHONE = '9993060222';
+/* tel: links are dialled with the country code — without +91 some Android
+   dialers mis-handle the number when the SIM is roaming. */
+export const TIFFIN_PHONE_TEL = '+919993060222';
+export const TIFFIN_PHONE_PRETTY = '+91 99930 60222';
 
 /* ── Plans ────────────────────────────────────────────────────────────────
    A ladder, not a single price: a stranger from an ad will not commit to a

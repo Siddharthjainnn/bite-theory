@@ -24,7 +24,7 @@ import AppHeader from '../components/AppHeader';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { C, money, submitTiffinLead, TiffinDay } from '../lib/bite';
 import {
-  TIFFIN_PHONE, TIFFIN_PHONE_PRETTY, TIFFIN_PLAN, TIFFIN_PLANS, DEFAULT_PLAN_KEY,
+  TIFFIN_PHONE_TEL, TIFFIN_PHONE_PRETTY, TIFFIN_PLAN, TIFFIN_PLANS, DEFAULT_PLAN_KEY,
   TIFFIN_AREAS, TIFFIN_SLOTS, DAYS,
 } from './config';
 
@@ -205,7 +205,7 @@ export default function TiffinPage() {
             <b>{phone}</b> within a few hours to confirm your plan and start date.
           </p>
           <a
-            href={`tel:${TIFFIN_PHONE}`}
+            href={`tel:${TIFFIN_PHONE_TEL}`}
             style={{
               display: 'inline-block', marginTop: 18, background: C.dark, color: '#fff',
               padding: '13px 24px', borderRadius: 24, fontWeight: 800,
@@ -534,7 +534,7 @@ export default function TiffinPage() {
       </div>
 
       {/* sticky call bar — for people who will never fill a form */}
-      <a href={`tel:${TIFFIN_PHONE}`} style={{
+      <a href={`tel:${TIFFIN_PHONE_TEL}`} style={{
         position: 'fixed', left: 14, right: 14, bottom: 16, zIndex: 40,
         maxWidth: 452, margin: '0 auto', display: 'flex', alignItems: 'center',
         justifyContent: 'center', gap: 9, background: C.green, color: '#fff',
