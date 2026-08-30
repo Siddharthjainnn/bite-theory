@@ -149,8 +149,8 @@ export default function TiffinPage() {
         email: email.trim() || undefined,
         area: area || undefined,
         planKey: TIFFIN_PLAN.key,
-        planLabel: TIFFIN_PLAN.label,
-        planPrice: TIFFIN_PLAN.price,
+        planLabel: `${TIFFIN_PLAN.label} (${money(TIFFIN_PLAN.price)} + ${money(TIFFIN_PLAN.delivery)} delivery)`,
+        planPrice: TIFFIN_PLAN.total,
         schedule,
         notes: notes.trim() || undefined,
         source: params.get('utm_source') || params.get('source') || 'website',
@@ -232,11 +232,14 @@ export default function TiffinPage() {
           </p>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{ fontSize: 34, fontWeight: 900, letterSpacing: -1 }}>
-              {money(TIFFIN_PLAN.price)}
+              {money(TIFFIN_PLAN.total)}
             </span>
             <span style={{ fontSize: 13, opacity: .9, fontWeight: 700 }}>
               {TIFFIN_PLAN.duration}
             </span>
+          </div>
+          <div style={{ fontSize: 12, opacity: .92, marginTop: 3 }}>
+            {money(TIFFIN_PLAN.price)} meals + {money(TIFFIN_PLAN.delivery)} delivery
           </div>
           <div style={{ fontSize: 12, opacity: .92, marginTop: 4, fontWeight: 700 }}>
             {TIFFIN_PLAN.note}
@@ -432,7 +435,7 @@ export default function TiffinPage() {
           background: busy ? C.muted : C.dark, color: '#fff', fontSize: 15.5,
           fontWeight: 900, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit',
         }}>
-          {busy ? 'Submitting…' : `Enrol now · ${money(TIFFIN_PLAN.price)}`}
+          {busy ? 'Submitting…' : `Enrol now · ${money(TIFFIN_PLAN.total)}`}
         </button>
         <p style={{
           fontSize: 11.5, color: C.muted, textAlign: 'center',

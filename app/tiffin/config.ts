@@ -11,10 +11,19 @@
 export const TIFFIN_PHONE = '999306022';
 export const TIFFIN_PHONE_PRETTY = '+91 999306022';
 
+/* Base and delivery are separate so the breakdown can be shown honestly and
+   so the finance side can split them later without re-deriving from a total. */
+const TIFFIN_BASE = 1999;
+const TIFFIN_DELIVERY = 300;
+
 export const TIFFIN_PLAN = {
-  key: 'monthly-1750',
+  key: 'monthly-1999',
   label: 'Daily Tiffin Plan',
-  price: 1750,
+  price: TIFFIN_BASE,
+  delivery: TIFFIN_DELIVERY,
+  /* What the customer actually pays, and what gets stored on the lead — the
+     figure the team will collect on the callback. */
+  total: TIFFIN_BASE + TIFFIN_DELIVERY,
   duration: 'per month',
   /* One-time payment for the month — no auto-renewal, no saved card. Said
      plainly on both the home tile and /tiffin, because "subscription" makes
