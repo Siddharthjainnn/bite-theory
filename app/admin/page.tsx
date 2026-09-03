@@ -2522,6 +2522,7 @@ function CouponAssignments({ showToast }: { showToast: (m: string) => void }) {
   const [userId, setUserId] = useState<number | ''>('');
   const [userSearch, setUserSearch] = useState('');
   const [note, setNote] = useState('');
+  const [sendEmail, setSendEmail] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -2550,8 +2551,18 @@ function CouponAssignments({ showToast }: { showToast: (m: string) => void }) {
     if (!couponId || !userId) { showToast('Pick a coupon and a customer'); return; }
     setBusy(true);
     try {
-      await assignCoupon(Number(couponId), Number(userId), note.trim() || undefined, ADMIN_KEY_HEADER());
-      showToast('Coupon assigned 🎁');
+      const r = await assignCoupon(
+        Number(couponId), Number(userId), note.trim() || undefined,
+        ADMIN_KEY_HEADER(), sendEmail,
+      );
+      /* Report the email outcome explicitly: assignment can succeed while the
+         email fails, and silently implying it was sent would be worse than
+         not offering to send it at all. */
+      showToast(
+        !sendEmail ? 'Coupon assigned 🎁'
+          : r.mail?.emailed ? `Coupon assigned and emailed to ${r.mail.to} 🎁`
+          : `Coupon assigned, but email failed: ${r.mail?.reason || 'unknown'}`,
+      );
       setNote(''); setUserId(''); setUserSearch('');
       await load();
     } catch (e: any) { showToast(e.message || 'Could not assign'); }
@@ -2599,11 +2610,24 @@ function CouponAssignments({ showToast }: { showToast: (m: string) => void }) {
           <label style={{ fontSize: 12, color: C.muted }}>Note (optional, internal)</label>
           <input style={inputStyle} placeholder="e.g. compensation for late order #BT123" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <button style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={assign}>
-            {busy ? 'Assigning…' : 'Assign coupon'}
+            {busy ? 'Assigning…' : sendEmail ? 'Assign & email coupon' : 'Assign coupon'}
           </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: C.ink, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={sendEmail}
+              onChange={(e) => setSendEmail(e.target.checked)}
+              style={{ width: 16, height: 16, cursor: 'pointer' }}
+            />
+            Email the coupon to the customer
+          </label>
         </div>
+        <p style={{ fontSize: 11.5, color: C.muted, margin: '8px 0 0' }}>
+          Needs SMTP configured and the customer to have an email on file.
+          You&apos;ll be told either way.
+        </p>
       </div>
 
       <div style={{ ...cardStyle, overflowX: 'auto' }}>

@@ -688,11 +688,16 @@ export async function fetchCouponAssignments(
 export async function assignCoupon(
   couponId: number, userId: number, note: string | undefined,
   adminHeaders: Record<string, string>,
-): Promise<CouponAssignmentRow> {
+  sendEmail = false,
+): Promise<CouponAssignmentRow & {
+  /* null when the admin didn't tick "email it"; otherwise reports whether the
+     send worked, so the UI can say so without a second request. */
+  mail?: { emailed: boolean; to?: string; reason?: string } | null;
+}> {
   const res = await fetch(`${API_BASE}/coupon-assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...adminHeaders },
-    body: JSON.stringify({ couponId, userId, note }),
+    body: JSON.stringify({ couponId, userId, note, sendEmail }),
   });
   return jsonOrThrow(res);
 }
