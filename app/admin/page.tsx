@@ -15,6 +15,7 @@ import { useEffect, useState, useCallback, useRef, useMemo} from 'react';
 
 import StoreSettingsPanel from '../components/StoreSettingsPanel';
 import TiffinLeadsPanel from '../components/TiffinLeadsPanel';
+import CouponBlastPanel from '../components/CouponBlastPanel';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
 import ThaliAdminPanel from '../components/ThaliAdminPanel';
 import {
@@ -854,6 +855,7 @@ const NAV: NavGroup[] = [
     { key: 'campaigns_new', label: 'Campaigns', icon: '⚡' },
     { key: 'coupons', label: 'Coupons', icon: '🎟️' },
     { key: 'coupon_assign', label: 'Assign Coupon', icon: '🎁' },
+    { key: 'coupon_blast', label: 'Coupon Campaign', icon: '📧' },
     { key: 'campaigns', label: 'Campaigns', icon: '📣' },
     { key: 'banners', label: 'Banners', icon: '🖼️' },
     { key: 'referrals', label: 'Referrals', icon: '🔗' },
@@ -905,7 +907,7 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
     'favorites', 'support_tickets', 'help_centre', 'notifications',
   ],
   marketing_manager: [
-    'dashboard', 'reports', 'campaigns_new', 'coupons', 'coupon_assign', 'campaigns',
+    'dashboard', 'reports', 'campaigns_new', 'coupons', 'coupon_assign', 'coupon_blast', 'campaigns',
     'banners', 'referrals', 'loyalty_points',
   ],
   finance_manager: [
@@ -1518,7 +1520,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1595,6 +1597,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
             {effectivePage === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'tiffin_leads' && <TiffinLeadsPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
+            {effectivePage === 'coupon_blast' && <CouponBlastPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {effectivePage === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
             {effectivePage === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'thali' && <ThaliAdminPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
