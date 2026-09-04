@@ -1420,7 +1420,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
                 <>
                   {newOrders.map((o) => (
                     <button key={`n${o.id}`}
-                      onClick={() => { setOpen(false); onGo('orders'); }}
+                      onClick={() => { setOpen(false); onGo('live_orders'); }}
                       style={alertRow}>
                       <span style={{ fontSize: 16 }}>🆕</span>
                       <span style={{ flex: 1, textAlign: 'left' }}>
@@ -1433,7 +1433,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
                   ))}
                   {stuckReady.map((o) => (
                     <button key={`r${o.id}`}
-                      onClick={() => { setOpen(false); onGo('orders'); }}
+                      onClick={() => { setOpen(false); onGo('live_orders'); }}
                       style={alertRow}>
                       <span style={{ fontSize: 16 }}>🍱</span>
                       <span style={{ flex: 1, textAlign: 'left' }}>
