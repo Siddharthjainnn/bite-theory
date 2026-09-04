@@ -18,45 +18,73 @@
  * when a customer never waits for the carousel to reach the Swiggy slide.
  */
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { money } from '../lib/bite';
 import { TIFFIN_PHONE_TEL, MONTHLY_PLAN, TRIAL_PLAN } from '../tiffin/config';
+import { LIVE_PLATFORMS, FREE_DELIVERY_ABOVE } from '../lib/platforms';
 
-/* Kept in sync with PromoBannerDeck — both read the same offer window. */
-const SWIGGY_URL = 'https://www.swiggy.com/menu/1429311?source=sharing';
-const SWIGGY_OFFER_ENDS = new Date('2026-09-01T23:59:59+05:30');
-
-function fmtShort(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return d > 0 ? `${d}d ${pad(h)}h ${pad(m)}m` : `${pad(h)}:${pad(m)}:${pad(sec)}`;
+/**
+ * Platform logo, falling back to a wordmark.
+ *
+ * The image is only trusted once it has actually loaded: a missing file would
+ * otherwise leave a blank space on the busiest tile on the page. onError flips
+ * to the styled name instead, so the tile always reads correctly whether or
+ * not the logo files have been added.
+ */
+function PlatformMark({ platform }: { platform: (typeof LIVE_PLATFORMS)[number] }) {
+  const [failed, setFailed] = useState(false);
+  if (platform.logo && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={platform.logo}
+        alt={platform.name}
+        className="hsv-plat-logo"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return <b className="hsv-tile-h hsv-plat-word">{platform.name}</b>;
 }
 
 export default function HomeServices() {
   const router = useRouter();
 
-  /* Null through SSR *and* the hydration render so both agree; the first
-     effect pass fills it in. Reading the clock during render would mismatch. */
-  const [left, setLeft] = useState<number | null>(null);
-  useEffect(() => {
-    const tick = () => setLeft(SWIGGY_OFFER_ENDS.getTime() - Date.now());
-    tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
-  }, []);
-  const swiggyLive = left === null || left > 0;
-
   return (
     <section className="hsv">
       <div className="hsv-head">
-        <h2 className="hsv-title">How can we feed you today?</h2>
-        <span className="hsv-sub">Three ways to eat with us</span>
+        <h2 className="hsv-title">Order now</h2>
+        <span className="hsv-sub">Live on Toing &amp; Swiggy</span>
       </div>
+
+      {/* ── marketplaces first ──
+          Ordered for VOLUME, not margin. A direct order is worth more (no
+          commission), but early on the marketplaces are where the customers
+          already are, and their ranking rewards order count — so the tiles
+          that win orders today lead the page. Revisit once direct demand
+          is established. */}
+      {LIVE_PLATFORMS.length > 0 && (
+        <div className="hsv-pair hsv-pair--lead">
+          {LIVE_PLATFORMS.map((p) => (
+            <div
+              key={p.key}
+              className="hsv-tile hsv-tile--platform"
+              role="button"
+              tabIndex={0}
+              style={{ background: p.gradient, boxShadow: p.shadow }}
+              onClick={() => window.open(p.url, '_blank', 'noopener,noreferrer')}
+            >
+              <span className="hsv-tile-art" aria-hidden>{p.art}</span>
+              <span className="hsv-plat-badge">ORDER NOW ON</span>
+              <PlatformMark platform={p} />
+              <span className="hsv-tile-p">{p.blurb}</span>
+              {p.offer && <span className="hsv-timer">🎉 {p.offer}</span>}
+              <span className="hsv-cta-mini hsv-cta-mini--tight">Order →</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── primary: daily tiffin ── */}
       <div
@@ -99,37 +127,20 @@ export default function HomeServices() {
         </div>
       </div>
 
-      {/* ── secondary pair ── */}
-      <div className="hsv-pair">
-        <div
-          className="hsv-tile hsv-tile--swiggy"
-          role="button"
-          tabIndex={0}
-          onClick={() => window.open(SWIGGY_URL, '_blank', 'noopener,noreferrer')}
-        >
-          <span className="hsv-tile-art" aria-hidden>🛵</span>
-          <span className="hsv-tile-eyebrow">NOW LIVE ON</span>
-          <b className="hsv-tile-h">Swiggy</b>
-          <span className="hsv-tile-p">Same kitchen, same menu</span>
-          {swiggyLive && (
-            <span className="hsv-timer">
-              {left === null ? 'Offer on now' : `Ends in ${fmtShort(left)}`}
-            </span>
-          )}
-        </div>
-
-        <div
-          className="hsv-tile hsv-tile--menu"
-          role="button"
-          tabIndex={0}
-          onClick={() => router.push('/menu')}
-        >
-          <span className="hsv-tile-art" aria-hidden>🥗</span>
-          <span className="hsv-tile-eyebrow">ORDER DIRECT</span>
-          <b className="hsv-tile-h">Full menu</b>
-          <span className="hsv-tile-p">Best price, no commission</span>
-          <span className="hsv-timer hsv-timer--calm">Under ₹99 combos</span>
-        </div>
+      {/* ── order direct: lowest price for the customer, best margin for us ── */}
+      <div
+        className="hsv-tile hsv-tile--menu hsv-wide"
+        role="button"
+        tabIndex={0}
+        onClick={() => router.push('/menu')}
+      >
+        <span className="hsv-tile-art" aria-hidden>🥗</span>
+        <span className="hsv-tile-eyebrow">ORDER DIRECT · BEST PRICE</span>
+        <b className="hsv-tile-h">Our full menu</b>
+        <span className="hsv-tile-p">
+          No commission, so you get our lowest price. Free delivery above ₹{FREE_DELIVERY_ABOVE}.
+        </span>
+        <span className="hsv-cta-mini">Browse menu →</span>
       </div>
     </section>
   );

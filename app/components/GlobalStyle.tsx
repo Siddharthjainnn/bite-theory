@@ -976,6 +976,39 @@ a{text-decoration:none;color:inherit}
   animation:hsvBlink 2.2s ease-in-out infinite}
 .hsv-timer--calm{animation:none;background:rgba(0,0,0,.24)}
 
+/* Full-width variant for the direct-menu tile. */
+.hsv-wide{margin-top:10px;min-height:auto;padding:15px 16px 14px}
+.hsv-wide .hsv-tile-art{font-size:56px;right:10px;bottom:-6px}
+.hsv-wide .hsv-tile-p{max-width:72%}
+.hsv-cta-mini{margin-top:10px;display:inline-block;background:#fff;color:#0D3B2E;
+  font-size:12px;font-weight:900;padding:7px 14px;border-radius:20px;
+  position:relative;z-index:2}
+
+/* "or order us on" rule between the direct menu and the marketplaces. */
+.hsv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 10px}
+.hsv-divider::before,.hsv-divider::after{content:'';flex:1;height:1px;background:var(--bt-line,#e4ebe6)}
+.hsv-divider span{font-size:11px;font-weight:900;letter-spacing:.7px;
+  color:#6b7d74;text-transform:uppercase;white-space:nowrap}
+
+/* ── marketplace tiles when they lead the page ──
+   Taller than the secondary variant and with a stronger lift, because these
+   are now the first thing under the header and have to earn the tap. */
+.hsv-pair--lead{margin-top:0;margin-bottom:14px}
+.hsv-tile--platform{min-height:172px;padding:14px 13px 13px;
+  transition:transform .18s ease, box-shadow .18s ease}
+.hsv-tile--platform:hover{transform:translateY(-2px)}
+.hsv-tile--platform .hsv-tile-art{font-size:52px;right:4px;bottom:-6px;opacity:.8}
+.hsv-plat-badge{font-size:9px;font-weight:900;letter-spacing:.8px;opacity:.95;
+  background:rgba(0,0,0,.26);border:1px solid rgba(255,255,255,.28);
+  padding:3px 8px;border-radius:99px;position:relative;z-index:2}
+/* Contained, never stretched — a squashed partner logo breaches most brand terms. */
+.hsv-plat-logo{height:26px;width:auto;max-width:118px;object-fit:contain;
+  margin:9px 0 2px;position:relative;z-index:2;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.25))}
+.hsv-plat-word{margin-top:9px;font-size:19px;letter-spacing:-.5px;
+  position:relative;z-index:2;text-shadow:0 2px 0 rgba(0,0,0,.18)}
+.hsv-cta-mini--tight{margin-top:9px;padding:6px 13px;font-size:11.5px}
+
 @keyframes hsvRise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes hsvSheen{0%{transform:translateX(-120%)}55%,100%{transform:translateX(120%)}}
 @keyframes hsvFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
