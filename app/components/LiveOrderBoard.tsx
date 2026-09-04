@@ -9,18 +9,20 @@
  * 1pm. This screen is built for one job — move the order to its next state in
  * a single tap — and orders re-file themselves into the correct tab as they go.
  *
- * TABS vs STATUSES
- * There are NINE statuses in the backend state machine but only five things a
- * kitchen cares about, so tabs group them:
- *   New        order_received, order_confirmed
- *   Preparing  preparing_food
- *   Ready      food_ready
- *   On the way assigned_to_delivery, out_for_delivery, arriving_soon
- *   Past       delivered, cancelled
+ * FOUR TAPS, NOT NINE
+ * The backend has nine statuses, but a kitchen should not tap nine times.
+ * Where the state machine permits a skip, this screen takes it:
  *
- * The primary button always performs the single legal next transition, taken
- * from the same TRANSITIONS map the server enforces, so the UI can never offer
- * a move the backend will reject.
+ *   Accept      order_received -> preparing_food   (skips order_confirmed,
+ *                                                   which the machine allows)
+ *   Ready       preparing_food -> food_ready
+ *   Picked up   food_ready -> assigned_to_delivery -> out_for_delivery
+ *                                                   (two calls, one button)
+ *   Delivered   out_for_delivery -> delivered       (skips arriving_soon)
+ *
+ * Nothing is bypassed on the server: every hop is a legal transition and every
+ * one is written to order_status_history. The customer still sees the full
+ * granular timeline; only the staff tap count shrinks.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -43,16 +45,16 @@ type Order = {
 };
 type Rider = { id: number; name: string; isAvailable?: boolean };
 
-/* Mirrors src/orders/order-status.machine.ts. Kept deliberately explicit
-   rather than derived, so a backend change surfaces here as a visible edit. */
-const NEXT: Record<string, { to: string; label: string }> = {
-  order_received:       { to: 'order_confirmed',      label: 'Accept order' },
-  order_confirmed:      { to: 'preparing_food',       label: 'Start cooking' },
-  preparing_food:       { to: 'food_ready',           label: 'Mark food ready' },
-  food_ready:           { to: 'assigned_to_delivery', label: 'Assign rider' },
-  assigned_to_delivery: { to: 'out_for_delivery',     label: 'Send out' },
-  out_for_delivery:     { to: 'delivered',            label: 'Mark delivered' },
-  arriving_soon:        { to: 'delivered',            label: 'Mark delivered' },
+/* Each entry is ONE button. `chain` is the sequence of server transitions it
+   performs, every hop legal per src/orders/order-status.machine.ts. */
+const NEXT: Record<string, { chain: string[]; label: string }> = {
+  order_received:       { chain: ['preparing_food'],                          label: 'Accept' },
+  order_confirmed:      { chain: ['preparing_food'],                          label: 'Accept' },
+  preparing_food:       { chain: ['food_ready'],                              label: 'Food ready' },
+  food_ready:           { chain: ['assigned_to_delivery', 'out_for_delivery'], label: 'Picked up' },
+  assigned_to_delivery: { chain: ['out_for_delivery'],                        label: 'Picked up' },
+  out_for_delivery:     { chain: ['delivered'],                               label: 'Delivered' },
+  arriving_soon:        { chain: ['delivered'],                               label: 'Delivered' },
 };
 
 const CANCELLABLE = new Set([
@@ -61,11 +63,11 @@ const CANCELLABLE = new Set([
 ]);
 
 const TABS = [
-  { key: 'new',       label: 'New',        statuses: ['order_received', 'order_confirmed'] },
-  { key: 'preparing', label: 'Preparing',  statuses: ['preparing_food'] },
-  { key: 'ready',     label: 'Ready',      statuses: ['food_ready'] },
-  { key: 'otw',       label: 'On the way', statuses: ['assigned_to_delivery', 'out_for_delivery', 'arriving_soon'] },
-  { key: 'past',      label: 'Past',       statuses: ['delivered', 'cancelled'] },
+  { key: 'new',       label: 'New',         statuses: ['order_received', 'order_confirmed'] },
+  { key: 'preparing', label: 'Preparing',   statuses: ['preparing_food'] },
+  { key: 'ready',     label: 'Ready',       statuses: ['food_ready'] },
+  { key: 'picked',    label: 'Picked Up',   statuses: ['assigned_to_delivery', 'out_for_delivery', 'arriving_soon'] },
+  { key: 'past',      label: 'Past Orders', statuses: ['delivered', 'cancelled'] },
 ];
 
 const STATUS_LABEL: Record<string, string> = {
@@ -150,18 +152,26 @@ export default function LiveOrderBoard({
     if (!step) return;
     setBusyId(o.id);
     try {
-      if (step.to === 'assigned_to_delivery') {
-        const rid = riderPick[o.id] ?? riders[0]?.id;
-        if (!rid) throw new Error('No rider available. Add one in Delivery Partners.');
-        // assign-rider moves the order to assigned_to_delivery itself.
-        await api.assignRider(o.id, rid);
-      } else {
-        await api.advanceOrderStatus(o.id, step.to);
+      /* Run the chain in order. Each hop is a separate server call because the
+         state machine validates one transition at a time; if a later hop fails
+         the earlier ones stand, which is correct — the order really did reach
+         that stage. */
+      for (const to of step.chain) {
+        if (to === 'assigned_to_delivery') {
+          const rid = riderPick[o.id] ?? riders[0]?.id;
+          if (!rid) throw new Error('No rider available. Add one in Delivery Partners.');
+          // assign-rider moves the order into assigned_to_delivery itself.
+          await api.assignRider(o.id, rid);
+        } else {
+          await api.advanceOrderStatus(o.id, to);
+        }
       }
-      showToast(`${o.orderNumber || o.order_number || `#${o.id}`} → ${STATUS_LABEL[step.to]}`);
+      const last = step.chain[step.chain.length - 1];
+      showToast(`${o.orderNumber || o.order_number || `#${o.id}`} → ${STATUS_LABEL[last]}`);
       await load();
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Could not update');
+      await load();
     } finally { setBusyId(null); }
   };
 
@@ -183,7 +193,7 @@ export default function LiveOrderBoard({
         <div>
           <h2 style={{ fontSize: 19, fontWeight: 900, color: C.ink, margin: 0 }}>Live Orders</h2>
           <p style={{ fontSize: 12.5, color: C.muted, margin: '3px 0 0' }}>
-            One tap moves an order forward. Refreshes itself every 20 seconds.
+            Four taps from new order to delivered. Refreshes every 20 seconds.
           </p>
         </div>
         <button onClick={load} style={{
@@ -240,7 +250,7 @@ export default function LiveOrderBoard({
         const when = o.placedAt || o.placed_at;
         const addr = o.deliveryAddress || o.delivery_address;
         const busy = busyId === o.id;
-        const needsRider = step?.to === 'assigned_to_delivery';
+        const needsRider = step?.chain.includes('assigned_to_delivery');
 
         return (
           <div key={o.id} style={{
