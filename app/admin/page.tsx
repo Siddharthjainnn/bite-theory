@@ -16,6 +16,7 @@ import { useEffect, useState, useCallback, useRef, useMemo} from 'react';
 import StoreSettingsPanel from '../components/StoreSettingsPanel';
 import TiffinLeadsPanel from '../components/TiffinLeadsPanel';
 import CouponBlastPanel from '../components/CouponBlastPanel';
+import LiveOrderBoard from '../components/LiveOrderBoard';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
 import ThaliAdminPanel from '../components/ThaliAdminPanel';
 import {
@@ -834,7 +835,8 @@ interface NavGroup { title: string; items: NavItem[]; }
 const NAV: NavGroup[] = [
   { title: 'Overview', items: [{ key: 'dashboard', label: 'Dashboard', icon: '▦' }, { key: 'reports', label: 'Reports', icon: '📊' }] },
   { title: 'Orders', items: [
-    { key: 'orders', label: 'Orders', icon: '🧾' },
+    { key: 'live_orders', label: 'Live Orders', icon: '🔔' },
+    { key: 'orders', label: 'All Orders', icon: '🧾' },
     { key: 'order_items', label: 'Order Items', icon: '🍽️' },
     { key: 'pos', label: 'Counter / POS', icon: '🛒' },
   ]},
@@ -896,14 +898,14 @@ type PageKey = typeof ALL_KEYS[number];
    browser master key is retired (see the write-guard JWT change). */
 const ROLE_SECTIONS: Record<string, PageKey[]> = {
   kitchen_manager: [
-    'dashboard', 'orders', 'order_items',
+    'dashboard', 'live_orders', 'orders', 'order_items',
     'products', 'todays_special', 'categories', 'inventory', 'thali',
   ],
   delivery_manager: [
-    'dashboard', 'orders', 'order_items', 'delivery_partners',
+    'dashboard', 'live_orders', 'orders', 'order_items', 'delivery_partners',
   ],
   customer_support: [
-    'dashboard', 'orders', 'users', 'reviews', 'addresses',
+    'dashboard', 'live_orders', 'orders', 'users', 'reviews', 'addresses',
     'favorites', 'support_tickets', 'help_centre', 'notifications',
   ],
   marketing_manager: [
@@ -1520,7 +1522,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'live_orders', 'invoice_layout', 'thali'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1598,6 +1600,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'tiffin_leads' && <TiffinLeadsPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {effectivePage === 'coupon_blast' && <CouponBlastPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
+            {effectivePage === 'live_orders' && <LiveOrderBoard api={api} showToast={showToast} />}
             {effectivePage === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
             {effectivePage === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'thali' && <ThaliAdminPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
