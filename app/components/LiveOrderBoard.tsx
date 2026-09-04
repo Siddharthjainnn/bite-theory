@@ -26,7 +26,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { C, money } from '../lib/bite';
+import { C, money, fetchStoreSettings } from '../lib/bite';
+import { chefTicket, customerInvoice, printHtml } from '../lib/invoice';
 
 type Order = {
   id: number;
@@ -42,8 +43,38 @@ type Order = {
   items?: { productName?: string; product_name?: string; quantity: number }[];
   deliveryPartnerId?: number | null;
   delivery_partner_id?: number | null;
+  customerName?: string | null;
+  customerMobile?: string | null;
+  distanceKm?: number | string | null;
+  distance_km?: number | string | null;
+  zone?: string | null;
 };
 type Rider = { id: number; name: string; isAvailable?: boolean };
+
+/* Indore localities, longest first so "Vijay Nagar Extension" is not matched
+   as plain "Vijay Nagar", and so "Scheme No 78" beats "Scheme". Matched
+   against the free-text delivery address, which is all Google gives us for
+   orders placed before address autocomplete existed. */
+const LOCALITIES = [
+  'Vijay Nagar', 'Scheme No 78', 'Scheme No 114', 'Scheme 78', 'Scheme 114',
+  'BRK Business Park', 'Bholaram Ustad Marg', 'Bhawarkuan', 'Bhawarkua',
+  'Mangal City', 'Sudama Nagar', 'Bajrang Nagar', 'Girdhar Nagar', 'Nanda Nagar',
+  'Old Palasia', 'New Palasia', 'Palasia', 'Sukhliya', 'Sukliya', 'Patnipura',
+  'Kanadia', 'Kajrana', 'Nakshatra', 'Winway', 'Rajendra Nagar', 'Annapurna',
+  'Rau', 'Mhow', 'Bengali Square', 'Khajrana', 'Silicon City', 'Nipania',
+  'Tilak Nagar', 'Geeta Bhawan', 'Saket', 'LIG', 'MIG', 'AB Road',
+  'Badi Gwaltoli', 'Chhoti Gwaltoli', 'Malharganj', 'Sarafa', 'Rajwada',
+  'Manorama Ganj', 'Snehlataganj', 'Navlakha', 'Musakhedi', 'Pipliyahana',
+  'Scheme No 54', 'Scheme No 71', 'Scheme No 140', 'Dewas Naka', 'Bapat Square',
+].sort((a, b) => b.length - a.length);
+
+/** Best-effort locality from a free-text address. */
+function localityOf(addr?: string | null): string | null {
+  if (!addr) return null;
+  const hay = addr.toLowerCase();
+  for (const l of LOCALITIES) if (hay.includes(l.toLowerCase())) return l;
+  return null;
+}
 
 /* Each entry is ONE button. `chain` is the sequence of server transitions it
    performs, every hop legal per src/orders/order-status.machine.ts. */
@@ -115,6 +146,7 @@ export default function LiveOrderBoard({
     advanceOrderStatus: (id: number, status: string, note?: string) => Promise<unknown>;
     assignRider: (id: number, partnerId: number) => Promise<unknown>;
     listRidersForAssignment: () => Promise<unknown[]>;
+    getOrderFull: (id: number) => Promise<Record<string, unknown>>;
   };
   showToast: (m: string) => void;
 }) {
@@ -229,6 +261,35 @@ export default function LiveOrderBoard({
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Could not update');
       await load();
+    } finally { setBusyId(null); }
+  };
+
+  /**
+   * One tap = chef ticket + customer bill.
+   *
+   * The list payload has no line items (deliberately — 400 orders with items
+   * would be a heavy response), so fetch the full order first. Both windows
+   * are opened from the SAME click: browsers block a popup opened after an
+   * await unless it descends from a user gesture, so the second print is
+   * queued on a short timer rather than nested inside another await.
+   */
+  const printBoth = async (o: Order) => {
+    setBusyId(o.id);
+    try {
+      const full = await api.getOrderFull(o.id);
+      /* Same source the order-detail printer uses, so the ticket and bill
+         printed here are byte-identical to the ones printed there. */
+      const settings = await fetchStoreSettings().catch(() => null);
+      const cfg = settings?.invoiceConfig ?? null;
+      printHtml(chefTicket(full as never, cfg as never));
+      // Small gap so the first print dialog is dismissed before the second.
+      setTimeout(() => {
+        try { printHtml(customerInvoice(full as never, cfg as never, false, { reorder: '', insta: '' })); }
+        catch { showToast('Bill could not be printed'); }
+      }, 700);
+      showToast('Printing chef ticket + bill');
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Could not print');
     } finally { setBusyId(null); }
   };
 
@@ -365,6 +426,8 @@ export default function LiveOrderBoard({
         const addr = o.deliveryAddress || o.delivery_address;
         const busy = busyId === o.id;
         const needsRider = step?.chain.includes('assigned_to_delivery');
+        const km = Number(o.distanceKm ?? o.distance_km ?? 0);
+        const area = localityOf(addr) || o.zone || null;
 
         return (
           <div key={o.id} style={{
@@ -394,9 +457,39 @@ export default function LiveOrderBoard({
                   </div>
                 )}
 
+                {/* Who and where — the two things the kitchen asks first. */}
+                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 7, alignItems: 'center' }}>
+                  {area && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 900, background: C.greenSoft, color: C.greenDeep,
+                      padding: '3px 9px', borderRadius: 99,
+                    }}>📍 {area}</span>
+                  )}
+                  {km > 0 && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 900,
+                      background: km > 6 ? '#fff4e0' : '#eef2ef',
+                      color: km > 6 ? '#8a6100' : C.muted,
+                      padding: '3px 9px', borderRadius: 99,
+                    }}>
+                      🛵 {km.toFixed(1)} km{km > 6 ? ' · far' : ''}
+                    </span>
+                  )}
+                  {o.customerName && (
+                    <span style={{ fontSize: 11.5, color: C.muted, fontWeight: 700 }}>
+                      👤 {o.customerName}
+                    </span>
+                  )}
+                  {o.customerMobile && (
+                    <a href={`tel:${o.customerMobile}`} style={{
+                      fontSize: 11.5, color: C.greenDeep, fontWeight: 800, textDecoration: 'none',
+                    }}>📞 {o.customerMobile}</a>
+                  )}
+                </div>
+
                 {addr && (
-                  <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
-                    📍 {addr}
+                  <div style={{ fontSize: 11.5, color: C.muted, marginTop: 5, lineHeight: 1.45 }}>
+                    {addr}
                   </div>
                 )}
                 <div style={{ fontSize: 13, fontWeight: 900, color: C.ink, marginTop: 5 }}>
@@ -430,6 +523,12 @@ export default function LiveOrderBoard({
                     {busy ? 'Working…' : step.label} →
                   </button>
                 )}
+
+                <button onClick={() => printBoth(o)} disabled={busy} style={{
+                  padding: '9px 14px', borderRadius: 10, cursor: busy ? 'default' : 'pointer',
+                  border: `1px solid ${C.line}`, background: '#fff', color: C.ink,
+                  fontSize: 12.5, fontWeight: 800, fontFamily: 'inherit',
+                }}>🖨️ Chef ticket + bill</button>
 
                 {CANCELLABLE.has(o.status) && (
                   <button onClick={() => cancel(o)} disabled={busy} style={{
