@@ -70,12 +70,32 @@ const TABS = [
   { key: 'past',      label: 'Past Orders', statuses: ['delivered', 'cancelled'] },
 ];
 
+/* Statuses that still need someone to act. Module scope so it is a stable
+   reference and does not re-trigger the memo on every render. */
+const LIVE_STATUSES = TABS.filter((t) => t.key !== 'past').flatMap((t) => t.statuses);
+
 const STATUS_LABEL: Record<string, string> = {
   order_received: 'New', order_confirmed: 'Accepted', preparing_food: 'Cooking',
   food_ready: 'Ready', assigned_to_delivery: 'Rider assigned',
   out_for_delivery: 'Out for delivery', arriving_soon: 'Arriving soon',
   delivered: 'Delivered', cancelled: 'Cancelled',
 };
+
+/** Local YYYY-MM-DD. Uses local parts, not toISOString(), which would shift
+    an IST evening order back to the previous UTC day. */
+const ymd = (d: Date) => {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const addDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d; };
+
+const PRESETS = [
+  { key: 'today',  label: 'Today',      from: () => ymd(new Date()),  to: () => ymd(new Date()) },
+  { key: 'yday',   label: 'Yesterday',  from: () => ymd(addDays(-1)), to: () => ymd(addDays(-1)) },
+  { key: 'week',   label: 'Last 7 days', from: () => ymd(addDays(-6)), to: () => ymd(new Date()) },
+  { key: 'month',  label: 'Last 30 days', from: () => ymd(addDays(-29)), to: () => ymd(new Date()) },
+  { key: 'all',    label: 'All time',   from: () => '', to: () => '' },
+];
 
 const since = (iso?: string | null) => {
   if (!iso) return '';
@@ -104,6 +124,11 @@ export default function LiveOrderBoard({
   const [busyId, setBusyId] = useState<number | null>(null);
   const [riderPick, setRiderPick] = useState<Record<number, number>>({});
   const [err, setErr] = useState('');
+  /* Defaults to today: a kitchen screen should show today's work, not every
+     order ever placed. Presets and an explicit from/to cover the rest. */
+  const [preset, setPreset] = useState('today');
+  const [from, setFrom] = useState(ymd(new Date()));
+  const [to, setTo] = useState(ymd(new Date()));
 
   const load = useCallback(async () => {
     try {
@@ -128,15 +153,47 @@ export default function LiveOrderBoard({
     return () => { alive = false; clearInterval(t); };
   }, [load]);
 
+  const inRange = useCallback((o: Order) => {
+    if (!from && !to) return true;              // "All time"
+    const raw = o.placedAt || o.placed_at;
+    if (!raw) return false;
+    const d = ymd(new Date(raw));
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  }, [from, to]);
+
+  const pool = useMemo(() => orders.filter(inRange), [orders, inRange]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const t of TABS) c[t.key] = orders.filter((o) => t.statuses.includes(o.status)).length;
+    for (const t of TABS) c[t.key] = pool.filter((o) => t.statuses.includes(o.status)).length;
     return c;
-  }, [orders]);
+  }, [pool]);
+
+  /* Orders still unfinished but OUTSIDE the chosen dates. Without this, a
+     date filter silently hides work that was never completed — exactly the
+     orders most in need of attention. */
+  const strandedCount = useMemo(
+    () => orders.filter((o) => LIVE_STATUSES.includes(o.status) && !inRange(o)).length,
+    [orders, inRange],
+  );
+
+  const applyPreset = (key: string) => {
+    const p = PRESETS.find((x) => x.key === key);
+    if (!p) return;
+    setPreset(key); setFrom(p.from()); setTo(p.to());
+  };
+
+  const revenue = useMemo(
+    () => pool.filter((o) => o.status === 'delivered')
+              .reduce((n, o) => n + Number(o.total || 0), 0),
+    [pool],
+  );
 
   const visible = useMemo(() => {
     const t = TABS.find((x) => x.key === tab)!;
-    return orders
+    return pool
       .filter((o) => t.statuses.includes(o.status))
       .sort((a, b) => {
         const at = new Date(a.placedAt || a.placed_at || 0).getTime();
@@ -145,7 +202,7 @@ export default function LiveOrderBoard({
         // cold. Past: newest first, because that is a lookup list.
         return tab === 'past' ? bt - at : at - bt;
       });
-  }, [orders, tab]);
+  }, [pool, tab]);
 
   const advance = async (o: Order) => {
     const step = NEXT[o.status];
@@ -193,7 +250,7 @@ export default function LiveOrderBoard({
         <div>
           <h2 style={{ fontSize: 19, fontWeight: 900, color: C.ink, margin: 0 }}>Live Orders</h2>
           <p style={{ fontSize: 12.5, color: C.muted, margin: '3px 0 0' }}>
-            Four taps from new order to delivered. Refreshes every 20 seconds.
+            Four taps from new order to delivered. Showing today by default.
           </p>
         </div>
         <button onClick={load} style={{
@@ -205,6 +262,63 @@ export default function LiveOrderBoard({
       {err && (
         <div style={{ background: '#fdecea', color: '#c0392b', padding: '11px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
           {err}
+        </div>
+      )}
+
+      {/* date range */}
+      <div style={{
+        background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14,
+        padding: '12px 14px', marginBottom: 12,
+      }}>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
+          {PRESETS.map((p) => {
+            const on = preset === p.key;
+            return (
+              <button key={p.key} onClick={() => applyPreset(p.key)} style={{
+                padding: '7px 14px', borderRadius: 18, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 12.5, fontWeight: 800,
+                border: on ? `1.5px solid ${C.green}` : `1px solid ${C.line}`,
+                background: on ? C.greenSoft : '#fff',
+                color: on ? C.greenDeep : C.muted,
+              }}>{p.label}</button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 12, fontWeight: 800, color: C.muted }}>From</label>
+          <input type="date" value={from} max={to || undefined}
+            onChange={(e) => { setFrom(e.target.value); setPreset('custom'); }}
+            style={{ padding: '7px 10px', borderRadius: 9, border: `1px solid ${C.line}`, fontSize: 12.5, fontFamily: 'inherit', color: C.ink }} />
+          <label style={{ fontSize: 12, fontWeight: 800, color: C.muted }}>To</label>
+          <input type="date" value={to} min={from || undefined}
+            onChange={(e) => { setTo(e.target.value); setPreset('custom'); }}
+            style={{ padding: '7px 10px', borderRadius: 9, border: `1px solid ${C.line}`, fontSize: 12.5, fontFamily: 'inherit', color: C.ink }} />
+          <span style={{ marginLeft: 'auto', fontSize: 12.5, color: C.muted, fontWeight: 700 }}>
+            {pool.length} order{pool.length === 1 ? '' : 's'}
+            {revenue > 0 && <> · <b style={{ color: C.greenDeep }}>{money(revenue)}</b> delivered</>}
+          </span>
+        </div>
+      </div>
+
+      {/* Unfinished orders outside the date range. The screenshot that
+          prompted this had 21 orders sitting in New for three weeks; a date
+          filter would have hidden them without a word. */}
+      {strandedCount > 0 && (
+        <div style={{
+          background: '#fff4e0', border: '1px solid #f0d9a8', borderRadius: 12,
+          padding: '11px 14px', marginBottom: 12, display: 'flex',
+          alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 12.5, color: '#8a6100', fontWeight: 700, lineHeight: 1.5 }}>
+            ⚠️ <b>{strandedCount}</b> unfinished order{strandedCount === 1 ? '' : 's'} outside these
+            dates — still sitting in New, Preparing, Ready or Picked Up. They need closing or cancelling.
+          </span>
+          <button onClick={() => applyPreset('all')} style={{
+            marginLeft: 'auto', padding: '7px 14px', borderRadius: 9, cursor: 'pointer',
+            border: '1px solid #e0c489', background: '#fff', color: '#8a6100',
+            fontSize: 12, fontWeight: 800, fontFamily: 'inherit', whiteSpace: 'nowrap',
+          }}>Show them</button>
         </div>
       )}
 
