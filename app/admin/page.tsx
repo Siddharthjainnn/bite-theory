@@ -1082,6 +1082,13 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
   const [sound, setSound] = useState(false);
   const seenRef = useRef<Set<number>>(new Set());
   const primedRef = useRef(false);
+  /* Orders whose alarm the staff have explicitly silenced. Without the modal
+     there is no other way to stop the ringing, and an alarm that cannot be
+     silenced gets solved by turning the sound off permanently — which is
+     strictly worse than a snooze. The order stays in the badge and on the
+     board; only its alarm is muted. */
+  const snoozedRef = useRef<Set<number>>(new Set());
+  const [snoozeTick, setSnoozeTick] = useState(0);
 
   useEffect(() => {
     try { setSound(localStorage.getItem('bt_admin_sound') === '1'); } catch { /* ignore */ }
@@ -1109,7 +1116,6 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
          sees it and the ringing stops — no manual "silence" needed
      So the alarm ends because the JOB got done, not because a timer expired. */
   const [alertOrder, setAlertOrder] = useState<Order | null>(null);
-  const [acting, setActing] = useState(false);
   const ringingRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -1135,7 +1141,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
 
         /* Show the popup for the OLDEST unhandled new order — the one that has
            been waiting longest, not the newest. */
-        const needsAck = fresh[fresh.length - 1] || null;
+        const needsAck = fresh.filter((o) => !snoozedRef.current.has(o.id)).pop() || null;
         setAlertOrder((cur) => {
           // keep showing the same order unless it's been handled elsewhere
           if (cur && fresh.some((o) => o.id === cur.id)) return cur;
@@ -1179,29 +1185,14 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
     return () => {
       if (ringingRef.current) { clearInterval(ringingRef.current); ringingRef.current = null; }
     };
-  }, [alertOrder, sound]);
+  }, [alertOrder, sound, snoozeTick]);
 
-  /** Confirm or cancel straight from the popup — the fastest possible ack. */
-  async function actOnAlert(status: 'order_confirmed' | 'cancelled') {
-    if (!alertOrder) return;
-    setActing(true);
-    try {
-      await api.advanceOrderStatus(alertOrder.id, status,
-        status === 'cancelled' ? 'Cancelled by kitchen' : 'Confirmed by kitchen');
-      /* Clear locally right away so the ringing stops on THIS click rather than
-         waiting up to 10s for the next poll to notice. */
-      setAlertOrder(null);
-      setOrders((prev) => prev.map((o) => (o.id === alertOrder.id ? { ...o, status } as Order : o)));
-      if (typeof document !== 'undefined') document.title = 'Bites Theory Admin';
-    } catch (e: any) {
-      alert(e?.message || 'Could not update the order — please open Orders and try there.');
-    } finally { setActing(false); }
-  }
-
-  /* Clear the title alert once someone actually looks at the bell. */
-  useEffect(() => {
-    if (open && typeof document !== 'undefined') document.title = 'Bites Theory Admin';
-  }, [open]);
+  /** Silence the current alarm without touching the order itself. */
+  const silence = () => {
+    if (alertOrder) snoozedRef.current.add(alertOrder.id);
+    setAlertOrder(null);
+    setSnoozeTick((n) => n + 1);
+  };
 
   /**
    * New-order chime. WebAudio, so there's no asset to host and nothing to
@@ -1226,19 +1217,43 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
       const ctx = audioRef.current;
       if (ctx.state === 'suspended') ctx.resume();
 
-      // rising 3-note motif: G5 → B5 → D6
-      [784, 988, 1175].forEach((freq, i) => {
-        const t0 = ctx.currentTime + i * 0.14;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, t0);
-        osc.connect(gain); gain.connect(ctx.destination);
-        gain.gain.setValueAtTime(0.0001, t0);
-        gain.gain.exponentialRampToValueAtTime(0.28, t0 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.30);
-        osc.start(t0); osc.stop(t0 + 0.32);
-      });
+      /* Two passes of the motif per ring. One pass is easy to dismiss as an
+         incidental noise; a repeat reads as a summons. */
+      for (let pass = 0; pass < 2; pass++) {
+        const base = ctx.currentTime + pass * 0.62;
+        [784, 988, 1175].forEach((freq, i) => {
+          const t0 = base + i * 0.15;
+
+          /* A square carries far better than a sine through an exhaust fan:
+             its harmonics survive when the fundamental is masked. Kept at
+             moderate gain because square at full scale is genuinely painful. */
+          const osc = ctx.createOscillator();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(freq, t0);
+
+          /* Low sine an octave down. Adds the body that makes the alert
+             audible across a room rather than only at the tablet. */
+          const sub = ctx.createOscillator();
+          sub.type = 'sine';
+          sub.frequency.setValueAtTime(freq / 2, t0);
+
+          /* Softens the square's edge so it is loud without being shrill. */
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(3200, t0);
+
+          const gain = ctx.createGain();
+          osc.connect(filter); sub.connect(filter);
+          filter.connect(gain); gain.connect(ctx.destination);
+
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.55, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34);
+
+          osc.start(t0); osc.stop(t0 + 0.36);
+          sub.start(t0); sub.stop(t0 + 0.36);
+        });
+      }
     } catch { /* audio is a nicety, never a failure */ }
   }
 
@@ -1272,94 +1287,29 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
           money already taken with a clock running — it needs a decision, not a
           swipe-away. The only exits are Confirm, Cancel, or "Open Orders" for
           the cases that need a closer look. */}
-      {alertOrder && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(4,22,15,.62)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: 18,
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 380,
-            padding: 22, textAlign: 'center',
-            boxShadow: '0 24px 60px rgba(0,0,0,.4)',
+      {/* The full-screen new-order modal was removed. It blocked the whole
+          console until dismissed, and its one action — confirm and start
+          cooking — is now the Accept button on the Live Orders board, where
+          the order is already in front of you with address, distance and
+          locality. What survives is everything that gets ATTENTION without
+          seizing the screen: the ringing chime, the bell badge, and the tab
+          title below. */}
+
+      {/* Ringing right now — offer the stop button next to the bell, where
+          someone reaching to silence it will actually look. */}
+      {alertOrder && sound && (
+        <button
+          onClick={silence}
+          title="Stop the sound for this order"
+          style={{
+            marginRight: 8, padding: '7px 13px', borderRadius: 9, cursor: 'pointer',
+            border: '1px solid #f0c9c9', background: '#fdecea', color: '#c0392b',
+            fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap',
             animation: 'adminAlertPop .3s cubic-bezier(.34,1.5,.64,1)',
-          }}>
-            <div style={{ fontSize: 40, animation: 'adminAlertRing 1s ease-in-out infinite' }}>🔔</div>
-            <div style={{ fontWeight: 850, fontSize: 19, color: C.ink, marginTop: 6 }}>
-              New order!
-            </div>
-            <div style={{ fontSize: 13, color: C.muted, marginTop: 3 }}>
-              {alertOrder.orderNumber} · <b style={{ color: C.ink }}>{money(Number(alertOrder.total))}</b>
-            </div>
-
-            {(alertOrder.customerName || alertOrder.deliveryAddress) && (
-              <div style={{
-                marginTop: 12, background: C.bg, borderRadius: 12, padding: '10px 12px',
-                textAlign: 'left', fontSize: 12.5, color: C.ink, lineHeight: 1.5,
-                border: `1px solid ${C.line}`,
-              }}>
-                {alertOrder.customerName && (
-                  <div style={{ fontWeight: 800 }}>
-                    👤 {alertOrder.customerName}
-                    {alertOrder.customerMobile ? ` · ${alertOrder.customerMobile}` : ''}
-                  </div>
-                )}
-                {alertOrder.deliveryAddress && (
-                  <div style={{ marginTop: 4, color: C.muted }}>📍 {alertOrder.deliveryAddress}</div>
-                )}
-                {alertOrder.zone && (
-                  <div style={{ marginTop: 4, fontWeight: 800, color: C.darkGreen }}>🗺️ Zone: {alertOrder.zone}</div>
-                )}
-              </div>
-            )}
-
-            {newOrders.length > 1 && (
-              <div style={{
-                marginTop: 10, fontSize: 11.5, fontWeight: 800, color: '#8a5a00',
-                background: C.orangeSoft, borderRadius: 20, padding: '4px 12px',
-                display: 'inline-block',
-              }}>
-                +{newOrders.length - 1} more waiting
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-              <button
-                onClick={() => actOnAlert('cancelled')}
-                disabled={acting}
-                style={{
-                  flex: 1, background: '#fff', border: `2px solid ${C.red}`, color: C.red,
-                  borderRadius: 12, padding: '12px', fontWeight: 800, fontSize: 13.5,
-                  cursor: acting ? 'wait' : 'pointer',
-                }}
-              >
-                Cancel order
-              </button>
-              <button
-                onClick={() => actOnAlert('order_confirmed')}
-                disabled={acting}
-                style={{
-                  flex: 2, background: C.green, border: 'none', color: '#fff',
-                  borderRadius: 12, padding: '12px', fontWeight: 800, fontSize: 14,
-                  cursor: acting ? 'wait' : 'pointer',
-                  boxShadow: '0 6px 16px rgba(76,175,80,.4)',
-                }}
-              >
-                {acting ? 'Saving…' : '✓ Confirm & start cooking'}
-              </button>
-            </div>
-
-            <button
-              onClick={() => { setAlertOrder(null); onGo('orders'); }}
-              style={{
-                marginTop: 10, background: 'none', border: 'none', color: C.muted,
-                fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 6,
-              }}
-            >
-              Open Orders instead →
-            </button>
-          </div>
-        </div>
+          }}
+        >
+          🔕 Silence
+        </button>
       )}
 
       <button
