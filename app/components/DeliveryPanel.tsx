@@ -44,6 +44,8 @@ const TARGET = { onTimePct: 90, promiseErrorMedianMin: 5, foodWaitMedianMin: 5, 
 /* The rules people actually tune, with plain-language help. */
 const RULES: { key: string; label: string; help: string; unit?: string; kind: 'num' | 'bool'; min?: number; max?: number }[] = [
   { key: 'batchMaxOrders', label: 'Orders per trip', help: '1 turns batching off. 3 once on-time holds.', kind: 'num', min: 1, max: 3 },
+  { key: 'batchMaxDropGapKm', label: 'Drops at most this far apart', help: 'orders share a rider only if their addresses are this close (0 = no limit)', unit: 'km', kind: 'num', min: 0, max: 10 },
+  { key: 'batchMaxBearingDeg', label: 'Same direction within', help: 'angle between drops, seen from the kitchen (45° ≈ same side of town; 180° = off)', unit: '°', kind: 'num', min: 10, max: 180 },
   { key: 'batchMaxExtraMin', label: 'Max extra wait per customer', help: 'vs a solo drop', unit: 'min', kind: 'num', min: 0, max: 30 },
   { key: 'batchReadyGapMin', label: 'Ready times within', help: 'food never waits for a slow partner order', unit: 'min', kind: 'num', min: 0, max: 20 },
   { key: 'foodAgeMaxMin', label: 'Max food age', help: 'ready → delivered, every order on a trip', unit: 'min', kind: 'num', min: 10, max: 90 },
