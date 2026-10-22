@@ -206,6 +206,11 @@ export interface ApiOrder {
     locationUpdatedAt?: string | null;
   } | null;
   store?: { lat: number; lng: number; address?: string | null } | null;
+  /** Set when the kitchen booked a Porter instead of a house rider. */
+  courier?: {
+    provider: string; label: string; riderName: string | null;
+    riderPhone: string | null; trackingUrl: string | null;
+  } | null;
   deliveryOtp?: string | null;
   prepVideoUrl?: string | null;
   cookingNote?: string | null;

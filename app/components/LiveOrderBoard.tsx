@@ -28,6 +28,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { C, money, fetchStoreSettings } from '../lib/bite';
 import { chefTicket, customerInvoice, printHtml } from '../lib/invoice';
+import DispatchSheet from './DispatchSheet';
+import { isExternalProvider, localityOf, ORDERS_CHANGED_EVENT, type DispatchApi } from '../lib/dispatch';
 
 type Order = {
   id: number;
@@ -48,33 +50,13 @@ type Order = {
   distanceKm?: number | string | null;
   distance_km?: number | string | null;
   zone?: string | null;
+  /* external courier (Porter) — see backend courier.util.ts */
+  deliveryProvider?: string | null;
+  externalRef?: string | null;
+  externalRiderName?: string | null;
+  externalRiderPhone?: string | null;
 };
 type Rider = { id: number; name: string; isAvailable?: boolean };
-
-/* Indore localities, longest first so "Vijay Nagar Extension" is not matched
-   as plain "Vijay Nagar", and so "Scheme No 78" beats "Scheme". Matched
-   against the free-text delivery address, which is all Google gives us for
-   orders placed before address autocomplete existed. */
-const LOCALITIES = [
-  'Vijay Nagar', 'Scheme No 78', 'Scheme No 114', 'Scheme 78', 'Scheme 114',
-  'BRK Business Park', 'Bholaram Ustad Marg', 'Bhawarkuan', 'Bhawarkua',
-  'Mangal City', 'Sudama Nagar', 'Bajrang Nagar', 'Girdhar Nagar', 'Nanda Nagar',
-  'Old Palasia', 'New Palasia', 'Palasia', 'Sukhliya', 'Sukliya', 'Patnipura',
-  'Kanadia', 'Kajrana', 'Nakshatra', 'Winway', 'Rajendra Nagar', 'Annapurna',
-  'Rau', 'Mhow', 'Bengali Square', 'Khajrana', 'Silicon City', 'Nipania',
-  'Tilak Nagar', 'Geeta Bhawan', 'Saket', 'LIG', 'MIG', 'AB Road',
-  'Badi Gwaltoli', 'Chhoti Gwaltoli', 'Malharganj', 'Sarafa', 'Rajwada',
-  'Manorama Ganj', 'Snehlataganj', 'Navlakha', 'Musakhedi', 'Pipliyahana',
-  'Scheme No 54', 'Scheme No 71', 'Scheme No 140', 'Dewas Naka', 'Bapat Square',
-].sort((a, b) => b.length - a.length);
-
-/** Best-effort locality from a free-text address. */
-function localityOf(addr?: string | null): string | null {
-  if (!addr) return null;
-  const hay = addr.toLowerCase();
-  for (const l of LOCALITIES) if (hay.includes(l.toLowerCase())) return l;
-  return null;
-}
 
 /* Each entry is ONE button. `chain` is the sequence of server transitions it
    performs, every hop legal per src/orders/order-status.machine.ts. */
@@ -87,6 +69,26 @@ const NEXT: Record<string, { chain: string[]; label: string }> = {
   out_for_delivery:     { chain: ['delivered'],                               label: 'Delivered' },
   arriving_soon:        { chain: ['delivered'],                               label: 'Delivered' },
 };
+
+/* Porter orders: the kitchen never picks a rider, and "Ready" means "waiting
+   for the Porter driver". So Ready stays in the Ready tab, and the one tap at
+   hand-over walks food_ready -> assigned_to_delivery -> out_for_delivery. The
+   backend accepts assigned_to_delivery without a house rider once a courier
+   is booked. */
+const NEXT_PORTER: Record<string, { chain: string[]; label: string }> = {
+  ...NEXT,
+  preparing_food:       { chain: ['food_ready'],                              label: 'Food ready' },
+  food_ready:           { chain: ['assigned_to_delivery', 'out_for_delivery'], label: 'Out for delivery' },
+  assigned_to_delivery: { chain: ['out_for_delivery'],                        label: 'Out for delivery' },
+};
+
+const nextStep = (o: { status: string; deliveryProvider?: string | null }) =>
+  (isExternalProvider(o.deliveryProvider) ? NEXT_PORTER : NEXT)[o.status];
+
+/* Where "Book Porter" is offered. From Preparing, not just Ready: a Porter
+   driver takes 8-15 min to reach the kitchen, so booking at Ready means the
+   food waits for the driver instead of the driver waiting for the food. */
+const PORTER_BOOKABLE = new Set(['order_confirmed', 'preparing_food', 'food_ready', 'assigned_to_delivery']);
 
 const CANCELLABLE = new Set([
   'order_received', 'order_confirmed', 'preparing_food',
@@ -147,7 +149,7 @@ export default function LiveOrderBoard({
     assignRider: (id: number, partnerId: number) => Promise<unknown>;
     listRidersForAssignment: () => Promise<unknown[]>;
     getOrderFull: (id: number) => Promise<Record<string, unknown>>;
-  };
+  } & DispatchApi;
   showToast: (m: string) => void;
 }) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -156,6 +158,7 @@ export default function LiveOrderBoard({
   const [busyId, setBusyId] = useState<number | null>(null);
   const [riderPick, setRiderPick] = useState<Record<number, number>>({});
   const [err, setErr] = useState('');
+  const [dispatchFor, setDispatchFor] = useState<number | null>(null);
   /* Defaults to today: a kitchen screen should show today's work, not every
      order ever placed. Presets and an explicit from/to cover the rest. */
   const [preset, setPreset] = useState('today');
@@ -182,7 +185,11 @@ export default function LiveOrderBoard({
     /* A kitchen screen left open must not go stale — new orders have to appear
        without anyone remembering to refresh. */
     const t = setInterval(() => { if (alive) load(); }, 20000);
-    return () => { alive = false; clearInterval(t); };
+    /* The new-order popup and the Porter sheet announce changes, so the board
+       re-files the order now instead of up to 20s later. */
+    const onChanged = () => { if (alive) load(); };
+    window.addEventListener(ORDERS_CHANGED_EVENT, onChanged);
+    return () => { alive = false; clearInterval(t); window.removeEventListener(ORDERS_CHANGED_EVENT, onChanged); };
   }, [load]);
 
   const inRange = useCallback((o: Order) => {
@@ -237,7 +244,8 @@ export default function LiveOrderBoard({
   }, [pool, tab]);
 
   const advance = async (o: Order) => {
-    const step = NEXT[o.status];
+    const step = nextStep(o);
+    const porter = isExternalProvider(o.deliveryProvider);
     if (!step) return;
     setBusyId(o.id);
     try {
@@ -246,7 +254,7 @@ export default function LiveOrderBoard({
          the earlier ones stand, which is correct — the order really did reach
          that stage. */
       for (const to of step.chain) {
-        if (to === 'assigned_to_delivery') {
+        if (to === 'assigned_to_delivery' && !porter) {
           const rid = riderPick[o.id] ?? riders[0]?.id;
           if (!rid) throw new Error('No rider available. Add one in Delivery Partners.');
           // assign-rider moves the order into assigned_to_delivery itself.
@@ -311,7 +319,7 @@ export default function LiveOrderBoard({
         <div>
           <h2 style={{ fontSize: 19, fontWeight: 900, color: C.ink, margin: 0 }}>Live Orders</h2>
           <p style={{ fontSize: 12.5, color: C.muted, margin: '3px 0 0' }}>
-            Four taps from new order to delivered. Showing today by default.
+            Accept → Food ready → hand to your rider or a Porter → Delivered. Showing today by default.
           </p>
         </div>
         <button onClick={load} style={{
@@ -420,12 +428,14 @@ export default function LiveOrderBoard({
       )}
 
       {visible.map((o) => {
-        const step = NEXT[o.status];
+        const step = nextStep(o);
+        const porter = isExternalProvider(o.deliveryProvider);
         const num = o.orderNumber || o.order_number || `#${o.id}`;
         const when = o.placedAt || o.placed_at;
         const addr = o.deliveryAddress || o.delivery_address;
         const busy = busyId === o.id;
-        const needsRider = step?.chain.includes('assigned_to_delivery');
+        const needsRider = !porter && step?.chain.includes('assigned_to_delivery');
+        const canBookPorter = !porter && PORTER_BOOKABLE.has(o.status);
         const km = Number(o.distanceKm ?? o.distance_km ?? 0);
         const area = localityOf(addr) || o.zone || null;
 
@@ -495,6 +505,25 @@ export default function LiveOrderBoard({
                 <div style={{ fontSize: 13, fontWeight: 900, color: C.ink, marginTop: 5 }}>
                   {money(Number(o.total || 0))}
                 </div>
+
+                {porter && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8,
+                    background: C.orangeSoft, border: '1px solid #f6d8a6', borderRadius: 10,
+                    padding: '7px 10px', fontSize: 12, fontWeight: 800, color: C.orangeDeep,
+                  }}>
+                    <span>🛵 Porter{o.externalRef ? ` · ${o.externalRef}` : ' booked'}</span>
+                    {o.externalRiderName && <span style={{ color: C.ink }}>{o.externalRiderName}</span>}
+                    {o.externalRiderPhone && (
+                      <a href={`tel:${o.externalRiderPhone}`} style={{ color: C.greenDeep, textDecoration: 'none' }}>
+                        📞 {o.externalRiderPhone}
+                      </a>
+                    )}
+                    {!o.externalRiderName && o.status === 'food_ready' && (
+                      <span style={{ color: C.muted, fontWeight: 700 }}>waiting for driver</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7, minWidth: 190 }}>
@@ -524,6 +553,21 @@ export default function LiveOrderBoard({
                   </button>
                 )}
 
+                {canBookPorter && (
+                  <button onClick={() => setDispatchFor(o.id)} disabled={busy} style={{
+                    padding: '10px 14px', borderRadius: 10, cursor: busy ? 'default' : 'pointer',
+                    border: `1.5px solid ${C.orange}`, background: C.orangeSoft, color: C.orangeDeep,
+                    fontSize: 13, fontWeight: 900, fontFamily: 'inherit',
+                  }}>🛵 Book Porter</button>
+                )}
+                {porter && (
+                  <button onClick={() => setDispatchFor(o.id)} disabled={busy} style={{
+                    padding: '9px 14px', borderRadius: 10, cursor: busy ? 'default' : 'pointer',
+                    border: `1px solid #f6d8a6`, background: '#fff', color: C.orangeDeep,
+                    fontSize: 12.5, fontWeight: 800, fontFamily: 'inherit',
+                  }}>📋 Porter details</button>
+                )}
+
                 <button onClick={() => printBoth(o)} disabled={busy} style={{
                   padding: '9px 14px', borderRadius: 10, cursor: busy ? 'default' : 'pointer',
                   border: `1px solid ${C.line}`, background: '#fff', color: C.ink,
@@ -542,6 +586,15 @@ export default function LiveOrderBoard({
           </div>
         );
       })}
+
+      {dispatchFor != null && (
+        <DispatchSheet
+          orderId={dispatchFor}
+          api={api}
+          showToast={showToast}
+          onClose={() => setDispatchFor(null)}
+        />
+      )}
     </div>
   );
 }

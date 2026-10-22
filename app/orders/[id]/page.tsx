@@ -614,6 +614,35 @@ export default function OrderTrackPage() {
               </div>
             )}
 
+            {/* ── PORTER CARD — the kitchen booked a Porter driver for this order.
+                 There is no house-rider GPS to show, so Porter's own live link is
+                 the tracker. trackingUrl is https-only (validated server-side). ── */}
+            {!order.partner && order.courier && !['delivered', 'cancelled'].includes(String(order.status)) && (
+              <div style={{ ...card, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.orangeSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                  🛵
+                </div>
+                <div style={{ flex: 1, minWidth: 150 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>
+                    {order.courier.riderName || `${order.courier.label} delivery partner`}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.muted }}>
+                    Delivering with {order.courier.label}
+                  </div>
+                </div>
+                {order.courier.trackingUrl && (
+                  <a href={order.courier.trackingUrl} target="_blank" rel="noopener noreferrer" style={{ background: C.dark, color: '#fff', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontWeight: 800, textDecoration: 'none' }}>
+                    Track live ↗
+                  </a>
+                )}
+                {order.courier.riderPhone && (
+                  <a href={`tel:${order.courier.riderPhone}`} style={{ background: C.green, color: '#fff', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontWeight: 800, textDecoration: 'none' }}>
+                    📞 Call
+                  </a>
+                )}
+              </div>
+            )}
+
             {/* ── LIVE STATUS HERO — the emotional focal point while waiting ── */}
             {!cancelled && (
               <div className={`ot-hero ${delivered ? 'ot-hero--done' : ''}`}>

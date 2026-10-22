@@ -27,6 +27,12 @@ import {
   customerInvoice, chefTicket, printHtml, openHtmlPreview, InvoiceOrder,
 } from '../lib/invoice';
 import { qrSvg } from '../lib/qr';
+import { NewOrderPopup, DispatchPrompt } from '../components/NewOrderPopup';
+import DispatchSheet from '../components/DispatchSheet';
+import {
+  announceOrdersChanged, isExternalProvider, ORDERS_CHANGED_EVENT,
+  type BookCourierBody, type DispatchSheetData,
+} from '../lib/dispatch';
 /* ============ types ============ */
 type Status = 'active' | 'inactive';
 
@@ -48,6 +54,7 @@ interface Order {
   walletUsed: number; total: number; status: string; deliverySlot: string;
   deliveryPartnerId: number; placedAt: string; updatedAt: string;
   customerName?: string | null; customerMobile?: string | null; deliveryAddress?: string | null; zone?: string | null;
+  distanceKm?: number | null; deliveryProvider?: string | null;
 }
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
@@ -314,6 +321,11 @@ const api = {
       tax: Number(o.tax) || 0, walletUsed: Number(o.walletUsed) || 0, total: Number(o.total) || 0,
       status: o.status, deliverySlot: o.deliverySlot || '', deliveryPartnerId: o.deliveryPartnerId,
       placedAt: o.placedAt, updatedAt: o.updatedAt,
+      /* the new-order popup shows who and where without a second request */
+      customerName: o.customerName ?? null, customerMobile: o.customerMobile ?? null,
+      deliveryAddress: o.deliveryAddress ?? null, zone: o.zone ?? null,
+      distanceKm: o.distanceKm != null ? Number(o.distanceKm) : null,
+      deliveryProvider: o.deliveryProvider ?? 'in_house',
     }));
   },
   async getOrderHistory(orderId: number): Promise<OrderHistoryEntry[]> {
@@ -352,6 +364,27 @@ const api = {
       try { const j = await r.json(); if (j?.message) msg = j.message; } catch {}
       throw new Error(msg);
     }
+    return r.json();
+  },
+
+  /* ----- External courier (Porter) — backend src/orders/courier.util.ts ----- */
+  async dispatchSheet(orderId: number): Promise<DispatchSheetData> {
+    const r = await fetch(`${API_BASE}/orders/${orderId}/dispatch-sheet`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load delivery details');
+    return r.json();
+  },
+  async bookCourier(orderId: number, body: BookCourierBody) {
+    const r = await fetch(`${API_BASE}/orders/${orderId}/book-courier`, {
+      method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw await apiError(r, 'Could not save the Porter booking');
+    return r.json();
+  },
+  async cancelCourier(orderId: number, reason?: string) {
+    const r = await fetch(`${API_BASE}/orders/${orderId}/cancel-courier`, {
+      method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify({ reason }),
+    });
+    if (!r.ok) throw await apiError(r, 'Could not cancel the Porter booking');
     return r.json();
   },
 
@@ -1117,6 +1150,15 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
      So the alarm ends because the JOB got done, not because a timer expired. */
   const [alertOrder, setAlertOrder] = useState<Order | null>(null);
   const ringingRef = useRef<number | null>(null);
+  /* After Accept the popup becomes a dispatch prompt for that order. */
+  const [dispatchPrompt, setDispatchPrompt] = useState<{ id: number; orderNumber: string } | null>(null);
+  const [sheetFor, setSheetFor] = useState<number | null>(null);
+  const [bellToast, setBellToast] = useState('');
+  const tickRef = useRef<() => void>(() => {});
+  const flash = useCallback((m: string) => {
+    setBellToast(m);
+    window.setTimeout(() => setBellToast((cur) => (cur === m ? '' : cur)), 3200);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -1156,6 +1198,11 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
       } catch { /* a failed poll shouldn't spam the UI */ }
     };
 
+    tickRef.current = () => { void tick(); };
+    /* an Accept on the board should close this popup now, not on the next poll */
+    const onChanged = () => { void tick(); };
+    window.addEventListener(ORDERS_CHANGED_EVENT, onChanged);
+
     tick();
     /* 10s, not 20s: a new order is money on the clock. Browsers throttle
        setInterval to ~60s in BACKGROUND tabs, so we also re-check the moment
@@ -1168,6 +1215,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
       alive = false;
       clearInterval(t);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener(ORDERS_CHANGED_EVENT, onChanged);
     };
   }, []);
 
@@ -1258,7 +1306,27 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
   }
 
   const newOrders = orders.filter((o) => o.status === 'order_received');
-  const stuckReady = orders.filter((o) => o.status === 'food_ready');
+  /* A Porter-booked order at Ready is waiting for its driver, not for a rider. */
+  const stuckReady = orders.filter((o) => o.status === 'food_ready' && !isExternalProvider(o.deliveryProvider));
+
+  const acceptOrder = async (o: { id: number; orderNumber: string }) => {
+    await api.advanceOrderStatus(o.id, 'preparing_food');
+    snoozedRef.current.add(o.id);          // stop the ring for it before the next poll
+    setAlertOrder(null);
+    setDispatchPrompt({ id: o.id, orderNumber: o.orderNumber });
+    announceOrdersChanged();
+    tickRef.current();
+  };
+  const rejectOrder = async (o: { id: number; orderNumber: string }) => {
+    if (!confirm(`Reject ${o.orderNumber}? It will be cancelled and any payment refunded.`)) return;
+    await api.advanceOrderStatus(o.id, 'cancelled', 'Rejected from new-order popup');
+    snoozedRef.current.add(o.id);
+    setAlertOrder(null);
+    flash(`${o.orderNumber} rejected`);
+    announceOrdersChanged();
+    tickRef.current();
+  };
+  const loadFull = useCallback((id: number) => api.getOrderFull(id), []);
 
   /* Bug #101 — the badge counted every order still needing action, so it sat
      at "2" forever even after the admin had LOOKED at both alerts. Viewing the
@@ -1287,13 +1355,47 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
           money already taken with a clock running — it needs a decision, not a
           swipe-away. The only exits are Confirm, Cancel, or "Open Orders" for
           the cases that need a closer look. */}
-      {/* The full-screen new-order modal was removed. It blocked the whole
-          console until dismissed, and its one action — confirm and start
-          cooking — is now the Accept button on the Live Orders board, where
-          the order is already in front of you with address, distance and
-          locality. What survives is everything that gets ATTENTION without
-          seizing the screen: the ringing chime, the bell badge, and the tab
-          title below. */}
+      {/* The old full-screen new-order modal blocked the whole console and was
+          removed. Its replacement (NewOrderPopup, rendered above) is a card
+          pinned to the corner: it carries the Accept / Reject decision but
+          never covers the page, so the board stays usable behind it. */}
+
+      {/* New-order popup: non-blocking, rings until Accept or Reject. */}
+      {alertOrder && (
+        <NewOrderPopup
+          key={alertOrder.id}
+          order={{
+            id: alertOrder.id, orderNumber: alertOrder.orderNumber, total: alertOrder.total,
+            placedAt: alertOrder.placedAt, customerName: alertOrder.customerName,
+            customerMobile: alertOrder.customerMobile, deliveryAddress: alertOrder.deliveryAddress,
+            zone: alertOrder.zone, distanceKm: alertOrder.distanceKm,
+          }}
+          waiting={Math.max(0, newOrders.length - 1)}
+          ringing={sound}
+          loadFull={loadFull}
+          onAccept={acceptOrder}
+          onReject={rejectOrder}
+          onSilence={silence}
+          onOpenBoard={() => { silence(); onGo('live_orders'); }}
+        />
+      )}
+      {!alertOrder && dispatchPrompt && (
+        <DispatchPrompt
+          orderNumber={dispatchPrompt.orderNumber}
+          onBookPorter={() => { setSheetFor(dispatchPrompt.id); setDispatchPrompt(null); }}
+          onLater={() => setDispatchPrompt(null)}
+        />
+      )}
+      {sheetFor != null && (
+        <DispatchSheet orderId={sheetFor} api={api} showToast={flash} onClose={() => setSheetFor(null)} />
+      )}
+      {bellToast && (
+        <div role="status" style={{
+          position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 260,
+          background: C.darkGreen, color: '#fff', padding: '10px 16px', borderRadius: 12,
+          fontSize: 13, fontWeight: 800, boxShadow: '0 10px 28px rgba(13,59,46,.3)',
+        }}>{bellToast}</div>
+      )}
 
       {/* Ringing right now — offer the stop button next to the bell, where
           someone reaching to silence it will actually look. */}
