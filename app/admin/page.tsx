@@ -29,9 +29,10 @@ import {
 import { qrSvg } from '../lib/qr';
 import { NewOrderPopup, DispatchPrompt } from '../components/NewOrderPopup';
 import DispatchSheet from '../components/DispatchSheet';
+import DeliveryPanel, { type DeliveryApi } from '../components/DeliveryPanel';
 import {
-  announceOrdersChanged, isExternalProvider, ORDERS_CHANGED_EVENT,
-  type BookCourierBody, type DispatchSheetData,
+  announceOrdersChanged, isExternalProvider, ORDERS_CHANGED_EVENT, TripRefused,
+  type BookCourierBody, type DispatchSheetData, type Suggestion, type RiderStatus, type TripView,
 } from '../lib/dispatch';
 /* ============ types ============ */
 type Status = 'active' | 'inactive';
@@ -47,6 +48,8 @@ interface Product {
   carbs: number; fat: number; rating: number; status: Status;
   isTodaysSpecial?: boolean; isVeg?: boolean; specialTag?: string;
   isSpinWheel?: boolean;
+  /** cook time in minutes; null = store default. Drives the customer's ETA. */
+  prepMinutes?: number | null;
 }
 interface Order {
   id: number; orderNumber: string; userId: number; addressId: number;
@@ -158,6 +161,7 @@ const api = {
       isVeg: p.isVeg === undefined && p.is_veg === undefined ? true : Boolean(p.isVeg ?? p.is_veg),
       specialTag: p.specialTag ?? p.special_tag ?? '',
       isSpinWheel: Boolean(p.isSpinWheel ?? p.is_spin_wheel),
+      prepMinutes: p.prepMinutes ?? p.prep_minutes ?? null,
     }));
   },
   async createProduct(d: Partial<Product>) {
@@ -171,6 +175,7 @@ const api = {
         isTodaysSpecial: !!d.isTodaysSpecial, isVeg: d.isVeg !== false,
         specialTag: d.specialTag || undefined,
         isSpinWheel: !!d.isSpinWheel,
+        prepMinutes: d.prepMinutes ? Math.round(Number(d.prepMinutes)) : null,
       }),
     });
     if (!r.ok) throw await apiError(r, 'Create failed');
@@ -187,6 +192,7 @@ const api = {
         isTodaysSpecial: !!d.isTodaysSpecial, isVeg: d.isVeg !== false,
         specialTag: d.specialTag || undefined,
         isSpinWheel: !!d.isSpinWheel,
+        prepMinutes: d.prepMinutes ? Math.round(Number(d.prepMinutes)) : null,
       }),
     });
     if (!r.ok) throw await apiError(r, 'Update failed');
@@ -364,6 +370,62 @@ const api = {
       try { const j = await r.json(); if (j?.message) msg = j.message; } catch {}
       throw new Error(msg);
     }
+    return r.json();
+  },
+
+  /* ----- Trips + dispatch (backend src/delivery) ----- */
+  async dispatchSuggestions(): Promise<{ generatedAt: string; suggestions: Suggestion[]; riders: RiderStatus[] }> {
+    const r = await fetch(`${API_BASE}/delivery/suggestions`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load suggestions');
+    return r.json();
+  },
+  async createTrip(orderIds: number[], riderId: number, opts: { force?: boolean; source?: 'admin' | 'suggested' } = {}): Promise<TripView> {
+    const r = await fetch(`${API_BASE}/delivery/trips`, {
+      method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify({ orderIds, riderId, ...opts }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      if (Array.isArray(j?.reasons)) throw new TripRefused(j.message || 'Not allowed', j.reasons, !!j.canForce);
+      throw new Error(j?.message || 'Could not create the trip');
+    }
+    return r.json();
+  },
+  async addToTrip(tripId: number, orderId: number, force = false): Promise<TripView> {
+    const r = await fetch(`${API_BASE}/delivery/trips/${tripId}/orders`, {
+      method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify({ orderId, force }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      if (Array.isArray(j?.reasons)) throw new TripRefused(j.message || 'Not allowed', j.reasons, !!j.canForce);
+      throw new Error(j?.message || 'Could not add to the trip');
+    }
+    return r.json();
+  },
+  async deliveryReport(from: string, to: string): ReturnType<DeliveryApi['deliveryReport']> {
+    const r = await fetch(`${API_BASE}/delivery/report?from=${from}&to=${to}`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load the delivery report');
+    return r.json();
+  },
+  async adminSettings(): ReturnType<DeliveryApi['adminSettings']> {
+    const r = await fetch(`${API_BASE}/settings`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load settings');
+    return r.json();
+  },
+  async saveDispatchConfig(dispatchConfig: Record<string, unknown>): ReturnType<DeliveryApi['saveDispatchConfig']> {
+    const r = await fetch(`${API_BASE}/settings`, {
+      method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify({ dispatchConfig }),
+    });
+    if (!r.ok) throw await apiError(r, 'Could not save the delivery rules');
+    return r.json();
+  },
+  async recomputeEta(): ReturnType<DeliveryApi['recomputeEta']> {
+    const r = await fetch(`${API_BASE}/delivery/eta/recompute`, { method: 'POST', headers: WRITE_HEADERS });
+    if (!r.ok) throw await apiError(r, 'Could not rebuild the time model');
+    return r.json();
+  },
+  async runDispatchNow() {
+    const r = await fetch(`${API_BASE}/delivery/tick`, { method: 'POST', headers: WRITE_HEADERS });
+    if (!r.ok) throw await apiError(r, 'Could not run dispatch');
     return r.json();
   },
 
@@ -869,6 +931,7 @@ const NAV: NavGroup[] = [
   { title: 'Overview', items: [{ key: 'dashboard', label: 'Dashboard', icon: '▦' }, { key: 'reports', label: 'Reports', icon: '📊' }] },
   { title: 'Orders', items: [
     { key: 'live_orders', label: 'Live Orders', icon: '🔔' },
+    { key: 'delivery', label: 'Delivery', icon: '🛵' },
     { key: 'orders', label: 'All Orders', icon: '🧾' },
     { key: 'order_items', label: 'Order Items', icon: '🍽️' },
     { key: 'pos', label: 'Counter / POS', icon: '🛒' },
@@ -931,11 +994,11 @@ type PageKey = typeof ALL_KEYS[number];
    browser master key is retired (see the write-guard JWT change). */
 const ROLE_SECTIONS: Record<string, PageKey[]> = {
   kitchen_manager: [
-    'dashboard', 'live_orders', 'orders', 'order_items',
+    'dashboard', 'live_orders', 'delivery', 'orders', 'order_items',
     'products', 'todays_special', 'categories', 'inventory', 'thali',
   ],
   delivery_manager: [
-    'dashboard', 'live_orders', 'orders', 'order_items', 'delivery_partners',
+    'dashboard', 'live_orders', 'delivery', 'orders', 'order_items', 'delivery_partners',
   ],
   customer_support: [
     'dashboard', 'live_orders', 'orders', 'users', 'reviews', 'addresses',
@@ -1574,7 +1637,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'live_orders', 'invoice_layout', 'thali'];
+  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'live_orders', 'invoice_layout', 'thali', 'delivery'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1653,6 +1716,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'tiffin_leads' && <TiffinLeadsPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {effectivePage === 'coupon_blast' && <CouponBlastPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {effectivePage === 'live_orders' && <LiveOrderBoard api={api} showToast={showToast} />}
+            {effectivePage === 'delivery' && <DeliveryPanel api={api} showToast={showToast} />}
             {effectivePage === 'coupon_assign' && <CouponAssignments showToast={showToast} />}
             {effectivePage === 'invoice_layout' && <InvoiceLayoutPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'thali' && <ThaliAdminPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
@@ -4543,7 +4607,14 @@ function ProductModal({ product, cats, onClose, onSave }:
         <Field label="Protein (g)"><input style={inputStyle} type="number" value={f.protein || ''} onChange={e => num('protein', e.target.value)} /></Field>
         <Field label="Carbs (g)"><input style={inputStyle} type="number" value={f.carbs || ''} onChange={e => num('carbs', e.target.value)} /></Field>
       </Row3>
-      <Field label="Fat (g)"><input style={inputStyle} type="number" value={f.fat || ''} onChange={e => num('fat', e.target.value)} /></Field>
+      <Row>
+        <Field label="Fat (g)"><input style={inputStyle} type="number" value={f.fat || ''} onChange={e => num('fat', e.target.value)} /></Field>
+        {/* Feeds the delivery promise: one chai is not six thalis. Blank = store default. */}
+        <Field label="Prep time (min)">
+          <input style={inputStyle} type="number" min={1} max={120} placeholder="store default"
+            value={f.prepMinutes ?? ''} onChange={e => setF(x => ({ ...x, prepMinutes: e.target.value === '' ? null : Number(e.target.value) }))} />
+        </Field>
+      </Row>
 
       <div style={{ fontWeight: 700, fontSize: 13, margin: '8px 0 10px', color: C.ink }}>Visibility & highlights</div>
       <Row>

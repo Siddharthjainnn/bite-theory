@@ -7,8 +7,9 @@
  * while a delivery is active (this is what moves the customer's map)
  * → Navigate via Google Maps → Picked up → Delivered.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { C, money, API_BASE, ApiOrder } from '../lib/bite';
+import RiderTripPanel, { type RiderTrip } from '../components/RiderTripPanel';
 
 /* Owner decision (cost control): 15s pings — the original cadence, reverted
    from 5s. Fewer requests; the customer map still glides the marker between
@@ -125,6 +126,18 @@ export default function RiderPage() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   const [mine, setMine] = useState<ApiOrder[]>([]);
+  /* Trips: the panel reloads with every poll; the order cards follow its drop order. */
+  const [tripKey, setTripKey] = useState(0);
+  const [stopSeq, setStopSeq] = useState<Record<number, number>>({});
+  const onTrip = useCallback((t: RiderTrip | null) => {
+    const m: Record<number, number> = {};
+    t?.trip?.stops.forEach((st) => { m[st.orderId] = st.seq; });
+    setStopSeq(m);
+  }, []);
+  const sortedMine = useMemo(
+    () => [...mine].sort((a, b) => (stopSeq[a.id] ?? 99) - (stopSeq[b.id] ?? 99)),
+    [mine, stopSeq],
+  );
   const [completed, setCompleted] = useState<ApiOrder[]>([]); // #13/#16 delivered history
   const [gpsOn, setGpsOn] = useState(false);
   const [earnings, setEarnings] = useState<RiderEarnings | null>(null);
@@ -151,6 +164,7 @@ export default function RiderPage() {
         api(`/orders?deliveryPartnerId=${r.id}`).catch(() => []),
       ]);
       setMine(own);
+      setTripKey((k) => k + 1);
       if (earn) setEarnings(earn);
       setCompleted(
         (Array.isArray(done) ? done : []).filter((o: ApiOrder) => o.status === 'delivered'),
@@ -458,6 +472,9 @@ export default function RiderPage() {
         </div>
       )}
 
+      {/* shift + the current trip in drop order */}
+      <RiderTripPanel api={api} onChanged={onTrip} refreshKey={tripKey} />
+
       {/* my active deliveries */}
       <div style={{ margin: '0 14px 8px', fontWeight: 800, fontSize: 14, color: C.ink }}>
         My deliveries ({mine.length})
@@ -465,7 +482,7 @@ export default function RiderPage() {
       {mine.length === 0 && (
         <div style={{ ...card, color: C.muted, fontSize: 13 }}>No active delivery. Accept one below 👇</div>
       )}
-      {mine.map((o) => (
+      {sortedMine.map((o) => (
         <div key={o.id} style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <b style={{ fontSize: 14 }}>{o.orderNumber}</b>

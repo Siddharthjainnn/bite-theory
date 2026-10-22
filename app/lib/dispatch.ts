@@ -99,3 +99,47 @@ export const ORDERS_CHANGED_EVENT = 'bt:orders-changed';
 export const announceOrdersChanged = () => {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(ORDERS_CHANGED_EVENT));
 };
+
+/* ─────────── Trips, riders and dispatch suggestions (backend src/delivery) ─────────── */
+
+export type RiderStatus = {
+  id: number; name: string; mobile: string | null; capacity: number; shiftStatus: string;
+  state: 'offline' | 'at_kitchen' | 'assigned' | 'on_trip' | 'returning';
+  availableAt: number; label: string; tripId: number | null;
+  cashHeadroom: number; deliveriesToday: number; stopsLeft: number; plannedOrders: number;
+};
+
+export type Suggestion = {
+  orderId: number; orderNumber: string;
+  kind: 'join' | 'trip' | 'rider' | 'porter' | 'no_pin';
+  reason: string; readyAt: string; readyInMin: number;
+  riderId?: number; riderName?: string; riderLabel?: string; riderLateMin?: number;
+  tripId?: number; tripOrderIds?: number[]; tripOrderNumbers?: string[];
+  savingMin?: number; extraWaitMin?: number;
+  porterBookAt?: string; porterBookInMin?: number;
+};
+
+export type TripView = {
+  id: number; riderId: number; riderName: string; status: string; source: string;
+  plannedMinutes: number | null; savingMinutes: number | null;
+  stops: { seq: number; orderId: number; orderNumber: string; status: string; deliveredAt: string | null }[];
+};
+
+/** A refused trip comes back with reasons the admin can act on, and may be forced. */
+export class TripRefused extends Error {
+  constructor(message: string, readonly reasons: string[], readonly canForce: boolean) { super(message); }
+}
+
+export type TripsApi = {
+  dispatchSuggestions: () => Promise<{ generatedAt: string; suggestions: Suggestion[]; riders: RiderStatus[] }>;
+  createTrip: (orderIds: number[], riderId: number, opts?: { force?: boolean; source?: 'admin' | 'suggested' }) => Promise<TripView>;
+  addToTrip: (tripId: number, orderId: number, force?: boolean) => Promise<TripView>;
+};
+
+export const RIDER_STATE_TONE: Record<RiderStatus['state'], { bg: string; fg: string }> = {
+  at_kitchen: { bg: '#e8f5e9', fg: '#2e7d32' },
+  returning: { bg: '#fef3e2', fg: '#b76e00' },
+  assigned: { bg: '#eef2ef', fg: '#0D3B2E' },
+  on_trip: { bg: '#e3eefc', fg: '#1d4f91' },
+  offline: { bg: '#f1f1f1', fg: '#6b7d74' },
+};

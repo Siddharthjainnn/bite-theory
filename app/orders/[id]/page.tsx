@@ -420,6 +420,26 @@ export default function OrderTrackPage() {
               {!cancelled && !delivered && (
                 <div style={{ fontSize: 12.5, marginTop: 4, opacity: 0.9 }}>{meta?.label}</div>
               )}
+              {/* The promise made at checkout, and honesty about it: a shared trip
+                  says how many drops come first; a slip says so before the
+                  customer has to ask. */}
+              {!cancelled && !delivered && order.promisedAt && (
+                <div style={{ fontSize: 12, marginTop: 6, opacity: 0.85 }}>
+                  Promised by <b>{new Date(order.promisedAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</b>
+                </div>
+              )}
+              {!cancelled && !delivered && (order.stopsBefore ?? 0) > 0 && (
+                <div style={{ fontSize: 12, marginTop: 6, padding: '4px 9px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.15)', display: 'inline-block' }}>
+                  🛵 Your rider has {order.stopsBefore} drop{order.stopsBefore === 1 ? '' : 's'} before you
+                </div>
+              )}
+              {!cancelled && !delivered && order.runningLate && (
+                <div style={{ fontSize: 12, marginTop: 6, padding: '5px 9px', borderRadius: 8,
+                  background: C.orange, color: '#1f1300', fontWeight: 800, display: 'inline-block' }}>
+                  Running a little late — sorry. It&apos;s on its way as fast as we can.
+                </div>
+              )}
               {/* stale GPS: rider assigned but no location ping in >60s */}
               {!cancelled && !delivered && order.partner &&
                 (!order.partner.locationUpdatedAt ||

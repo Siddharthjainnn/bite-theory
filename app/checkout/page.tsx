@@ -89,10 +89,12 @@ export default function CheckoutPage() {
       deliveryLat: addingNew ? picked?.lat : undefined,
       deliveryLng: addingNew ? picked?.lng : undefined,
       subtotal,
+      items: lines.map((l) => ({ productId: l.p.id, quantity: l.qty })),
     })
       .then((q) => { if (alive) setQuote(q); })
       .finally(() => { if (alive) setQuoting(false); });
     return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `lines` is a fresh array each render; subtotal tracks cart changes
   }, [selectedAddr, addingNew, picked?.lat, picked?.lng, subtotal]);
 
   async function saveNewAddress() {
@@ -656,7 +658,10 @@ export default function CheckoutPage() {
               )}
               {quote && quote.deliverable && (
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>
-                  📍 {quote.zone}{quote.etaMinutes ? ` · approx ${quote.etaMinutes} min` : ''}
+                  📍 {quote.zone}
+                  {quote.etaMin && quote.etaMax
+                    ? <> · arrives in <b style={{ color: C.ink }}>{quote.etaMin}–{quote.etaMax} min</b></>
+                    : quote.etaMinutes ? ` · approx ${quote.etaMinutes} min` : ''}
                 </div>
               )}
               {quote && !quote.deliverable && (

@@ -212,6 +212,14 @@ export interface ApiOrder {
     riderPhone: string | null; trackingUrl: string | null;
   } | null;
   deliveryOtp?: string | null;
+  /** The promise made at checkout: the high end of the range shown then. */
+  promisedAt?: string | null;
+  promisedMin?: number | null;
+  promisedMax?: number | null;
+  /** Shared trip: drops the rider makes before this one. */
+  stopsBefore?: number;
+  /** Live ETA is past the promise. */
+  runningLate?: boolean;
   prepVideoUrl?: string | null;
   cookingNote?: string | null;
   deliveryInstructions?: string | null;
@@ -279,10 +287,15 @@ export interface DeliveryQuote {
   freeAbove: number;
   deliverable: boolean;
   reason: 'ok' | 'no_pin' | 'out_of_range';
+  /** Honest range from the kitchen's time model ("30-40 min"); null on older servers. */
+  etaMin?: number | null;
+  etaMax?: number | null;
 }
 
 export async function fetchDeliveryQuote(args: {
   addressId?: number; deliveryLat?: number; deliveryLng?: number; subtotal: number;
+  /** cart lines: lets the server size the prep time (one chai ≠ six thalis) */
+  items?: { productId: number; quantity: number }[];
 }): Promise<DeliveryQuote | null> {
   try {
     const res = await fetch(`${API_BASE}/orders/delivery-quote`, {
