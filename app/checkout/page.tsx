@@ -664,6 +664,12 @@ export default function CheckoutPage() {
                     : quote.etaMinutes ? ` · approx ${quote.etaMinutes} min` : ''}
                 </div>
               )}
+              {/* WhatsApp policy: tell customers before messaging them, and how to stop. */}
+              {settings.whatsappUpdates && (
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>
+                  💬 We&apos;ll send order updates on WhatsApp to your mobile number. Reply STOP anytime to turn them off.
+                </div>
+              )}
               {quote && !quote.deliverable && (
                 <div style={{ fontSize: 12, color: '#C0392B', marginTop: 8, fontWeight: 700 }}>
                   {quote.reason === 'out_of_range'

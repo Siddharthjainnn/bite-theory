@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { C, money } from '../lib/bite';
+import WhatsAppPanel, { type WhatsAppApi } from './WhatsAppPanel';
 
 type Report = {
   from: string; to: string;
@@ -25,7 +26,7 @@ type Report = {
 
 export type DeliveryApi = {
   deliveryReport: (from: string, to: string) => Promise<Report>;
-  adminSettings: () => Promise<{ dispatchConfig?: Record<string, unknown> }>;
+  adminSettings: () => Promise<{ dispatchConfig?: Record<string, unknown>; notifyConfig?: Record<string, unknown> }>;
   saveDispatchConfig: (cfg: Record<string, unknown>) => Promise<{ dispatchConfig?: Record<string, unknown> }>;
   recomputeEta: () => Promise<{ band: string; part: string; n: number; median: number; p80: number }[]>;
   runDispatchNow: () => Promise<unknown>;
@@ -59,8 +60,8 @@ const RULES: { key: string; label: string; help: string; unit?: string; kind: 'n
   { key: 'autoDispatch', label: 'Auto-dispatch', help: 'assign riders and trips without a tap (Porter still needs you)', kind: 'bool' },
 ];
 
-export default function DeliveryPanel({ api, showToast }: { api: DeliveryApi; showToast: (m: string) => void }) {
-  const [tab, setTab] = useState<'report' | 'rules' | 'model'>('report');
+export default function DeliveryPanel({ api, showToast }: { api: DeliveryApi & WhatsAppApi; showToast: (m: string) => void }) {
+  const [tab, setTab] = useState<'report' | 'rules' | 'model' | 'whatsapp'>('report');
   const [from, setFrom] = useState(ymd(daysAgo(6)));
   const [to, setTo] = useState(ymd(new Date()));
   const [report, setReport] = useState<Report | null>(null);
@@ -82,7 +83,7 @@ export default function DeliveryPanel({ api, showToast }: { api: DeliveryApi; sh
 
   useEffect(() => {
     let alive = true;
-    void Promise.resolve().then(() => { if (!alive) return; return tab === 'report' ? loadReport() : loadCfg(); });
+    void Promise.resolve().then(() => { if (!alive || tab === 'whatsapp') return; return tab === 'report' ? loadReport() : loadCfg(); });
     return () => { alive = false; };
   }, [tab, loadReport, loadCfg]);
 
@@ -109,9 +110,9 @@ export default function DeliveryPanel({ api, showToast }: { api: DeliveryApi; sh
           <p>Are we keeping our promises, and at what cost per delivery.</p>
         </div>
         <div className="dp-tabs" role="tablist">
-          {(['report', 'rules', 'model'] as const).map((k) => (
+          {(['report', 'rules', 'model', 'whatsapp'] as const).map((k) => (
             <button key={k} role="tab" aria-selected={tab === k} data-on={tab === k ? '1' : '0'} onClick={() => setTab(k)}>
-              {k === 'report' ? 'Report' : k === 'rules' ? 'Rules' : 'Time model'}
+              {k === 'report' ? 'Report' : k === 'rules' ? 'Rules' : k === 'model' ? 'Time model' : 'WhatsApp'}
             </button>
           ))}
         </div>
@@ -225,6 +226,8 @@ export default function DeliveryPanel({ api, showToast }: { api: DeliveryApi; sh
           </div>
         </div>
       )}
+
+      {tab === 'whatsapp' && <WhatsAppPanel api={api} showToast={showToast} />}
 
       {tab === 'model' && (
         <div className="dp-card">

@@ -30,6 +30,7 @@ import { qrSvg } from '../lib/qr';
 import { NewOrderPopup, DispatchPrompt } from '../components/NewOrderPopup';
 import DispatchSheet from '../components/DispatchSheet';
 import DeliveryPanel, { type DeliveryApi } from '../components/DeliveryPanel';
+import { type WhatsAppApi } from '../components/WhatsAppPanel';
 import {
   announceOrdersChanged, isExternalProvider, ORDERS_CHANGED_EVENT, TripRefused,
   type BookCourierBody, type DispatchSheetData, type Suggestion, type RiderStatus, type TripView,
@@ -421,6 +422,27 @@ const api = {
   async recomputeEta(): ReturnType<DeliveryApi['recomputeEta']> {
     const r = await fetch(`${API_BASE}/delivery/eta/recompute`, { method: 'POST', headers: WRITE_HEADERS });
     if (!r.ok) throw await apiError(r, 'Could not rebuild the time model');
+    return r.json();
+  },
+  /* ----- WhatsApp (backend src/notify) ----- */
+  async notifyStatus(): ReturnType<WhatsAppApi['notifyStatus']> {
+    const r = await fetch(`${API_BASE}/notify/status`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load WhatsApp status');
+    return r.json();
+  },
+  async notifyLog(): ReturnType<WhatsAppApi['notifyLog']> {
+    const r = await fetch(`${API_BASE}/notify/log?limit=50`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load the message log');
+    return r.json();
+  },
+  async notifyTest(phone: string): ReturnType<WhatsAppApi['notifyTest']> {
+    const r = await fetch(`${API_BASE}/notify/test`, { method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify({ phone }) });
+    if (!r.ok) throw await apiError(r, 'Could not send the test');
+    return r.json();
+  },
+  async saveNotifyConfig(notifyConfig: Record<string, unknown>): ReturnType<WhatsAppApi['saveNotifyConfig']> {
+    const r = await fetch(`${API_BASE}/settings`, { method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify({ notifyConfig }) });
+    if (!r.ok) throw await apiError(r, 'Could not save WhatsApp settings');
     return r.json();
   },
   async runDispatchNow() {

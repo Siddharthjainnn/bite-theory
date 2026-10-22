@@ -18,6 +18,8 @@ export interface StoreSettings {
   freeDeliveryAbove: number;
   minOrderAmount: number;
   maxOrderAmount: number;
+  /** Customers get order updates on WhatsApp (shown as a notice at checkout). */
+  whatsappUpdates: boolean;
 }
 export interface StoreStatus {
   open: boolean;
@@ -27,7 +29,7 @@ export interface StoreStatus {
 }
 
 const DEFAULTS: StoreSettings = {
-  deliveryCharge: 30, freeDeliveryAbove: 500, minOrderAmount: 0, maxOrderAmount: 0,
+  deliveryCharge: 30, freeDeliveryAbove: 500, minOrderAmount: 0, maxOrderAmount: 0, whatsappUpdates: false,
 };
 
 export function useStoreSettings() {
@@ -53,6 +55,7 @@ export function useStoreSettings() {
             freeDeliveryAbove: Number(s.freeDeliveryAbove) || 0,
             minOrderAmount: Number(s.minOrderAmount) || 0,
             maxOrderAmount: Number(s.maxOrderAmount) || 0,
+            whatsappUpdates: s.whatsappUpdates === true,
           });
         }
         if (stRes.ok) setStatus(await stRes.json());
