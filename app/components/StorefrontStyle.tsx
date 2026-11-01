@@ -64,6 +64,13 @@ export default function StorefrontStyle() {
 .sf-err{font-size:12.5px;color:#FFD1C2;text-align:center}
 .sf-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+/* ── real Zomato rating ── */
+.sf-rating-line{padding:12px 16px 0;display:flex;align-items:center;gap:8px;font-size:13px;color:${SF.ink}}
+.sf-rating-line b{font-weight:800}
+.sf-rating-pill{display:inline-flex;align-items:center;gap:4px;background:${SF.green};color:#fff;font-weight:800;
+  font-size:13px;border-radius:8px;padding:3px 8px}
+.sf-desk .sf-rating-line{padding:16px 0 0}
+
 /* ── trust strip ── */
 .sf-trust{padding:12px 16px 0;display:flex;gap:8px}
 .sf-trust div{flex:1;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid ${SF.line};
@@ -145,12 +152,16 @@ export default function StorefrontStyle() {
 .sf-apps{padding:26px 16px 0;display:flex;flex-direction:column;gap:12px}
 .sf-apps h2{margin:0;font-size:17px;font-weight:800;color:${SF.ink}}
 .sf-apps p{margin:3px 0 0;font-size:12.5px;color:${SF.muted}}
-.sf-apps-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px}
-.sf-app{background:#fff;border:1px solid ${SF.line};border-radius:14px;padding:14px 10px;display:flex;flex-direction:column;
-  align-items:center;gap:10px;color:${SF.ink};transition:transform .15s, box-shadow .15s}
-.sf-app:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(13,59,46,.08)}
-.sf-app strong{font-size:20px;font-weight:800;letter-spacing:-.02em}
-.sf-app span{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700}
+.sf-apps-row{display:flex;flex-direction:column;gap:10px}
+.sf-app{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid ${SF.line};
+  border-left:5px solid ${SF.line};border-radius:14px;padding:10px 10px 10px 16px;min-height:62px;color:${SF.ink};
+  transition:transform .15s, box-shadow .15s}
+.sf-app:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(13,59,46,.10)}
+.sf-app:active{transform:scale(.99)}
+.sf-app:focus-visible{outline:3px solid ${SF.orange};outline-offset:2px}
+.sf-app strong{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.sf-app-btn{display:inline-flex;align-items:center;gap:6px;height:42px;padding:0 16px;border-radius:10px;background:${SF.deep};
+  color:#fff;font-size:13.5px;font-weight:800;white-space:nowrap}
 
 .sf-foot{padding:26px 16px 18px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12.5px;color:#3A4A44}
 .sf-foot b{font-weight:700}
@@ -178,8 +189,8 @@ export default function StorefrontStyle() {
 .sf-desk .sf-trust div,.sf-desk .sf-trust div.wide{flex:0 1 auto;font-size:13.5px;padding:9px 14px}
 .sf-desk .sf-chips{padding-left:0;top:62px;background:#f4f6f3}
 .sf-desk .sf-grid{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
-.sf-desk .sf-apps-row{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
-.sf-desk .sf-app{flex-direction:row;justify-content:space-between;padding:18px 20px}
+.sf-desk .sf-apps-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.sf-desk .sf-app{padding:14px 14px 14px 20px}
 .sf-desk .sf-app strong{font-size:24px}
 .sf-desk .sf-hero-ring,.sf-desk .sf-hero-pin{display:block}
 

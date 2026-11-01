@@ -32,10 +32,17 @@ export interface PlatformTile {
   url: string;
   enabled: boolean;
 }
+/** the restaurant's real Zomato rating, entered by the owner; shown labelled "on Zomato" */
+export interface ZomatoRating {
+  enabled: boolean;
+  value: number;
+  count: number;
+}
 export interface StorefrontConfig {
   launch: LaunchConfig;
   priceCompare: boolean;
   platforms: PlatformTile[];
+  zomatoRating?: ZomatoRating;
 }
 
 /** name = how we refer to it; mark = the wordmark-style label on the tile */

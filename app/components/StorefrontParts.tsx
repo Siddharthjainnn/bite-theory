@@ -39,6 +39,11 @@ const Icon = {
       <circle cx="12" cy="12" r="9" /><path d="M8 12l3 3 5-6" />
     </svg>
   ),
+  out: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 17L17 7" /><path d="M8 7h9v9" />
+    </svg>
+  ),
   arrow: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M5 12h14M13 6l6 6-6 6" />
@@ -48,12 +53,28 @@ const Icon = {
 
 export function TrustStrip() {
   const { freeDeliveryAbove, storefront } = useStorefront();
+  const z = storefront.zomatoRating;
   return (
+    <>
+    {z?.enabled && z.value > 0 && (
+      <div className="sf-rating-line">
+        <span className="sf-rating-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
+            <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" />
+          </svg>
+          {z.value.toFixed(1)}
+        </span>
+        <span>
+          {z.count > 0 ? `${z.count.toLocaleString('en-IN')} ratings` : 'Rated'} on <b>Zomato</b>
+        </span>
+      </div>
+    )}
     <section className="sf-trust" aria-label="Why order here">
       <div>{Icon.leaf}100% pure veg</div>
       {freeDeliveryAbove > 0 && <div className="wide">{Icon.truck}Free delivery above {money(freeDeliveryAbove)}</div>}
       {storefront.priceCompare && <div>{Icon.tag}Lowest price here</div>}
     </section>
+    </>
   );
 }
 
@@ -175,9 +196,10 @@ export function AppTiles() {
         {tiles.map((t) => {
           const look = PLATFORM_LOOK[t.key];
           return (
-            <a key={t.key} className="sf-app" href={t.url} target="_blank" rel="noopener noreferrer" aria-label={`Order on ${look.name}`}>
+            <a key={t.key} className="sf-app" href={t.url} target="_blank" rel="noopener noreferrer"
+              aria-label={`Order on ${look.name} (opens ${look.name})`} style={{ borderLeftColor: look.color }}>
               <strong style={{ color: look.color, fontStyle: look.italic ? 'italic' : 'normal' }}>{look.mark}</strong>
-              <span>Order on {look.name} {Icon.arrow}</span>
+              <span className="sf-app-btn">Order on {look.name} {Icon.out}</span>
             </a>
           );
         })}

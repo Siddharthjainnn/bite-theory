@@ -20,6 +20,7 @@ export interface StorefrontConfig {
   };
   priceCompare: boolean;
   platforms: { key: PlatformKey; name: string; url: string; enabled: boolean }[];
+  zomatoRating?: { enabled: boolean; value: number; count: number };
 }
 interface LaunchStats {
   total: number; notified: number; today: number;
@@ -305,6 +306,31 @@ export default function StorefrontPanel({ api, showToast }: { api: Api; showToas
           <button style={ghost} onClick={downloadCsv} disabled={!stats?.total}>Download list (CSV)</button>
         </section>
       </div>
+
+      {/* ── your real Zomato rating ── */}
+      <section style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h2 style={h2}>Your Zomato rating</h2>
+            <p style={sub}>Shown under the launch card as &quot;★ 4.3 · 712 ratings on Zomato&quot;. Copy the numbers from your Zomato page and keep them up to date; it is always labelled as Zomato&apos;s rating.</p>
+          </div>
+          <Switch
+            on={!!cfg.zomatoRating?.enabled}
+            onChange={(v) => { setCfg({ ...cfg, zomatoRating: { value: 0, count: 0, ...cfg.zomatoRating, enabled: v } }); setDirty(true); }}
+            label="Show Zomato rating"
+          />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+          <label style={{ ...label, width: 160 }}>Rating (1.0 – 5.0)
+            <input style={input} type="number" min={1} max={5} step={0.1} value={cfg.zomatoRating?.value || ''}
+              onChange={(e) => { setCfg({ ...cfg, zomatoRating: { enabled: false, count: 0, ...cfg.zomatoRating, value: Number(e.target.value) || 0 } }); setDirty(true); }} />
+          </label>
+          <label style={{ ...label, width: 200 }}>Number of ratings
+            <input style={input} type="number" min={0} value={cfg.zomatoRating?.count || ''}
+              onChange={(e) => { setCfg({ ...cfg, zomatoRating: { enabled: false, value: 0, ...cfg.zomatoRating, count: Math.max(0, Math.floor(Number(e.target.value) || 0)) } }); setDirty(true); }} />
+          </label>
+        </div>
+      </section>
 
       {/* ── 3. prices on other apps ── */}
       <section style={card}>
