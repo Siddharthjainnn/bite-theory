@@ -55,6 +55,10 @@ export interface Category {
   slug: string;
   image: string;
   emoji?: string;
+  /** home-page order (lower first) */
+  sortOrder?: number;
+  /** featured categories get their own section at the top of the home page */
+  featured?: boolean;
 }
 
 export interface Product {
@@ -77,6 +81,12 @@ export interface Product {
   isSpinWheel: boolean;
   stockStatus?: string;
   stockQty?: number | null;
+  /** the same dish on each app (their menu price); null = not listed there */
+  zomatoPrice?: number | null;
+  swiggyPrice?: number | null;
+  toingPrice?: number | null;
+  /** order inside its category */
+  sortOrder?: number;
 }
 
 export interface OrderItem {
@@ -118,7 +128,17 @@ function normalizeProduct(p: any): Product {
     isSpinWheel: Boolean(p.isSpinWheel ?? p.is_spin_wheel),
     stockStatus: p.stockStatus || p.stock_status || 'in_stock',
     stockQty: p.stockQty ?? p.stock_qty ?? null,
+    zomatoPrice: optNum(p.zomatoPrice ?? p.zomato_price),
+    swiggyPrice: optNum(p.swiggyPrice ?? p.swiggy_price),
+    toingPrice: optNum(p.toingPrice ?? p.toing_price),
+    sortOrder: Number(p.sortOrder ?? p.sort_order) || 0,
   };
+}
+
+/** a positive number, else null ("not listed on that app") */
+function optNum(v: unknown): number | null {
+  const n = Number(v);
+  return v === null || v === undefined || v === '' || !Number.isFinite(n) || n <= 0 ? null : n;
 }
 
 function normalizeCategory(c: any): Category {
@@ -128,6 +148,8 @@ function normalizeCategory(c: any): Category {
     slug: c.slug || '',
     image: c.image || '',
     emoji: catEmoji(c.name || ''),
+    sortOrder: Number(c.sortOrder ?? c.sort_order) || 0,
+    featured: Boolean(c.featured),
   };
 }
 
@@ -582,6 +604,16 @@ export const DEFAULT_INVOICE_CONFIG: InvoiceConfig = {
     'Made with care for you, {name}. Thank you for choosing us! ❤️',
   ],
 };
+
+/** "Notify me on opening day". Signed in → the profile mobile is used when no phone is given. */
+export async function subscribeLaunch(phone?: string): Promise<{ ok: true; phone: string; already: boolean }> {
+  const res = await fetch(`${API_BASE}/storefront/launch/notify`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(phone ? { phone } : {}),
+  });
+  return jsonOrThrow(res);
+}
 
 /** Public settings read — includes invoiceConfig once migration is applied. */
 export async function fetchStoreSettings(): Promise<any> {

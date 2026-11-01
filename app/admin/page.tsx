@@ -14,6 +14,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo} from 'react';
 
 import StoreSettingsPanel from '../components/StoreSettingsPanel';
+import StorefrontPanel, { type StorefrontApi } from '../components/StorefrontPanel';
 import TiffinLeadsPanel from '../components/TiffinLeadsPanel';
 import CouponBlastPanel from '../components/CouponBlastPanel';
 import LiveOrderBoard from '../components/LiveOrderBoard';
@@ -41,6 +42,8 @@ type Status = 'active' | 'inactive';
 interface Category {
   id: number; name: string; slug: string;
   description: string; image: string; status: Status; sortOrder: number;
+  /** own section at the top of the home page (e.g. Thali, Combos) */
+  featured?: boolean;
 }
 interface Product {
   id: number; categoryId: number; name: string; slug: string;
@@ -51,7 +54,19 @@ interface Product {
   isSpinWheel?: boolean;
   /** cook time in minutes; null = store default. Drives the customer's ETA. */
   prepMinutes?: number | null;
+  /** the same dish on each app (their menu price); null = not listed there */
+  zomatoPrice?: number | null;
+  swiggyPrice?: number | null;
+  toingPrice?: number | null;
+  /** position inside its category on the menu */
+  sortOrder?: number;
 }
+/** a positive price, else null ("not on that app") */
+function optPrice(v: unknown): number | null {
+  const n = Number(v);
+  return v === null || v === undefined || v === '' || !Number.isFinite(n) || n <= 0 ? null : Math.round(n * 100) / 100;
+}
+
 interface Order {
   id: number; orderNumber: string; userId: number; addressId: number;
   subtotal: number; discount: number; deliveryCharge: number; tax: number;
@@ -163,6 +178,10 @@ const api = {
       specialTag: p.specialTag ?? p.special_tag ?? '',
       isSpinWheel: Boolean(p.isSpinWheel ?? p.is_spin_wheel),
       prepMinutes: p.prepMinutes ?? p.prep_minutes ?? null,
+      zomatoPrice: optPrice(p.zomatoPrice ?? p.zomato_price),
+      swiggyPrice: optPrice(p.swiggyPrice ?? p.swiggy_price),
+      toingPrice: optPrice(p.toingPrice ?? p.toing_price),
+      sortOrder: Number(p.sortOrder ?? p.sort_order) || 0,
     }));
   },
   async createProduct(d: Partial<Product>) {
@@ -177,6 +196,8 @@ const api = {
         specialTag: d.specialTag || undefined,
         isSpinWheel: !!d.isSpinWheel,
         prepMinutes: d.prepMinutes ? Math.round(Number(d.prepMinutes)) : null,
+        zomatoPrice: optPrice(d.zomatoPrice), swiggyPrice: optPrice(d.swiggyPrice), toingPrice: optPrice(d.toingPrice),
+        sortOrder: Math.max(0, Math.round(Number(d.sortOrder) || 0)),
       }),
     });
     if (!r.ok) throw await apiError(r, 'Create failed');
@@ -194,6 +215,8 @@ const api = {
         specialTag: d.specialTag || undefined,
         isSpinWheel: !!d.isSpinWheel,
         prepMinutes: d.prepMinutes ? Math.round(Number(d.prepMinutes)) : null,
+        zomatoPrice: optPrice(d.zomatoPrice), swiggyPrice: optPrice(d.swiggyPrice), toingPrice: optPrice(d.toingPrice),
+        sortOrder: Math.max(0, Math.round(Number(d.sortOrder) || 0)),
       }),
     });
     if (!r.ok) throw await apiError(r, 'Update failed');
@@ -295,12 +318,13 @@ const api = {
       description: c.description || '', image: c.image || '',
       status: (c.isActive ? 'active' : 'inactive') as Status,
       sortOrder: Number(c.sortOrder) || 0,
+      featured: Boolean(c.featured),
     }));
   },
   async createCategory(d: Partial<Category>) {
     const r = await fetch(`${API_BASE}/categories`, {
       method: 'POST', headers: WRITE_HEADERS,
-      body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
+      body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active', featured: !!d.featured }),
     });
     if (!r.ok) throw await apiError(r, 'Create failed');
     return r.json();
@@ -308,7 +332,7 @@ const api = {
   async updateCategory(id: number, d: Partial<Category>) {
     const r = await fetch(`${API_BASE}/categories/${id}`, {
       method: 'PATCH', headers: WRITE_HEADERS,
-      body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active' }),
+      body: JSON.stringify({ name: d.name, description: d.description, image: d.image, sortOrder: d.sortOrder, isActive: d.status === 'active', featured: !!d.featured }),
     });
     if (!r.ok) throw await apiError(r, 'Update failed');
     return r.json();
@@ -444,6 +468,29 @@ const api = {
     const r = await fetch(`${API_BASE}/settings`, { method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify({ notifyConfig }) });
     if (!r.ok) throw await apiError(r, 'Could not save WhatsApp settings');
     return r.json();
+  },
+  /* ----- Home page (backend src/storefront + settings.storefrontConfig) ----- */
+  async loadStorefront(): ReturnType<StorefrontApi['loadStorefront']> {
+    const r = await fetch(`${API_BASE}/settings`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load the home page settings');
+    const s = await r.json();
+    return s.storefrontConfig;
+  },
+  async saveStorefront(storefrontConfig: Record<string, unknown>): ReturnType<StorefrontApi['saveStorefront']> {
+    const r = await fetch(`${API_BASE}/settings`, { method: 'PATCH', headers: WRITE_HEADERS, body: JSON.stringify({ storefrontConfig }) });
+    if (!r.ok) throw await apiError(r, 'Could not save the home page settings');
+    const s = await r.json();
+    return s.storefrontConfig;
+  },
+  async launchStats(): ReturnType<StorefrontApi['launchStats']> {
+    const r = await fetch(`${API_BASE}/storefront/launch/subscribers`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not load the opening-day list');
+    return r.json();
+  },
+  async launchCsv(): ReturnType<StorefrontApi['launchCsv']> {
+    const r = await fetch(`${API_BASE}/storefront/launch/subscribers.csv`, { headers: ADMIN_KEY_HEADER() });
+    if (!r.ok) throw await apiError(r, 'Could not download the list');
+    return r.blob();
   },
   async runDispatchNow() {
     const r = await fetch(`${API_BASE}/delivery/tick`, { method: 'POST', headers: WRITE_HEADERS });
@@ -959,6 +1006,7 @@ const NAV: NavGroup[] = [
     { key: 'pos', label: 'Counter / POS', icon: '🛒' },
   ]},
   { title: 'Catalog', items: [
+    { key: 'home_page', label: 'Home Page', icon: '🏠' },
     { key: 'products', label: 'Products', icon: '🍱' },
     { key: 'todays_special', label: "Today's Special", icon: '⚡' },
     { key: 'categories', label: 'Categories', icon: '🗂️' },
@@ -1659,7 +1707,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'live_orders', 'invoice_layout', 'thali', 'delivery'];
+  const DEDICATED = ['home_page', 'dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'live_orders', 'invoice_layout', 'thali', 'delivery'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1735,6 +1783,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'pos' && <PosCounter showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
             {effectivePage === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
+            {effectivePage === 'home_page' && <StorefrontPanel api={api} showToast={showToast} />}
             {effectivePage === 'tiffin_leads' && <TiffinLeadsPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {effectivePage === 'coupon_blast' && <CouponBlastPanel adminHeaders={ADMIN_KEY_HEADER} showToast={showToast} />}
             {effectivePage === 'live_orders' && <LiveOrderBoard api={api} showToast={showToast} />}
@@ -4638,6 +4687,19 @@ function ProductModal({ product, cats, onClose, onSave }:
         </Field>
       </Row>
 
+      <div style={{ fontWeight: 700, fontSize: 13, margin: '8px 0 4px', color: C.ink }}>Price on other apps</div>
+      <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 10 }}>
+        Their menu price for the same dish. Shown on the site as Zomato | Swiggy | Toing | Order here. Leave blank if it isn&apos;t on that app.
+      </div>
+      <Row3>
+        <Field label="Zomato (₹)"><input style={inputStyle} type="number" min={0} value={f.zomatoPrice ?? ''} onChange={e => setF(x => ({ ...x, zomatoPrice: e.target.value === '' ? null : Number(e.target.value) }))} /></Field>
+        <Field label="Swiggy (₹)"><input style={inputStyle} type="number" min={0} value={f.swiggyPrice ?? ''} onChange={e => setF(x => ({ ...x, swiggyPrice: e.target.value === '' ? null : Number(e.target.value) }))} /></Field>
+        <Field label="Toing (₹)"><input style={inputStyle} type="number" min={0} value={f.toingPrice ?? ''} onChange={e => setF(x => ({ ...x, toingPrice: e.target.value === '' ? null : Number(e.target.value) }))} /></Field>
+      </Row3>
+      <Field label="Position in its category (lower shows first)">
+        <input style={inputStyle} type="number" min={0} value={f.sortOrder ?? 0} onChange={e => setF(x => ({ ...x, sortOrder: e.target.value === '' ? 0 : Number(e.target.value) }))} />
+      </Field>
+
       <div style={{ fontWeight: 700, fontSize: 13, margin: '8px 0 10px', color: C.ink }}>Visibility & highlights</div>
       <Row>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: f.isTodaysSpecial ? '#fff7ed' : '#fff' }}>
@@ -4724,6 +4786,7 @@ function Categories({ showToast }: { showToast: (m: string) => void }) {
                   <div style={{ color: C.muted, fontSize: 12, margin: '3px 0 7px' }}>{c.description}</div>
                   <Pill kind={c.status}>{c.status === 'active' ? 'Active' : 'Inactive'}</Pill>
                   <span style={{ color: C.muted, fontSize: 11, marginLeft: 7 }}>#{c.sortOrder}</span>
+                  {c.featured && <span style={{ marginLeft: 7, fontSize: 10.5, fontWeight: 800, color: '#1F7A3A', background: '#EAF3EE', borderRadius: 6, padding: '2px 7px' }}>FEATURED</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 13 }}>
@@ -4760,6 +4823,13 @@ function CategoryModal({ cat, nextSort, onClose, onSave }:
         <Field label="Sort number"><input style={inputStyle} type="number" value={f.sortOrder ?? ''} onChange={e => set('sortOrder', e.target.value === '' ? 0 : Number(e.target.value))} /></Field>
         <Field label="Status"><select style={inputStyle} value={f.status} onChange={e => set('status', e.target.value as Status)}><option value="active">Active</option><option value="inactive">Inactive</option><option value="out_of_stock">Out of stock</option></select></Field>
       </Row>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: f.featured ? '#f0fdf4' : '#fff', marginTop: 4 }}>
+        <input type="checkbox" checked={!!f.featured} onChange={e => set('featured', e.target.checked)} />
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>Featured on the home page</div>
+          <div style={{ fontSize: 11, color: C.muted }}>Gets its own section at the top, before the full menu (like Thali and Combos). Sort number sets the order.</div>
+        </div>
+      </label>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
         <button style={btnGhost} onClick={onClose}>Cancel</button>
         <button style={btnPrimary} onClick={() => { if (!f.name) return alert('Name is required'); onSave(f); }}>{cat.id ? 'Save' : 'Create'}</button>

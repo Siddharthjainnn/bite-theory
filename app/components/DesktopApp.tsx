@@ -13,12 +13,16 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCatalog } from '../lib/useCatalog';
 import { useCart } from '../providers/CartProvider';
-import { C, money, effectivePrice, hasOffer, Product } from '../lib/bite';
+import { C, money, effectivePrice, imgUrl, Product } from '../lib/bite';
 import { useStoreSettings } from '../lib/useStoreSettings';
 import { useLanding } from '../lib/useLanding';
+import { compareFor, useStorefront } from '../lib/storefront';
 import { useMenu } from './MenuProvider';
-
-type Sort = 'pop' | 'protein' | 'lowcal' | 'cheap';
+import StorefrontStyle from './StorefrontStyle';
+import LaunchHero from './LaunchHero';
+import StoreClosedBanner from './StoreClosedBanner';
+import LiveOrderCard from './LiveOrderCard';
+import { AppTiles, MenuSections, SiteFooter, TrustStrip } from './StorefrontParts';
 
 export default function DesktopApp({
   onOpenProfile,
@@ -28,38 +32,15 @@ export default function DesktopApp({
   const router = useRouter();
   const { openMenu } = useMenu();
   const openProfile = onOpenProfile || openMenu;
-  const { products, categories, loading } = useCatalog();
+  const { products, categories, loading, error } = useCatalog();
   const { content } = useLanding();
   const brandName = content.brandName || 'Bites Theory';
   const brandCity = content.city || '';
-  const { settings } = useStoreSettings();
+  const { settings, status } = useStoreSettings();
+  const { storefront } = useStorefront();
   const { cart, add, sub, count, totalFor } = useCart();
 
-  const [activeCat, setActiveCat] = useState<number | 'all'>('all');
-  const [sort, setSort] = useState<Sort>('pop');
-  const [vegOnly, setVegOnly] = useState(true);
   const [q, setQ] = useState('');
-
-  const shown = useMemo(() => {
-    let list = products.slice();
-    if (vegOnly) list = list.filter((p) => p.isVeg);
-    if (activeCat !== 'all') list = list.filter((p) => p.categoryId === activeCat);
-    if (q.trim()) {
-      const t = q.trim().toLowerCase();
-      list = list.filter((p) => p.name.toLowerCase().includes(t) || p.description?.toLowerCase().includes(t));
-    }
-    const arr = [...list];
-    if (sort === 'protein') arr.sort((a, b) => (b.protein || 0) - (a.protein || 0));
-    else if (sort === 'lowcal') arr.sort((a, b) => (a.calories || 0) - (b.calories || 0));
-    else if (sort === 'cheap') arr.sort((a, b) => effectivePrice(a) - effectivePrice(b));
-    // Sold-out items sink to the bottom of every list (still visible, just greyed).
-    arr.sort((a, b) => {
-      const aOut = (a.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
-      const bOut = (b.stockStatus ?? 'in_stock') === 'out_of_stock' ? 1 : 0;
-      return aOut - bOut;
-    });
-    return arr;
-  }, [products, vegOnly, activeCat, q, sort]);
 
   const cartLines = useMemo(
     () => Object.entries(cart)
@@ -73,125 +54,51 @@ export default function DesktopApp({
   const deliveryFree = freeAbove > 0 && subtotal >= freeAbove;
   const deliveryCharge = deliveryFree ? 0 : Number(settings.deliveryCharge || 0);
   const total = subtotal + deliveryCharge;
+  /* what the same cart would cost on the dearest app, for the cart's "you save" line */
+  const appTotal = cartLines.reduce((sum, { p, qty }) => {
+    const c = compareFor(p, storefront);
+    return sum + (c ? Math.max(...c.apps.map((a) => a.price)) : effectivePrice(p)) * qty;
+  }, 0);
+  const cartSaving = Math.round(appTotal - subtotal);
 
   return (
     <div className="da-root">
       {/* ── TOP BAR ── */}
       <header className="da-top">
-        <div className="da-logo">B</div>
+        {content.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="da-logo da-logo-img" src={imgUrl(content.logoUrl)} alt="" />
+        ) : (
+          <div className="da-logo">B</div>
+        )}
         <div className="da-brand">{brandName} {brandCity && <span>· {brandCity}</span>}</div>
         <div className="da-search">
           <span>🔍</span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search thali, healthy meals, snacks…"
+            placeholder="Search thali, paneer, noodles…"
+            aria-label="Search the menu"
           />
-          {q && <button className="da-search-x" onClick={() => setQ('')}>✕</button>}
+          {q && <button className="da-search-x" onClick={() => setQ('')} aria-label="Clear search">✕</button>}
         </div>
         <button className="da-avatar" onClick={openProfile} aria-label="Profile">S</button>
       </header>
 
-      <div className="da-body">
-        {/* ── LEFT: CATEGORIES ── */}
-        <aside className="da-side">
-          <div className="da-side-h">CATEGORIES</div>
-          <div className="da-cats">
-            <button
-              className={`da-cat ${activeCat === 'all' ? 'on' : ''}`}
-              onClick={() => setActiveCat('all')}
-            >🍽️ All</button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                className={`da-cat ${activeCat === c.id ? 'on' : ''}`}
-                onClick={() => setActiveCat(c.id)}
-              >
-                <span>{c.emoji || '🍴'}</span> {c.name}
-              </button>
-            ))}
+      <div className="sf-desk da-wrap">
+        <LaunchHero desktop />
+        {!status.open && (
+          <div style={{ paddingTop: 16 }}>
+            <StoreClosedBanner status={status} />
           </div>
-          <div className="da-veg">
-            <div className="da-veg-top">
-              <span className="da-veg-badge">VEG</span>
-              <span>Pure veg only</span>
-            </div>
-            <button
-              className={`da-toggle ${vegOnly ? 'on' : ''}`}
-              onClick={() => setVegOnly((v) => !v)}
-              aria-label="Toggle veg only"
-            >
-              <span className="da-knob" />
-            </button>
-          </div>
-        </aside>
+        )}
+        <LiveOrderCard />
+        <TrustStrip />
+      </div>
 
-        {/* ── CENTER: PRODUCTS ── */}
+      <div className="da-body sf-desk">
         <main className="da-main">
-          <div className="da-toolbar">
-            <div className="da-title">
-              {activeCat === 'all' ? 'Popular near you'
-                : categories.find((c) => c.id === activeCat)?.name || 'Menu'}
-              <span className="da-count-mini">{shown.length} items</span>
-            </div>
-            <div className="da-sorts">
-              {([['pop', 'Popular'], ['protein', 'High protein'], ['lowcal', 'Under 400 cal'], ['cheap', 'Cheapest']] as [Sort, string][])
-                .map(([k, label]) => (
-                  <button
-                    key={k}
-                    className={`da-sort ${sort === k ? 'on' : ''}`}
-                    onClick={() => setSort(k)}
-                  >{label}</button>
-                ))}
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="da-empty">Loading menu…</div>
-          ) : shown.length === 0 ? (
-            <div className="da-empty">Nothing here yet. Try another category.</div>
-          ) : (
-            <div className="da-grid">
-              {shown.map((p) => {
-                const qty = cart[p.id] || 0;
-                const off = hasOffer(p);
-                return (
-                  <div key={p.id} className="da-card">
-                    <div
-                      className="da-card-img"
-                      onClick={() => router.push(`/product/${p.id}`)}
-                    >
-                      {p.image ? <img src={p.image} alt={p.name} /> : <span>🍛</span>}
-                      {off && <span className="da-card-off">{Math.round((1 - effectivePrice(p) / p.price) * 100)}% OFF</span>}
-                      {p.specialTag && <span className="da-card-tag">{p.specialTag}</span>}
-                    </div>
-                    <div className="da-card-body">
-                      <div className="da-card-name" onClick={() => router.push(`/product/${p.id}`)}>{p.name}</div>
-                      <div className="da-card-meta">
-                        {p.isVeg && '🟢 '}
-                        {p.protein ? `${p.protein}g protein` : p.calories ? `${p.calories} cal` : 'pure veg'}
-                      </div>
-                      <div className="da-card-foot">
-                        <div className="da-card-price">
-                          {money(effectivePrice(p))}
-                          {off && <span className="da-strike">{money(p.price)}</span>}
-                        </div>
-                        {qty === 0 ? (
-                          <button className="da-add" onClick={() => add(p.id)}>ADD +</button>
-                        ) : (
-                          <div className="da-stepper">
-                            <button onClick={() => sub(p.id)}>−</button>
-                            <span>{qty}</span>
-                            <button onClick={() => add(p.id)}>+</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <MenuSections products={products} categories={categories} loading={loading} error={error} query={q} />
         </main>
 
         {/* ── RIGHT: CART RAIL ── */}
@@ -237,6 +144,9 @@ export default function DesktopApp({
                     <div className="da-cart-hint">Add {money(freeAbove - subtotal)} more for free delivery 🎉</div>
                   )}
                   <div className="da-cart-total"><span>Total</span><span>{money(total)}</span></div>
+                  {storefront.priceCompare && cartSaving > 0 && (
+                    <div className="da-cart-save">You save {money(cartSaving)} compared with the apps</div>
+                  )}
                   <button className="da-checkout" onClick={() => router.push('/cart')}>Checkout →</button>
                 </div>
               </>
@@ -245,6 +155,12 @@ export default function DesktopApp({
         </aside>
       </div>
 
+      <div className="sf-desk da-wrap">
+        <AppTiles />
+        <SiteFooter />
+      </div>
+
+      <StorefrontStyle />
       <style jsx>{`
         .da-root { min-height: 100vh; background: ${C.bg}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         .da-top { position: sticky; top: 0; z-index: 20; background: ${C.dark}; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
@@ -257,8 +173,11 @@ export default function DesktopApp({
         .da-search-x { background: none; border: none; color: #9fb0a8; cursor: pointer; font-size: 13px; }
         .da-avatar { width: 38px; height: 38px; border-radius: 50%; border: none; background: linear-gradient(135deg, #a3c93a, ${C.orange}); color: #fff; font-weight: 800; font-size: 15px; cursor: pointer; margin-left: auto; }
 
-        .da-body { display: grid; grid-template-columns: 220px minmax(0, 1fr) 320px; align-items: start; max-width: 1500px; margin: 0 auto; }
-        @media (max-width: 1180px) { .da-body { grid-template-columns: 200px minmax(0, 1fr) 300px; } }
+        .da-wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+        .da-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+        @media (max-width: 1180px) { .da-body { grid-template-columns: minmax(0, 1fr) 300px; } }
+        .da-logo-img { object-fit: cover; background: #fff; border-radius: 50%; }
+        .da-cart-save { margin-top: 10px; background: #EAF3EE; color: #1F7A3A; border-radius: 10px; padding: 9px 12px; font-size: 12.5px; font-weight: 700; text-align: center; }
 
         .da-side { background: #fff; border-right: 1px solid ${C.line}; padding: 18px 12px; min-height: calc(100vh - 62px); position: sticky; top: 62px; }
         .da-side-h { font-size: 11px; font-weight: 800; color: #9aaba1; letter-spacing: .06em; padding: 0 8px 8px; }
@@ -274,7 +193,7 @@ export default function DesktopApp({
         .da-knob { position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: left .2s; }
         .da-toggle.on .da-knob { left: 20px; }
 
-        .da-main { padding: 20px 22px; }
+        .da-main { padding: 0; min-width: 0; }
         .da-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
         .da-title { font-weight: 900; font-size: 19px; color: ${C.dark}; display: flex; align-items: center; gap: 10px; }
         .da-count-mini { font-size: 12px; font-weight: 700; color: #9aaba1; }
@@ -302,7 +221,7 @@ export default function DesktopApp({
         .da-stepper span { font-weight: 800; font-size: 13px; color: ${C.dark}; min-width: 12px; text-align: center; }
         .da-stepper.sm { padding: 3px 8px; gap: 8px; }
 
-        .da-cart-rail { padding: 20px 18px 20px 0; }
+        .da-cart-rail { padding: 74px 0 20px; }
         .da-cart { background: #fff; border: 1px solid ${C.line}; border-radius: 16px; overflow: hidden; position: sticky; top: 82px; display: flex; flex-direction: column; max-height: calc(100vh - 104px); }
         .da-cart-h { background: ${C.dark}; color: #fff; padding: 14px 16px; font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 8px; }
         .da-cart-count { background: ${C.orange}; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: auto; }

@@ -13,6 +13,7 @@
  */
 
 import type { StoreStatus } from '../lib/useStoreSettings';
+import { RichLine } from './StorefrontParts';
 
 export default function StoreClosedBanner({ status }: { status: StoreStatus }) {
   if (status.open) return null;
@@ -23,7 +24,7 @@ export default function StoreClosedBanner({ status }: { status: StoreStatus }) {
         <span className="bt-closed-dot" aria-hidden="true" />
         <div>
           <div className="bt-closed-title">Kitchen closed right now</div>
-          <div className="bt-closed-msg">{status.message || 'We are not taking orders at the moment.'}</div>
+          <div className="bt-closed-msg"><RichLine text={status.message || 'We are not taking orders at the moment.'} /></div>
         </div>
       </div>
       <style>{`

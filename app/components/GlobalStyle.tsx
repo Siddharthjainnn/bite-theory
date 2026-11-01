@@ -1,6 +1,7 @@
 'use client';
 
 import { C } from '../lib/bite';
+import StorefrontStyle from './StorefrontStyle';
 
 /**
  * One stylesheet shared by every page (app shell + all screens).
@@ -10,6 +11,8 @@ import { C } from '../lib/bite';
  */
 export default function GlobalStyle() {
   return (
+    <>
+    <StorefrontStyle />
     <style>{`
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden}
@@ -1382,5 +1385,6 @@ a{text-decoration:none;color:inherit}
 
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
     `}</style>
+    </>
   );
 }
