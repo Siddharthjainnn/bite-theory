@@ -57,7 +57,7 @@ function pickGreeting(templates: string[], seed: string): string {
   return list[h % list.length];
 }
 
-function esc(s: unknown): string {
+export function esc(s: unknown): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
@@ -74,12 +74,12 @@ function contentWidth(paper: InvoiceConfig['paper']): string {
   return '76mm';
 }
 
-function cfgOrDefault(cfg?: Partial<InvoiceConfig> | null): InvoiceConfig {
+export function cfgOrDefault(cfg?: Partial<InvoiceConfig> | null): InvoiceConfig {
   return { ...DEFAULT_INVOICE_CONFIG, ...(cfg || {}),
     columns: { ...DEFAULT_INVOICE_CONFIG.columns, ...(cfg?.columns || {}) } };
 }
 
-function baseStyles(cfg: InvoiceConfig): string {
+export function baseStyles(cfg: InvoiceConfig): string {
   const isThermal = cfg.paper !== 'a4';
   const base = isThermal ? 12 : 13;
   // Thermal heads print grey when given #333/#555 — force pure black and heavier

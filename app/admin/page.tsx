@@ -20,6 +20,10 @@ import CouponBlastPanel from '../components/CouponBlastPanel';
 import LiveOrderBoard from '../components/LiveOrderBoard';
 import InvoiceLayoutPanel from '../components/InvoiceLayoutPanel';
 import ThaliAdminPanel from '../components/ThaliAdminPanel';
+import PosCounter from '../components/pos/PosCounter';
+import OutletsPanel from '../components/pos/OutletsPanel';
+import PosReportsPanel from '../components/pos/PosReportsPanel';
+import { posApi } from '../lib/pos';
 import {
   fetchStoreSettings, InvoiceConfig as InvoiceConfigT,
   fetchCouponAssignments, assignCoupon, deleteCouponAssignment,
@@ -114,6 +118,8 @@ const ADMIN_KEY_HEADER = () => {
   return h;
 };
 const money = (n: number) => '₹' + Number(n || 0).toLocaleString('en-IN');
+/** counter POS client (stable identity — panels use it in effect deps) */
+const POS_API = posApi(ADMIN_KEY_HEADER);
 
 type RiderOption = {
   id: number; name: string | null; mobile: string | null;
@@ -1004,6 +1010,10 @@ const NAV: NavGroup[] = [
     { key: 'orders', label: 'All Orders', icon: '🧾' },
     { key: 'pos', label: 'Counter / POS', icon: '🛒' },
   ]},
+  { title: 'Outlets', items: [
+    { key: 'outlets', label: 'Outlets & Rates', icon: '🏪' },
+    { key: 'pos_reports', label: 'Counter Reports', icon: '📈' },
+  ]},
   { title: 'Catalog', items: [
     { key: 'home_page', label: 'Home Page', icon: '🏠' },
     { key: 'products', label: 'Products', icon: '🍱' },
@@ -1062,8 +1072,10 @@ type PageKey = typeof ALL_KEYS[number];
    NOTE: this hides UI only. Real backend enforcement kicks in once the
    browser master key is retired (see the write-guard JWT change). */
 const ROLE_SECTIONS: Record<string, PageKey[]> = {
+  /* counter staff: bill and print, nothing else */
+  cashier: ['pos'],
   kitchen_manager: [
-    'dashboard', 'live_orders', 'delivery', 'orders',
+    'dashboard', 'live_orders', 'delivery', 'orders', 'pos', 'outlets', 'pos_reports',
     'products', 'todays_special', 'categories', 'inventory', 'thali',
   ],
   delivery_manager: [
@@ -1078,7 +1090,7 @@ const ROLE_SECTIONS: Record<string, PageKey[]> = {
     'banners', 'referrals', 'loyalty_points',
   ],
   finance_manager: [
-    'dashboard', 'reports', 'payments', 'refunds', 'wallet_transactions', 'orders',
+    'dashboard', 'reports', 'payments', 'refunds', 'wallet_transactions', 'orders', 'outlets', 'pos_reports',
   ],
 };
 
@@ -1698,7 +1710,7 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
   const effectivePage: PageKey = allowed.has(page) ? page : 'dashboard';
   const currentItem = NAV.flatMap(g => g.items).find(i => i.key === effectivePage);
 
-  const DEDICATED = ['home_page', 'dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'live_orders', 'invoice_layout', 'thali', 'delivery'];
+  const DEDICATED = ['home_page', 'dashboard', 'reports', 'products', 'todays_special', 'roles_access', 'refunds', 'help_centre', 'campaigns_new', 'categories', 'orders', 'pos', 'outlets', 'pos_reports', 'order_items', 'settings', 'coupon_assign', 'coupon_blast', 'tiffin_leads', 'live_orders', 'invoice_layout', 'thali', 'delivery'];
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.ink, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', fontSize: 14 }}>
@@ -1771,7 +1783,9 @@ function AdminDashboard({ onLogout, role }: { onLogout: () => void; role?: strin
             {effectivePage === 'campaigns_new' && <Campaigns showToast={showToast} />}
             {effectivePage === 'categories' && <Categories showToast={showToast} />}
             {effectivePage === 'orders' && <Orders showToast={showToast} />}
-            {effectivePage === 'pos' && <PosCounter showToast={showToast} />}
+            {effectivePage === 'pos' && <PosCounter api={POS_API} showToast={showToast} />}
+            {effectivePage === 'outlets' && <OutletsPanel api={POS_API} showToast={showToast} />}
+            {effectivePage === 'pos_reports' && <PosReportsPanel api={POS_API} showToast={showToast} />}
             {effectivePage === 'order_items' && <OrderItemsPage showToast={showToast} />}
             {effectivePage === 'settings' && <StoreSettingsPanel adminHeaders={ADMIN_KEY_HEADER} />}
             {effectivePage === 'home_page' && <StorefrontPanel api={api} showToast={showToast} />}
@@ -2846,153 +2860,6 @@ function CouponAssignments({ showToast }: { showToast: (m: string) => void }) {
 }
 
 /* ============ ORDER ITEMS (live) ============ */
-/* ============ COUNTER / POS ============
-   Native admin section: staff picks items, enters the customer's phone (name
-   auto-fills for existing customers), then generates + prints the invoice.
-   Saved as a real order so it shows in reports. Payment taken at counter. */
-function PosCounter({ showToast }: { showToast: (m: string) => void }) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cats, setCats] = useState<{ id: number; name: string }[]>([]);
-  const [q, setQ] = useState('');
-  const [activeCat, setActiveCat] = useState<number | 'all'>('all');
-  const [cart, setCart] = useState<Record<number, { product: Product; qty: number }>>({});
-  const [mobile, setMobile] = useState('');
-  const [name, setName] = useState('');
-  const [invoiceCfg, setInvoiceCfg] = useState<any>(null);
-
-  const priceOf = (p: Product) =>
-    p.offerPrice && Number(p.offerPrice) > 0 && Number(p.offerPrice) < Number(p.price)
-      ? Number(p.offerPrice) : Number(p.price);
-
-  useEffect(() => {
-    Promise.all([api.listProducts(), api.listCategories().catch(() => [])])
-      .then(([p, c]: any) => {
-        setProducts((p || []).filter((x: Product) => x.status === 'active'));
-        setCats((c || []).map((x: any) => ({ id: x.id, name: x.name })));
-      })
-      .catch((e: any) => showToast(e.message || 'Load failed'));
-    fetchStoreSettings().then((s: any) => setInvoiceCfg(s?.invoiceConfig || null)).catch(() => {});
-  }, [showToast]);
-
-  const shown = useMemo(() => {
-    let list = products;
-    if (activeCat !== 'all') list = list.filter((p) => p.categoryId === activeCat);
-    const t = q.trim().toLowerCase();
-    if (t) list = list.filter((p) => p.name.toLowerCase().includes(t));
-    return list;
-  }, [products, q, activeCat]);
-
-  const lines = Object.values(cart);
-  const subtotal = lines.reduce((s, l) => s + priceOf(l.product) * l.qty, 0);
-  const count = lines.reduce((s, l) => s + l.qty, 0);
-
-  const add = (p: Product) => setCart((c) => ({ ...c, [p.id]: { product: p, qty: (c[p.id]?.qty || 0) + 1 } }));
-  const setQty = (id: number, qty: number) => setCart((c) => {
-    if (qty <= 0) { const n = { ...c }; delete n[id]; return n; }
-    return { ...c, [id]: { ...c[id], qty } };
-  });
-
-  /* Print-only: build a slip locally and print it. Nothing is saved to the
-     server, no customer lookup, no order created. */
-  function printSlip() {
-    if (!lines.length) { showToast('Add at least one item'); return; }
-    const slipNo = 'SLIP' + Date.now().toString(36).toUpperCase().slice(-6);
-    const inv: InvoiceOrder = {
-      orderNumber: slipNo,
-      placedAt: new Date().toISOString(),
-      items: lines.map((l) => ({
-        productName: l.product.name, quantity: l.qty,
-        unitPrice: priceOf(l.product), lineTotal: priceOf(l.product) * l.qty,
-      })),
-      subtotal, discount: 0, deliveryCharge: 0, total: subtotal,
-      customerName: name.trim() || undefined,
-      customerMobile: mobile.trim() || undefined,
-      status: 'order_received',
-    } as InvoiceOrder;
-    if (invoiceCfg) printHtml(customerInvoice(inv, invoiceCfg));
-    else showToast('Invoice layout not loaded yet — try again in a moment');
-    showToast('Slip printed');
-    setCart({}); setMobile(''); setName('');
-  }
-
-  const chip = (active: boolean): React.CSSProperties => ({
-    padding: '6px 13px', borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-    border: `1px solid ${active ? C.green : C.line}`, background: active ? C.green : '#fff', color: active ? '#fff' : C.ink,
-  });
-  const qtyBtn: React.CSSProperties = { width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', fontWeight: 800, color: C.darkGreen, fontSize: 15 };
-
-  return (
-    <>
-      <PageHead title="Counter / POS" sub="Pick items, print the slip. Phone & name optional." />
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(320px,1fr)', gap: 16, alignItems: 'start' }}>
-        {/* LEFT: products */}
-        <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.line}` }}>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Search items…"
-            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
-          <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 10, marginBottom: 4 }}>
-            <div style={chip(activeCat === 'all')} onClick={() => setActiveCat('all')}>All</div>
-            {cats.map((c) => <div key={c.id} style={chip(activeCat === c.id)} onClick={() => setActiveCat(c.id)}>{c.name}</div>)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10, maxHeight: '62vh', overflowY: 'auto', paddingTop: 6 }}>
-            {shown.map((p) => {
-              const inCart = cart[p.id]?.qty || 0;
-              return (
-                <button key={p.id} onClick={() => add(p)}
-                  style={{ position: 'relative', textAlign: 'left', padding: '12px 12px', borderRadius: 13, cursor: 'pointer',
-                    border: `1.5px solid ${inCart ? C.green : C.line}`, background: inCart ? C.greenSoft : '#fff', transition: 'all .12s' }}>
-                  <div style={{ fontWeight: 700, color: C.ink, fontSize: 13.5, marginBottom: 6, lineHeight: 1.3 }}>{p.name}</div>
-                  <div style={{ color: C.green, fontWeight: 800, fontSize: 15 }}>{money(priceOf(p))}</div>
-                  {inCart > 0 && <div style={{ position: 'absolute', top: 8, right: 8, background: C.green, color: '#fff', borderRadius: 999, minWidth: 20, height: 20, fontSize: 12, fontWeight: 800, display: 'grid', placeItems: 'center', padding: '0 5px' }}>{inCart}</div>}
-                </button>
-              );
-            })}
-            {!shown.length && <div style={{ color: C.muted, padding: 20, gridColumn: '1/-1', textAlign: 'center' }}>No items found.</div>}
-          </div>
-        </div>
-
-        {/* RIGHT: slip */}
-        <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.line}`, position: 'sticky', top: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <b style={{ fontSize: 16, color: C.darkGreen }}>🧾 Slip</b>
-            {count > 0 && <span style={{ fontSize: 12.5, color: C.muted }}>{count} item{count > 1 ? 's' : ''}</span>}
-          </div>
-
-          {!lines.length && <div style={{ color: C.muted, fontSize: 13.5, padding: '20px 0', textAlign: 'center', background: C.bg, borderRadius: 11, marginBottom: 14 }}>Tap items on the left to add them.</div>}
-
-          {lines.length > 0 && (
-            <div style={{ display: 'grid', gap: 9, marginBottom: 14, maxHeight: '40vh', overflowY: 'auto' }}>
-              {lines.map((l) => (
-                <div key={l.product.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 13.5, color: C.ink, fontWeight: 500 }}>{l.product.name}</span>
-                  <button onClick={() => setQty(l.product.id, l.qty - 1)} style={qtyBtn}>−</button>
-                  <span style={{ width: 24, textAlign: 'center', fontWeight: 800 }}>{l.qty}</span>
-                  <button onClick={() => setQty(l.product.id, l.qty + 1)} style={qtyBtn}>+</button>
-                  <span style={{ width: 56, textAlign: 'right', fontWeight: 700, color: C.ink, fontSize: 13.5 }}>{money(priceOf(l.product) * l.qty)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ borderTop: `1px dashed ${C.line}`, paddingTop: 12, marginBottom: 14, display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 20, color: C.darkGreen }}>
-            <span>Total</span><span>{money(subtotal)}</span>
-          </div>
-
-          <input value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="Phone (optional)" inputMode="numeric"
-            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 8, boxSizing: 'border-box' }} />
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)"
-            style={{ width: '100%', padding: '11px 14px', borderRadius: 11, border: `1px solid ${C.line}`, fontSize: 14, marginBottom: 14, boxSizing: 'border-box' }} />
-
-          <button onClick={printSlip} disabled={!lines.length}
-            style={{ width: '100%', padding: '14px 0', borderRadius: 13, border: 'none', fontWeight: 800, fontSize: 15.5, cursor: !lines.length ? 'not-allowed' : 'pointer',
-              background: !lines.length ? C.muted : C.green, color: '#fff' }}>
-            🖨️ Print Slip
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
 function OrderItemsPage({ showToast }: { showToast: (m: string) => void }) {
 
   const [items, setItems] = useState<OrderItem[]>([]);
