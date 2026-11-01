@@ -2,6 +2,8 @@
 
 /**
  * /checkout — Swiggy-style checkout.
+ * 0. Delivery or Takeaway. Takeaway: pick the outlet (Vijay Nagar cloud
+ *    kitchen, Bhawarkua …); no address, no delivery fee, no rider tip.
  * 1. Deliver-to: saved addresses (from API) or add-new via MapPicker.
  * 2. Coupon: validated server-side against subtotal.
  * 3. Wallet toggle (balance from session).
@@ -21,7 +23,20 @@ import {
   C, money, effectivePrice,
   SavedAddress, fetchAddresses, createAddress, validateCoupon, checkoutOrder, createPaymentOrder,
   fetchDeliveryQuote, DeliveryQuote,
+  fetchOutlets, outletDirections, type PublicOutlet, type Fulfillment,
 } from '../lib/bite';
+
+const FULFILL_KEY = 'bt_fulfillment';
+const PICKUP_KEY = 'bt_pickup_outlet';
+function readLocal(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writeLocal(key: string, v: string) {
+  try { localStorage.setItem(key, v); } catch { /* private mode */ }
+}
+const opensLabel = (ymd: string) =>
+  new Date(ymd + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 import { openRazorpay } from '../lib/razorpay';
 import { useStoreSettings } from '../lib/useStoreSettings';
 import StoreClosedBanner from '../components/StoreClosedBanner';
@@ -49,6 +64,24 @@ export default function CheckoutPage() {
   );
   const subtotal = lines.reduce((s, l) => s + effectivePrice(l.p) * l.qty, 0)
     + thalis.reduce((s, t) => s + t.total, 0);
+
+  /* ── delivery or takeaway ── */
+  const [fulfillment, setFulfillmentState] = useState<Fulfillment>(
+    () => (readLocal(FULFILL_KEY) === 'pickup' ? 'pickup' : 'delivery'));
+  const [outlets, setOutlets] = useState<PublicOutlet[]>([]);
+  const [pickupId, setPickupId] = useState<number | null>(() => Number(readLocal(PICKUP_KEY)) || null);
+  useEffect(() => {
+    let alive = true;
+    fetchOutlets().then((o) => { if (alive) setOutlets(o.filter((x) => x.pickup)); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const openOutlets = outlets.filter((o) => o.pickupOpen);
+  /* takeaway only when an outlet can take it today; a remembered outlet that
+     closed falls back to the first open one */
+  const pickup = fulfillment === 'pickup' && openOutlets.length > 0;
+  const pickupOutlet = openOutlets.find((o) => o.id === pickupId) || openOutlets[0] || null;
+  const setFulfillment = (f: Fulfillment) => { setFulfillmentState(f); writeLocal(FULFILL_KEY, f); };
+  const choosePickup = (id: number) => { setPickupId(id); writeLocal(PICKUP_KEY, String(id)); };
 
   /* ── addresses ── */
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
@@ -81,7 +114,7 @@ export default function CheckoutPage() {
      so the charge shown is exactly what the server will charge. */
   useEffect(() => {
     const hasDest = selectedAddr || (picked?.lat != null && picked?.lng != null);
-    if (!hasDest || subtotal === 0) { setQuote(null); return; }
+    if (pickup || !hasDest || subtotal === 0) { setQuote(null); return; }
     let alive = true;
     setQuoting(true);
     fetchDeliveryQuote({
@@ -95,7 +128,7 @@ export default function CheckoutPage() {
       .finally(() => { if (alive) setQuoting(false); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `lines` is a fresh array each render; subtotal tracks cart changes
-  }, [selectedAddr, addingNew, picked?.lat, picked?.lng, subtotal]);
+  }, [selectedAddr, addingNew, picked?.lat, picked?.lng, subtotal, pickup]);
 
   async function saveNewAddress() {
     if (!userId) return;
@@ -175,15 +208,16 @@ export default function CheckoutPage() {
   // so the "free delivery" logic matches the backend's per-distance tiers.
   const freeThreshold = quote?.freeAbove ?? settings.freeDeliveryAbove;
   const freeByCart = netSubtotal >= freeThreshold || subtotal === 0;
-  const delivery = freeByCart
+  const delivery = pickup || freeByCart
     ? 0
     : (quote ? quote.deliveryCharge : settings.deliveryCharge);
+  const tipToPay = pickup ? 0 : tip;
   const belowMin = subtotal > 0 && subtotal < settings.minOrderAmount;
   const aboveMax = settings.maxOrderAmount > 0 && subtotal > settings.maxOrderAmount;
   const beforeWallet = Math.max(0, subtotal - discount + delivery);
   const [useWallet, setUseWallet] = useState(false);
-  const walletUsed = useWallet ? Math.min(walletBalance, beforeWallet + tip) : 0;
-  const payable = beforeWallet + tip - walletUsed;
+  const walletUsed = useWallet ? Math.min(walletBalance, beforeWallet + tipToPay) : 0;
+  const payable = beforeWallet + tipToPay - walletUsed;
 
   const [payMethod, setPayMethod] = useState<'cod' | 'online'>('cod');
   const [placing, setPlacing] = useState(false);
@@ -198,24 +232,28 @@ export default function CheckoutPage() {
     if (!userId) { router.push('/login?callbackUrl=/checkout'); return; }
     if (!user?.mobile) { router.push('/complete-profile?callbackUrl=/checkout'); return; }
     if (!lines.length && !thalis.length) return;
-    if (!selectedAddr && !(addingNew && newAddr.fullAddress.trim())) {
+    if (pickup && !pickupOutlet) { setError('Please choose where you will collect from'); return; }
+    if (!pickup && !selectedAddr && !(addingNew && newAddr.fullAddress.trim())) {
       setError('Please select or add a delivery address'); return;
     }
     setPlacing(true); setError('');
 
     const items = lines.map((l) => ({ productId: l.p.id, quantity: l.qty }));
     const thaliItems = thalis.map((t) => ({ templateId: t.templateId, selections: t.portions }));
-    const destination = selectedAddr
-      ? { addressId: selectedAddr }
+    const destination = pickup
+      ? { fulfillment: 'pickup' as const, pickupOutletId: pickupOutlet!.id }
+      : selectedAddr
+      ? { fulfillment: 'delivery' as const, addressId: selectedAddr }
       : {
+          fulfillment: 'delivery' as const,
           deliveryAddress: newAddr.fullAddress.trim(),
           deliveryLat: picked?.lat,
           deliveryLng: picked?.lng,
         };
 
     const extras = {
-      tipAmount: tip || undefined,
-      deliveryInstructions: instructions.trim() || undefined,
+      tipAmount: tipToPay || undefined,
+      deliveryInstructions: pickup ? undefined : (instructions.trim() || undefined),
       cookingNote: cookingNote.trim() || undefined,
     };
 
@@ -269,6 +307,7 @@ export default function CheckoutPage() {
             order = await checkoutOrder({
               userId,
               items,
+              thaliItems,
               ...destination,
               couponCode: coupon?.code,
               useWallet,
@@ -301,6 +340,7 @@ export default function CheckoutPage() {
       const order = await checkoutOrder({
         userId,
         items,
+        thaliItems,
         ...destination,
         couponCode: coupon?.code,
         useWallet,
@@ -346,12 +386,12 @@ export default function CheckoutPage() {
           <div className="checkout-bar">
             <div className="checkout-total">
               <b>{money(payable)}</b>
-              <span>{payMethod === 'cod' ? 'Pay on delivery' : 'Pay online'}</span>
+              <span>{payMethod === 'cod' ? (pickup ? 'Pay at the counter' : 'Pay on delivery') : 'Pay online'}</span>
             </div>
             <button
               className="checkout-btn"
               onClick={placeOrder}
-              disabled={placing || !storeStatus.open || belowMin || aboveMax}
+              disabled={placing || !storeStatus.open || belowMin || aboveMax || (pickup && !pickupOutlet)}
             >
               {!storeStatus.open
                 ? 'Kitchen closed'
@@ -359,13 +399,14 @@ export default function CheckoutPage() {
                 ? `Min order ${money(settings.minOrderAmount)}`
                 : aboveMax
                 ? `Max order ${money(settings.maxOrderAmount)}`
-                : placing ? 'Placing…' : 'Place Order'}
+                : placing ? 'Placing…' : pickup ? 'Place Takeaway Order' : 'Place Order'}
             </button>
           </div>
         ) : undefined
       }
     >
       <div className="bt-page-pad">
+        <style>{CHECKOUT_CSS}</style>
         {!storeStatus.open && <StoreClosedBanner status={storeStatus} />}
         {catLoading ? (
           <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Loading…</div>
@@ -375,7 +416,59 @@ export default function CheckoutPage() {
           </div>
         ) : (
           <>
+            {/* ── DELIVERY OR TAKEAWAY ── */}
+            {outlets.length > 0 && (
+              <div className="ck-mode" role="radiogroup" aria-label="Delivery or takeaway">
+                {([
+                  ['delivery', '🛵', 'Delivery', 'To your door'],
+                  ['pickup', '🛍️', 'Takeaway', openOutlets.length ? 'Collect it, no delivery fee' : 'Opening soon'],
+                ] as const).map(([val, icon, label, sub]) => {
+                  const on = (val === 'pickup') === pickup;
+                  const off = val === 'pickup' && !openOutlets.length;
+                  return (
+                    <button key={val} role="radio" aria-checked={on} disabled={off}
+                      className={`ck-mode-btn ${on ? 'on' : ''}`}
+                      onClick={() => setFulfillment(val)}>
+                      <span className="ck-mode-ic" aria-hidden>{icon}</span>
+                      <span><b>{label}</b><small>{sub}</small></span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {pickup && (
+              <div style={card}>
+                <div style={h}>🛍️ Collect from</div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {outlets.map((o) => {
+                    const on = o.pickupOpen && pickupOutlet?.id === o.id;
+                    return (
+                      <label key={o.id} className={`ck-outlet ${on ? 'on' : ''} ${o.pickupOpen ? '' : 'soon'}`}>
+                        <input type="radio" name="outlet" checked={on} disabled={!o.pickupOpen}
+                          onChange={() => choosePickup(o.id)} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span className="ck-outlet-name">
+                            {o.name}
+                            {!o.pickupOpen && o.opensOn && <em>Opening {opensLabel(o.opensOn)}</em>}
+                          </span>
+                          {o.address && <span className="ck-outlet-sub">{o.address}</span>}
+                          {on && o.note && <span className="ck-outlet-note">{o.note}</span>}
+                        </span>
+                        <a href={outletDirections(o)} target="_blank" rel="noopener noreferrer"
+                          className="ck-dir" onClick={(e) => e.stopPropagation()}>Directions ↗</a>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 10 }}>
+                  We&apos;ll let you know the moment it&apos;s ready. Show your pickup code at the counter.
+                </div>
+              </div>
+            )}
+
             {/* ── DELIVER TO ── */}
+            {!pickup && (
             <div style={card}>
               <div style={h}>📍 Deliver to</div>
               {addresses.map((a) => (
@@ -477,6 +570,7 @@ export default function CheckoutPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* ── ITEMS ── */}
             <div style={card}>
@@ -557,13 +651,15 @@ export default function CheckoutPage() {
             <div style={card}>
               <div style={h}>📝 Anything we should know?</div>
               <div style={{ display: 'grid', gap: 8 }}>
-                <input
-                  style={input}
-                  placeholder="Delivery instructions (e.g. leave at door, call on arrival)"
-                  value={instructions}
-                  maxLength={300}
-                  onChange={(e) => setInstructions(e.target.value)}
-                />
+                {!pickup && (
+                  <input
+                    style={input}
+                    placeholder="Delivery instructions (e.g. leave at door, call on arrival)"
+                    value={instructions}
+                    maxLength={300}
+                    onChange={(e) => setInstructions(e.target.value)}
+                  />
+                )}
                 <input
                   style={input}
                   placeholder="Cooking note (e.g. less spicy, no onion)"
@@ -572,6 +668,7 @@ export default function CheckoutPage() {
                   onChange={(e) => setCookingNote(e.target.value)}
                 />
               </div>
+              {!pickup && (<>
               <div style={{ fontSize: 13, fontWeight: 700, marginTop: 12, marginBottom: 6 }}>
                 🛵 Tip your rider <span style={{ color: C.muted, fontWeight: 500 }}>(100% goes to them)</span>
               </div>
@@ -592,13 +689,17 @@ export default function CheckoutPage() {
                   </button>
                 ))}
               </div>
+              </>)}
             </div>
 
             {/* ── PAYMENT ── */}
             <div style={card}>
               <div style={h}>💳 Payment method</div>
-              {([['cod', 'Cash on Delivery', 'Pay when your food arrives'],
-                 ['online', 'Pay Online', 'UPI / Card / Netbanking via Razorpay']] as const).map(([val, label, sub]) => (
+              {((pickup
+                ? [['cod', 'Pay at the counter', 'Cash or UPI when you collect'],
+                   ['online', 'Pay Online', 'UPI / Card / Netbanking via Razorpay']]
+                : [['cod', 'Cash on Delivery', 'Pay when your food arrives'],
+                   ['online', 'Pay Online', 'UPI / Card / Netbanking via Razorpay']]) as [('cod' | 'online'), string, string][]).map(([val, label, sub]) => (
                 <label
                   key={val}
                   style={{
@@ -635,13 +736,15 @@ export default function CheckoutPage() {
                   ? [[`Coupon ${coupon.code}`, `− ${money(coupon.discount)}`]] : []),
                 ...(flashOff > 0
                   ? [[`Flash deal (${Number(flashDeal?.discountPct || 0)}% OFF)`, `− ${money(flashOff)}`]] : []),
-                [
-                  quoting
-                    ? 'Delivery fee (calculating…)'
-                    : (quote?.distanceKm != null ? `Delivery fee (${quote.distanceKm} km)` : 'Delivery fee'),
-                  delivery === 0 ? 'FREE' : money(delivery),
-                ],
-                ...(tip > 0 ? [['Rider tip', money(tip)]] : []),
+                pickup
+                  ? ['Takeaway · no delivery fee', 'FREE']
+                  : [
+                      quoting
+                        ? 'Delivery fee (calculating…)'
+                        : (quote?.distanceKm != null ? `Delivery fee (${quote.distanceKm} km)` : 'Delivery fee'),
+                      delivery === 0 ? 'FREE' : money(delivery),
+                    ],
+                ...(tipToPay > 0 ? [['Rider tip', money(tipToPay)]] : []),
                 ...(walletUsed > 0 ? [['Wallet used', `− ${money(walletUsed)}`]] : []),
               ].map(([k, v]) => (
                 <div key={k as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', color: C.muted }}>
@@ -656,7 +759,12 @@ export default function CheckoutPage() {
                   Add {money(freeThreshold - (subtotal - discount))} more for FREE delivery
                 </div>
               )}
-              {quote && quote.deliverable && (
+              {pickup && pickupOutlet && (
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>
+                  🛍️ Collect from <b style={{ color: C.ink }}>{pickupOutlet.name}</b>
+                </div>
+              )}
+              {!pickup && quote && quote.deliverable && (
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>
                   📍 {quote.zone}
                   {quote.etaMin && quote.etaMax
@@ -670,7 +778,7 @@ export default function CheckoutPage() {
                   💬 We&apos;ll send order updates on WhatsApp to your mobile number. Reply STOP anytime to turn them off.
                 </div>
               )}
-              {quote && !quote.deliverable && (
+              {!pickup && quote && !quote.deliverable && (
                 <div style={{ fontSize: 12, color: '#C0392B', marginTop: 8, fontWeight: 700 }}>
                   {quote.reason === 'out_of_range'
                     ? '⚠️ This address is outside our delivery area.'
@@ -699,3 +807,27 @@ export default function CheckoutPage() {
     </AppShell>
   );
 }
+
+const CHECKOUT_CSS = `
+.ck-mode { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.ck-mode-btn { display:flex; align-items:center; gap:10px; text-align:left; padding:13px 14px; border-radius:18px;
+  border:1.5px solid rgba(13,59,46,.10); background:#fff; cursor:pointer; font:inherit; color:${C.ink};
+  box-shadow:0 6px 18px rgba(13,59,46,.06); transition:border-color .18s, background .18s, transform .1s; }
+.ck-mode-btn:active { transform:scale(.98); }
+.ck-mode-btn.on { border-color:${C.green}; background:${C.greenSoft}; box-shadow:0 6px 18px rgba(76,175,80,.18); }
+.ck-mode-btn:disabled { opacity:.55; cursor:not-allowed; }
+.ck-mode-ic { font-size:22px; line-height:1; }
+.ck-mode-btn b { display:block; font-size:14.5px; font-weight:850; }
+.ck-mode-btn small { display:block; font-size:11.5px; color:${C.muted}; margin-top:1px; }
+.ck-outlet { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border-radius:13px; cursor:pointer;
+  border:1.5px solid rgba(13,59,46,.08); transition:border-color .18s, background .18s; }
+.ck-outlet input { margin-top:3px; accent-color:${C.green}; }
+.ck-outlet.on { border-color:${C.green}; background:${C.greenSoft}; }
+.ck-outlet.soon { cursor:default; opacity:.7; }
+.ck-outlet-name { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-weight:800; font-size:13.5px; }
+.ck-outlet-name em { font-style:normal; font-size:10.5px; font-weight:800; color:${C.orangeDeep}; background:${C.orangeSoft};
+  border-radius:99px; padding:2px 8px; }
+.ck-outlet-sub { display:block; font-size:12px; color:${C.muted}; margin-top:2px; }
+.ck-outlet-note { display:block; font-size:11.5px; color:${C.greenDeep}; margin-top:4px; font-weight:600; }
+.ck-dir { font-size:12px; font-weight:800; color:${C.greenDeep}; text-decoration:none; white-space:nowrap; padding-top:1px; }
+`;

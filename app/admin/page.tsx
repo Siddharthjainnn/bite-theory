@@ -24,7 +24,9 @@ import PosCounter from '../components/pos/PosCounter';
 import OutletsPanel from '../components/pos/OutletsPanel';
 import PosReportsPanel from '../components/pos/PosReportsPanel';
 import { posApi } from '../lib/pos';
+import { forKitchen, readKitchen } from '../lib/kitchen';
 import {
+  fetchOutlets, type PublicOutlet,
   fetchStoreSettings, InvoiceConfig as InvoiceConfigT,
   fetchCouponAssignments, assignCoupon, deleteCouponAssignment,
 } from '../lib/bite';
@@ -78,6 +80,8 @@ interface Order {
   deliveryPartnerId: number; placedAt: string; updatedAt: string;
   customerName?: string | null; customerMobile?: string | null; deliveryAddress?: string | null; zone?: string | null;
   distanceKm?: number | null; deliveryProvider?: string | null;
+  /* takeaway: collected at an outlet, no rider */
+  fulfillment?: 'delivery' | 'pickup'; pickupOutletId?: number | null; pickupOutletName?: string | null;
 }
 interface OrderHistoryEntry { id: number; orderId: number; status: string; note: string; createdAt: string; }
 interface OrderItem { id: number; orderId: number; productId: number; productName: string; unitPrice: number; quantity: number; lineTotal: number; }
@@ -363,6 +367,9 @@ const api = {
       deliveryAddress: o.deliveryAddress ?? null, zone: o.zone ?? null,
       distanceKm: o.distanceKm != null ? Number(o.distanceKm) : null,
       deliveryProvider: o.deliveryProvider ?? 'in_house',
+      fulfillment: o.fulfillment === 'pickup' ? 'pickup' : 'delivery',
+      pickupOutletId: o.pickupOutletId != null ? Number(o.pickupOutletId) : null,
+      pickupOutletName: o.pickupOutletName ?? null,
     }));
   },
   async getOrderHistory(orderId: number): Promise<OrderHistoryEntry[]> {
@@ -1298,6 +1305,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
   const [sheetFor, setSheetFor] = useState<number | null>(null);
   const [bellToast, setBellToast] = useState('');
   const tickRef = useRef<() => void>(() => {});
+  const kitchenOutletsRef = useRef<PublicOutlet[] | null>(null);
   const flash = useCallback((m: string) => {
     setBellToast(m);
     window.setTimeout(() => setBellToast((cur) => (cur === m ? '' : cur)), 3200);
@@ -1308,8 +1316,12 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
 
     const tick = async () => {
       try {
-        const list = await api.listOrders();
+        const all = await api.listOrders();
         if (!alive) return;
+        /* only this screen's kitchen rings (chosen on Live Orders) */
+        if (!kitchenOutletsRef.current) kitchenOutletsRef.current = await fetchOutlets().catch(() => []);
+        const k = readKitchen();
+        const list = all.filter((o) => forKitchen(o, k, kitchenOutletsRef.current || []));
         setOrders(list);
 
         const fresh = list.filter((o) => o.status === 'order_received');
@@ -1450,7 +1462,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
 
   const newOrders = orders.filter((o) => o.status === 'order_received');
   /* A Porter-booked order at Ready is waiting for its driver, not for a rider. */
-  const stuckReady = orders.filter((o) => o.status === 'food_ready' && !isExternalProvider(o.deliveryProvider));
+  const stuckReady = orders.filter((o) => o.status === 'food_ready' && o.fulfillment !== 'pickup' && !isExternalProvider(o.deliveryProvider));
 
   const acceptOrder = async (o: { id: number; orderNumber: string }) => {
     await api.advanceOrderStatus(o.id, 'preparing_food');
@@ -1512,6 +1524,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
             placedAt: alertOrder.placedAt, customerName: alertOrder.customerName,
             customerMobile: alertOrder.customerMobile, deliveryAddress: alertOrder.deliveryAddress,
             zone: alertOrder.zone, distanceKm: alertOrder.distanceKm,
+            pickupOutletName: alertOrder.fulfillment === 'pickup' ? (alertOrder.pickupOutletName || 'outlet') : null,
           }}
           waiting={Math.max(0, newOrders.length - 1)}
           ringing={sound}

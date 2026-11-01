@@ -13,7 +13,8 @@ import { useSession } from 'next-auth/react';
 import AppShell from '../../components/AppShell';
 import AppHeader from '../../components/AppHeader';
 import {
-  C, money, ApiOrder, fetchOrderTrack, STATUS_META, TRACK_STEPS, ApiOrderStatus,
+  C, money, ApiOrder, fetchOrderTrack, TRACK_STEPS, ApiOrderStatus,
+  PICKUP_STEPS, statusMeta, outletDirections,
   cancelOrder, postReview, fetchStoreSettings, InvoiceConfig,
 } from '../../lib/bite';
 import { customerInvoice, printHtml, InvoiceOrder } from '../../lib/invoice';
@@ -376,8 +377,12 @@ export default function OrderTrackPage() {
     }).catch(() => { /* no-map fallback: timeline still shows */ });
   }, [order]);
 
-  const meta = order ? STATUS_META[order.status as ApiOrderStatus] : null;
-  const currentStep = meta?.step ?? 0;
+  const isPickup = order?.fulfillment === 'pickup';
+  const meta = order ? statusMeta(order.status as ApiOrderStatus, isPickup) : null;
+  const steps = isPickup ? PICKUP_STEPS : TRACK_STEPS;
+  const currentStep = !order ? 0 : isPickup
+    ? Math.max(0, steps.indexOf(order.status as ApiOrderStatus))
+    : meta?.step ?? 0;
   const cancelled = order?.status === 'cancelled';
   const delivered = order?.status === 'delivered';
 
@@ -408,9 +413,14 @@ export default function OrderTrackPage() {
             <div style={{ ...card, background: cancelled ? '#fdecea' : C.dark, color: cancelled ? '#c0392b' : '#fff', border: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: 12, opacity: 0.8 }}>{cancelled ? 'Order cancelled' : delivered ? 'Enjoy your meal!' : 'Estimated arrival'}</div>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    {cancelled ? 'Order cancelled' : delivered ? 'Enjoy your meal!'
+                      : isPickup ? (order.status === 'food_ready' ? `Takeaway · ${order.pickupOutlet?.name || 'outlet'}` : 'Ready for pickup in')
+                      : 'Estimated arrival'}
+                  </div>
                   <div style={{ fontWeight: 800, fontSize: 20 }}>
-                    {cancelled ? '—' : delivered ? 'Delivered ✅'
+                    {cancelled ? '—' : delivered ? (isPickup ? 'Picked up ✅' : 'Delivered ✅')
+                      : isPickup && order.status === 'food_ready' ? 'Ready — come collect it 🛍️'
                       : order.etaMinutes == null ? 'Calculating…'
                       : `${order.etaMinutes} ${order.etaMinutes === 1 ? 'min' : 'mins'}`}
                   </div>
@@ -425,7 +435,7 @@ export default function OrderTrackPage() {
                   customer has to ask. */}
               {!cancelled && !delivered && order.promisedAt && (
                 <div style={{ fontSize: 12, marginTop: 6, opacity: 0.85 }}>
-                  Promised by <b>{new Date(order.promisedAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</b>
+                  {isPickup ? 'Ready by' : 'Promised by'} <b>{new Date(order.promisedAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</b>
                 </div>
               )}
               {!cancelled && !delivered && (order.stopsBefore ?? 0) > 0 && (
@@ -437,7 +447,7 @@ export default function OrderTrackPage() {
               {!cancelled && !delivered && order.runningLate && (
                 <div style={{ fontSize: 12, marginTop: 6, padding: '5px 9px', borderRadius: 8,
                   background: C.orange, color: '#1f1300', fontWeight: 800, display: 'inline-block' }}>
-                  Running a little late — sorry. It&apos;s on its way as fast as we can.
+                  {isPickup ? 'Taking a little longer — sorry. We\u2019re on it.' : <>Running a little late — sorry. It&apos;s on its way as fast as we can.</>}
                 </div>
               )}
               {/* stale GPS: rider assigned but no location ping in >60s */}
@@ -471,8 +481,19 @@ export default function OrderTrackPage() {
               </div>
             )}
 
+            {/* ── TAKEAWAY: the code to show at the counter ── */}
+            {isPickup && !cancelled && !delivered && order.deliveryOtp && (
+              <div style={{ ...card, background: '#fff8e6', border: '1px solid #f3e3b3', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 26 }}>🎟️</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, color: C.muted }}>Pickup code — show this at the counter</div>
+                  <div style={{ fontWeight: 800, fontSize: 26, letterSpacing: 6, color: C.ink }}>{order.deliveryOtp}</div>
+                </div>
+              </div>
+            )}
+
             {/* ── DELIVERY OTP (§4.5): share with the rider at handoff ── */}
-            {!cancelled && !delivered && order.deliveryOtp &&
+            {!isPickup && !cancelled && !delivered && order.deliveryOtp &&
               ['out_for_delivery', 'arriving_soon'].includes(order.status) && (
               <div style={{ ...card, background: '#fff8e6', border: '1px solid #f3e3b3', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 26 }}>🔐</span>
@@ -666,9 +687,9 @@ export default function OrderTrackPage() {
             {/* ── LIVE STATUS HERO — the emotional focal point while waiting ── */}
             {!cancelled && (
               <div className={`ot-hero ${delivered ? 'ot-hero--done' : ''}`}>
-                <span className="ot-hero-emoji">{STATUS_META[order.status]?.emoji || '🍳'}</span>
+                <span className="ot-hero-emoji">{meta?.emoji || '🍳'}</span>
                 <div className="ot-hero-txt">
-                  <b>{STATUS_META[order.status]?.label || 'On it!'}</b>
+                  <b>{meta?.label || 'On it!'}</b>
                   <span>
                     {delivered
                       ? 'Enjoy your meal! 💚'
@@ -685,7 +706,7 @@ export default function OrderTrackPage() {
             {!cancelled && (
               <div style={card}>
                 <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>Order status</div>
-                {TRACK_STEPS.map((s, i) => {
+                {steps.map((s, i) => {
                   const done = i <= currentStep;
                   const active = i === currentStep;
                   return (
@@ -702,13 +723,13 @@ export default function OrderTrackPage() {
                           }}>
                           {done ? '✓' : ''}
                         </div>
-                        {i < TRACK_STEPS.length - 1 && (
+                        {i < steps.length - 1 && (
                           <div style={{ width: 2, height: 22, background: i < currentStep ? C.green : C.line }} />
                         )}
                       </div>
                       <div style={{ paddingTop: 3, paddingBottom: 8 }}>
                         <div style={{ fontSize: 13, fontWeight: active ? 800 : 600, color: done ? C.ink : C.muted }}>
-                          {STATUS_META[s].emoji} {STATUS_META[s].label}
+                          {statusMeta(s, isPickup)?.emoji} {statusMeta(s, isPickup)?.label}
                         </div>
                       </div>
                     </div>
@@ -717,8 +738,30 @@ export default function OrderTrackPage() {
               </div>
             )}
 
+            {/* ── TAKEAWAY: where to collect ── */}
+            {isPickup && order.pickupOutlet && (
+              <div style={card}>
+                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>🛍️ Collect from</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{order.pickupOutlet.name}</div>
+                {order.pickupOutlet.address && <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>{order.pickupOutlet.address}</div>}
+                {order.pickupOutlet.note && <div style={{ fontSize: 12.5, color: C.greenDeep, marginTop: 6, fontWeight: 600 }}>{order.pickupOutlet.note}</div>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <a href={outletDirections(order.pickupOutlet)} target="_blank" rel="noopener noreferrer"
+                    style={{ background: C.dark, color: '#fff', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontWeight: 800, textDecoration: 'none' }}>
+                    Directions ↗
+                  </a>
+                  {order.pickupOutlet.phone && (
+                    <a href={`tel:${order.pickupOutlet.phone}`}
+                      style={{ background: C.green, color: '#fff', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontWeight: 800, textDecoration: 'none' }}>
+                      📞 Call outlet
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* ── DELIVERY ADDRESS ── */}
-            {order.deliveryAddress && (
+            {!isPickup && order.deliveryAddress && (
               <div style={card}>
                 <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>📍 Delivering to</div>
                 <div style={{ fontSize: 13, color: C.muted }}>{order.deliveryAddress}</div>

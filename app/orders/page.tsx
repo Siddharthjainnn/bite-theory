@@ -12,7 +12,7 @@ import AppShell from '../components/AppShell';
 import AppHeader from '../components/AppHeader';
 import { useCart } from '../providers/CartProvider';
 import {
-  C, money, ApiOrder, ApiOrderStatus, STATUS_META, fetchMyOrders, fetchOrderTrack,
+  C, money, ApiOrder, ApiOrderStatus, STATUS_META, statusMeta, fetchMyOrders, fetchOrderTrack,
 } from '../lib/bite';
 
 function timeAgo(iso: string): string {
@@ -78,7 +78,7 @@ export default function OrdersPage() {
           </div>
         )}
         {orders?.map((o) => {
-          const meta = STATUS_META[o.status as ApiOrderStatus] || STATUS_META.order_received;
+          const meta = statusMeta(o.status as ApiOrderStatus, o.fulfillment === 'pickup') || STATUS_META.order_received;
           const isLive = live(o.status as ApiOrderStatus);
           return (
             <div

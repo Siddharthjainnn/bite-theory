@@ -9,6 +9,14 @@
  *   Out for delivery  "Delivered" →
  *   Delivered         today's finished orders
  *
+ * TAKEAWAY orders (customer collects at an outlet) skip the rider:
+ *   Preparing → "Ready for pickup" → "Picked up". They wait in the second tab
+ *   with an orange TAKEAWAY badge and the customer's pickup code.
+ *
+ * Which kitchen: the chips at the top pick this screen's outlet (remembered on
+ * this device). Bhawarkua sees its takeaways; the cloud kitchen sees every
+ * delivery plus its own takeaways.
+ *
  * (Earlier notes kept below.)
  *
  * LiveOrderBoard — Swiggy-partner-style order routing for the kitchen.
@@ -36,7 +44,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { C, money, fetchStoreSettings } from '../lib/bite';
+import { C, money, fetchStoreSettings, fetchOutlets, type PublicOutlet } from '../lib/bite';
+import { forKitchen, isPickupOrder, readKitchen, saveKitchen, type KitchenFilter } from '../lib/kitchen';
 import { chefTicket, customerInvoice, printHtml } from '../lib/invoice';
 import DispatchSheet from './DispatchSheet';
 import {
@@ -72,6 +81,11 @@ type Order = {
   tripId?: number | string | null;
   promisedAt?: string | null;
   readyAt?: string | null;
+  /* takeaway */
+  fulfillment?: 'delivery' | 'pickup' | null;
+  pickupOutletId?: number | null;
+  pickupOutletName?: string | null;
+  deliveryOtp?: string | null;
 };
 type Rider = { id: number; name: string; isAvailable?: boolean };
 
@@ -99,8 +113,15 @@ const NEXT_PORTER: Record<string, { chain: string[]; label: string }> = {
   assigned_to_delivery: { chain: ['out_for_delivery'],                        label: 'Out for delivery' },
 };
 
-const nextStep = (o: { status: string; deliveryProvider?: string | null }) =>
-  (isExternalProvider(o.deliveryProvider) ? NEXT_PORTER : NEXT)[o.status];
+/* Takeaway: the customer collects — ready, then picked up. No rider. */
+const NEXT_PICKUP: Record<string, { chain: string[]; label: string }> = {
+  ...NEXT,
+  preparing_food: { chain: ['food_ready'], label: 'Ready for pickup' },
+  food_ready:     { chain: ['delivered'],  label: 'Picked up' },
+};
+
+const nextStep = (o: { status: string; deliveryProvider?: string | null; fulfillment?: string | null }) =>
+  (o.fulfillment === 'pickup' ? NEXT_PICKUP : isExternalProvider(o.deliveryProvider) ? NEXT_PORTER : NEXT)[o.status];
 
 /* Rider availability order for every rider picker: free, returning, waiting, out, offline. */
 const STATE_ORDER: Record<string, number> = { at_kitchen: 0, returning: 1, assigned: 2, on_trip: 3, offline: 9 };
@@ -119,6 +140,7 @@ const TABS = [
 ];
 
 
+const PICKUP_LABEL: Record<string, string> = { food_ready: 'Ready for pickup', delivered: 'Picked up' };
 const STATUS_LABEL: Record<string, string> = {
   order_received: 'New', order_confirmed: 'Accepted', preparing_food: 'Cooking',
   food_ready: 'Ready', assigned_to_delivery: 'Rider assigned',
@@ -181,6 +203,18 @@ export default function LiveOrderBoard({
   const [preset, setPreset] = useState('today');
   const [from, setFrom] = useState(ymd(new Date()));
   const [to, setTo] = useState(ymd(new Date()));
+  /* which kitchen this screen is (remembered per device) */
+  const [kitchen, setKitchen] = useState<KitchenFilter>(() => readKitchen());
+  const [outlets, setOutlets] = useState<PublicOutlet[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchOutlets().then((o) => { if (alive) setOutlets(o); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const pickKitchen = (k: KitchenFilter) => { setKitchen(k); saveKitchen(k); };
+  /* an outlet that was removed falls back to "all" */
+  const kitchenOn: KitchenFilter = kitchen !== 'all' && outlets.length && !outlets.some((x) => x.id === kitchen) ? 'all' : kitchen;
+  const mine = useMemo(() => orders.filter((o) => forKitchen(o, kitchenOn, outlets)), [orders, kitchenOn, outlets]);
 
   const load = useCallback(async () => {
     try {
@@ -230,7 +264,7 @@ export default function LiveOrderBoard({
 
   /* Delivered tab: the chosen dates (today by default). Live tabs: every
      unfinished order, whatever day it was placed, so nothing is ever hidden. */
-  const pool = useMemo(() => orders.filter(inRange), [orders, inRange]);
+  const pool = useMemo(() => mine.filter(inRange), [mine, inRange]);
   const inTab = useCallback(
     (t: (typeof TABS)[number], o: Order) => t.statuses.includes(o.status) && (t.key !== 'past' || inRange(o)),
     [inRange],
@@ -238,9 +272,9 @@ export default function LiveOrderBoard({
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const t of TABS) c[t.key] = orders.filter((o) => inTab(t, o)).length;
+    for (const t of TABS) c[t.key] = mine.filter((o) => inTab(t, o)).length;
     return c;
-  }, [orders, inTab]);
+  }, [mine, inTab]);
 
   const applyPreset = (key: string) => {
     const p = PRESETS.find((x) => x.key === key);
@@ -249,8 +283,8 @@ export default function LiveOrderBoard({
   };
 
   const newCount = useMemo(
-    () => orders.filter((o) => o.status === 'order_received' || o.status === 'order_confirmed').length,
-    [orders],
+    () => mine.filter((o) => o.status === 'order_received' || o.status === 'order_confirmed').length,
+    [mine],
   );
 
   const revenue = useMemo(
@@ -261,7 +295,7 @@ export default function LiveOrderBoard({
 
   const visible = useMemo(() => {
     const t = TABS.find((x) => x.key === tab)!;
-    return orders
+    return mine
       .filter((o) => inTab(t, o))
       .sort((a, b) => {
         const at = new Date(a.placedAt || a.placed_at || 0).getTime();
@@ -270,7 +304,7 @@ export default function LiveOrderBoard({
         // cold. Past: newest first, because that is a lookup list.
         return tab === 'past' ? bt - at : at - bt;
       });
-  }, [orders, tab, inTab]);
+  }, [mine, tab, inTab]);
 
   const advance = async (o: Order) => {
     const step = nextStep(o);
@@ -304,7 +338,7 @@ export default function LiveOrderBoard({
         }
       }
       const last = step.chain[step.chain.length - 1];
-      showToast(`${o.orderNumber || o.order_number || `#${o.id}`} → ${STATUS_LABEL[last]}`);
+      showToast(`${o.orderNumber || o.order_number || `#${o.id}`} → ${(isPickupOrder(o) && PICKUP_LABEL[last]) || STATUS_LABEL[last]}`);
       await load();
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Could not update');
@@ -377,6 +411,7 @@ export default function LiveOrderBoard({
           <h2 style={{ fontSize: 19, fontWeight: 900, color: C.ink, margin: 0 }}>Live Orders</h2>
           <p style={{ fontSize: 12.5, color: C.muted, margin: '3px 0 0' }}>
             Accept → Food ready → Assign rider → Out for delivery → Delivered
+            {outlets.some((x) => x.pickup) && <><br />Takeaway: Accept → Ready for pickup → Picked up</>}
           </p>
         </div>
         <button onClick={load} style={{
@@ -384,6 +419,22 @@ export default function LiveOrderBoard({
           padding: '8px 14px', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', color: C.ink,
         }}>↻ Refresh</button>
       </div>
+
+      {outlets.length > 1 && (
+        <div role="group" aria-label="This screen's kitchen" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: C.muted, marginRight: 2 }}>This screen:</span>
+          {([['all', 'All kitchens', ''] as const, ...outlets.map((x) => [x.id, x.name, x.cooksDelivery ? 'deliveries + takeaway' : 'takeaway'] as const)]).map(([k, label, sub]) => {
+            const on = kitchenOn === k;
+            return (
+              <button key={String(k)} onClick={() => pickKitchen(k)} aria-pressed={on} title={sub || undefined} style={{
+                padding: '6px 12px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 800,
+                border: on ? `1.5px solid ${C.green}` : `1px solid ${C.line}`,
+                background: on ? C.greenSoft : '#fff', color: on ? C.greenDeep : C.ink,
+              }}>{label}</button>
+            );
+          })}
+        </div>
+      )}
 
       {err && (
         <div style={{ background: '#fdecea', color: '#c0392b', padding: '11px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
@@ -465,10 +516,11 @@ export default function LiveOrderBoard({
         const when = o.placedAt || o.placed_at;
         const addr = o.deliveryAddress || o.delivery_address;
         const busy = busyId === o.id;
-        const needsRider = !porter && step?.chain.includes('assigned_to_delivery');
-        const canBookPorter = !porter && o.status === 'food_ready';
+        const pickup = isPickupOrder(o);
+        const needsRider = !pickup && !porter && step?.chain.includes('assigned_to_delivery');
+        const canBookPorter = !pickup && !porter && o.status === 'food_ready';
         const km = Number(o.distanceKm ?? o.distance_km ?? 0);
-        const area = localityOf(addr) || o.zone || null;
+        const area = pickup ? null : localityOf(addr) || o.zone || null;
         const reservedId = Number(o.deliveryPartnerId ?? o.delivery_partner_id) || null;
         const reserved = reservedId ? (stateOf(reservedId)?.name || riders.find((r) => r.id === reservedId)?.name || `Rider #${reservedId}`) : null;
         const onTrip = !!o.tripId;
@@ -479,7 +531,7 @@ export default function LiveOrderBoard({
           <div key={o.id} style={{
             background: '#fff',
             border: `1px solid ${o.status === 'order_received' ? '#f0c9c9' : C.line}`,
-            borderLeft: `4px solid ${o.status === 'order_received' ? '#c0392b' : C.green}`,
+            borderLeft: `4px solid ${o.status === 'order_received' ? '#c0392b' : pickup ? C.orange : C.green}`,
             borderRadius: 14, padding: 14, marginBottom: 10,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -489,7 +541,13 @@ export default function LiveOrderBoard({
                   <span style={{
                     fontSize: 10.5, fontWeight: 900, padding: '3px 9px', borderRadius: 99,
                     background: C.greenSoft, color: C.greenDeep, textTransform: 'uppercase',
-                  }}>{STATUS_LABEL[o.status] || o.status}</span>
+                  }}>{(pickup && PICKUP_LABEL[o.status]) || STATUS_LABEL[o.status] || o.status}</span>
+                  {pickup && (
+                    <span style={{
+                      fontSize: 10.5, fontWeight: 900, padding: '3px 9px', borderRadius: 99,
+                      background: C.orangeSoft, color: C.orangeDeep, border: '1px solid #f6d8a6',
+                    }}>🛍️ TAKEAWAY · {o.pickupOutletName || 'outlet'}</span>
+                  )}
                   <span style={{ fontSize: 11.5, color: C.muted }}>{since(when)}</span>
                   {promisedAt && !['delivered', 'cancelled'].includes(o.status) && (
                     <span title="Promised to the customer at checkout" style={{
@@ -520,7 +578,13 @@ export default function LiveOrderBoard({
                       padding: '3px 9px', borderRadius: 99,
                     }}>📍 {area}</span>
                   )}
-                  {km > 0 && (
+                  {pickup && o.deliveryOtp && !['delivered', 'cancelled'].includes(o.status) && (
+                    <span title="The customer shows this code when collecting" style={{
+                      fontSize: 11.5, fontWeight: 900, background: '#fff8e6', color: C.ink,
+                      border: '1px solid #f3e3b3', padding: '3px 9px', borderRadius: 99, letterSpacing: 1,
+                    }}>🎟️ Code {o.deliveryOtp}</span>
+                  )}
+                  {!pickup && km > 0 && (
                     <span style={{
                       fontSize: 11, fontWeight: 900,
                       background: km > 6 ? '#fff4e0' : '#eef2ef',
@@ -542,7 +606,7 @@ export default function LiveOrderBoard({
                   )}
                 </div>
 
-                {addr && (
+                {addr && !pickup && (
                   <div style={{ fontSize: 11.5, color: C.muted, marginTop: 5, lineHeight: 1.45 }}>
                     {addr}
                   </div>
@@ -551,7 +615,15 @@ export default function LiveOrderBoard({
                   {money(Number(o.total || 0))}
                 </div>
 
-                {reserved && !porter && (
+                {pickup && o.status === 'food_ready' && (
+                  <div style={{
+                    marginTop: 8, display: 'inline-flex', gap: 6, alignItems: 'center',
+                    background: C.orangeSoft, color: C.orangeDeep, borderRadius: 10, padding: '6px 10px',
+                    fontSize: 12, fontWeight: 800,
+                  }}>Waiting for the customer to collect · match the code</div>
+                )}
+
+                {reserved && !porter && !pickup && (
                   <div style={{
                     marginTop: 8, display: 'inline-flex', gap: 6, alignItems: 'center',
                     background: '#e3eefc', color: '#1d4f91', borderRadius: 10, padding: '6px 10px',

@@ -205,6 +205,20 @@ export const TRACK_STEPS: ApiOrderStatus[] = [
   'order_received', 'order_confirmed', 'preparing_food', 'food_ready',
   'assigned_to_delivery', 'out_for_delivery', 'arriving_soon', 'delivered',
 ];
+/** Takeaway: no rider, so ready → picked up. */
+export const PICKUP_STEPS: ApiOrderStatus[] = [
+  'order_received', 'order_confirmed', 'preparing_food', 'food_ready', 'delivered',
+];
+export const PICKUP_META: Partial<Record<ApiOrderStatus, { label: string; emoji: string }>> = {
+  food_ready: { label: 'Ready for pickup', emoji: '🛍️' },
+  delivered:  { label: 'Picked up', emoji: '🎉' },
+};
+/** Status label/emoji, takeaway-aware. */
+export function statusMeta(status: ApiOrderStatus, pickup?: boolean) {
+  const base = STATUS_META[status];
+  const o = pickup ? PICKUP_META[status] : undefined;
+  return base ? { ...base, ...(o || {}) } : null;
+}
 
 export interface ApiOrderItem {
   id: number; productId: number; productName: string;
@@ -242,6 +256,13 @@ export interface ApiOrder {
   stopsBefore?: number;
   /** Live ETA is past the promise. */
   runningLate?: boolean;
+  /** takeaway: the customer collects from pickupOutlet (no rider) */
+  fulfillment?: 'delivery' | 'pickup';
+  pickupOutletId?: number | null;
+  pickupOutlet?: {
+    id: number; name: string; address: string | null; phone: string | null;
+    mapsUrl: string | null; note: string | null; lat: number | null; lng: number | null;
+  } | null;
   prepVideoUrl?: string | null;
   cookingNote?: string | null;
   deliveryInstructions?: string | null;
@@ -364,7 +385,37 @@ export interface CheckoutPayload {
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   razorpaySignature?: string;
+  /** takeaway: collect at an outlet instead of delivery */
+  fulfillment?: Fulfillment;
+  pickupOutletId?: number;
 }
+export type Fulfillment = 'delivery' | 'pickup';
+
+/** An outlet as the customer sees it (GET /storefront/outlets). */
+export interface PublicOutlet {
+  id: number; name: string; address: string | null; phone: string | null;
+  mapsUrl: string | null; note: string | null; lat: number | null; lng: number | null;
+  /** listed as a takeaway option */
+  pickup: boolean;
+  /** cooks the delivery orders */
+  cooksDelivery: boolean;
+  /** takeaway start date (YYYY-MM-DD) — shown as "Opening …" until then */
+  opensOn: string | null;
+  /** takeaway can be ordered today */
+  pickupOpen: boolean;
+}
+export async function fetchOutlets(): Promise<PublicOutlet[]> {
+  const res = await fetch(`${API_BASE}/storefront/outlets`, { cache: 'no-store' });
+  if (!res.ok) return [];
+  return res.json();
+}
+/** Directions link: the outlet's own Maps link, else its pin, else its address. */
+export function outletDirections(o: Pick<PublicOutlet, 'mapsUrl' | 'lat' | 'lng' | 'address' | 'name'>): string {
+  if (o.mapsUrl) return o.mapsUrl;
+  if (o.lat != null && o.lng != null) return `https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.name}, ${o.address || 'Indore'}`)}`;
+}
+
 export async function checkoutOrder(payload: CheckoutPayload): Promise<ApiOrder & { pointsEarned?: number }> {
   const res = await fetch(`${API_BASE}/orders/checkout`, {
     method: 'POST', headers: await authHeaders(), body: JSON.stringify(payload),
@@ -398,6 +449,7 @@ export async function createPaymentOrder(payload: {
   // webhook can finish the order even if this tab dies after paying
   deliveryAddress?: string; deliveryLat?: number; deliveryLng?: number;
   tipAmount?: number; deliveryInstructions?: string; cookingNote?: string;
+  fulfillment?: Fulfillment; pickupOutletId?: number;
 }): Promise<PaymentOrder> {
   const res = await fetch(`${API_BASE}/orders/create-payment`, {
     method: 'POST', headers: await authHeaders(), body: JSON.stringify(payload),

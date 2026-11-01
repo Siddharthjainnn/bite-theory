@@ -21,6 +21,9 @@ export interface PosOutlet {
   billFooter?: string | null; dayStartsAt: number;
   printMode: 'both' | 'bill' | 'kot'; kotCopies: number;
   isActive: boolean; sortOrder: number;
+  /* online takeaway */
+  pickupEnabled?: boolean; pickupOpensOn?: string | null; cooksDelivery?: boolean;
+  latitude?: number | null; longitude?: number | null; mapsUrl?: string | null; pickupNote?: string | null;
 }
 
 export interface PosBillItem {

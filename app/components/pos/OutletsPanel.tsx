@@ -19,6 +19,7 @@ const hourLabel = (h: number) => (h === 0 ? '12 midnight' : h === 12 ? '12 noon'
 const BLANK: Partial<PosOutlet> = {
   name: '', code: '', address: '', phone: '', gstin: '', fssai: '', billFooter: '',
   dayStartsAt: 4, printMode: 'both', kotCopies: 1, isActive: true, sortOrder: 0,
+  pickupEnabled: false, pickupOpensOn: '', cooksDelivery: false, latitude: null, longitude: null, mapsUrl: '', pickupNote: '',
 };
 
 export default function OutletsPanel({ api, showToast }: { api: PosApi; showToast: (m: string) => void }) {
@@ -57,7 +58,7 @@ export default function OutletsPanel({ api, showToast }: { api: PosApi; showToas
         {(list || []).map((o) => (
           <button key={o.id} className={`olt-out ${sel === o.id ? 'on' : ''}`} onClick={() => setSel(o.id)}>
             <b>{o.name}</b>
-            <small>{o.code}{o.isActive ? '' : ' · off'}</small>
+            <small>{o.code}{o.isActive ? '' : ' · off'}{o.pickupEnabled ? ' · takeaway' : ''}{o.cooksDelivery ? ' · delivery kitchen' : ''}</small>
           </button>
         ))}
         {sel === 'new' && <button className="olt-out on"><b>New outlet</b><small>—</small></button>}
@@ -100,7 +101,12 @@ function OutletForm({ api, outlet, showToast, onSaved }: {
         address: f.address || '', phone: f.phone || '', gstin: (f.gstin || '').toUpperCase(), fssai: f.fssai || '',
         billFooter: f.billFooter || '', dayStartsAt: Number(f.dayStartsAt), printMode: f.printMode,
         kotCopies: Number(f.kotCopies), isActive: !!f.isActive, sortOrder: Number(f.sortOrder) || 0,
+        pickupEnabled: !!f.pickupEnabled, pickupOpensOn: f.pickupOpensOn || '', cooksDelivery: !!f.cooksDelivery,
+        latitude: f.latitude === null || f.latitude === undefined || String(f.latitude) === '' ? null : Number(f.latitude),
+        longitude: f.longitude === null || f.longitude === undefined || String(f.longitude) === '' ? null : Number(f.longitude),
+        mapsUrl: f.mapsUrl || '', pickupNote: f.pickupNote || '',
       };
+      if ((body.latitude == null) !== (body.longitude == null)) { showToast('Fill both latitude and longitude, or neither'); setBusy(false); return; }
       const o = await api.saveOutlet(outlet?.id ?? null, body);
       showToast(outlet ? 'Outlet saved' : `${o.name} added`);
       onSaved(o);
@@ -141,6 +147,29 @@ function OutletForm({ api, outlet, showToast, onSaved }: {
         <label className="olt-check">
           <input type="checkbox" checked={!!f.isActive} onChange={(e) => set('isActive', e.target.checked)} />
           <span>Billing is on at this outlet</span>
+        </label>
+      </div>
+
+      <h3 className="olt-sub">Online takeaway</h3>
+      <div className="olt-form">
+        <label className="olt-check wide">
+          <input type="checkbox" checked={!!f.pickupEnabled} onChange={(e) => set('pickupEnabled', e.target.checked)} />
+          <span>Customers can order online and collect here</span>
+        </label>
+        <L label="Takeaway starts on" hint="Before this date the outlet shows as “Opening …” at checkout. Leave empty to take orders now.">
+          <input type="date" value={f.pickupOpensOn || ''} onChange={(e) => set('pickupOpensOn', e.target.value)} />
+        </L>
+        <L label="Note for customers" hint="Shown at checkout and on their order page.">
+          <input value={f.pickupNote || ''} onChange={(e) => set('pickupNote', e.target.value)} placeholder="Collect at the counter. Show your order code." maxLength={200} />
+        </L>
+        <L label="Google Maps link" hint="Share → Copy link in Google Maps. Used for “Directions”." wide>
+          <input value={f.mapsUrl || ''} onChange={(e) => set('mapsUrl', e.target.value.trim())} placeholder="https://maps.app.goo.gl/…" maxLength={500} />
+        </L>
+        <L label="Latitude (optional)"><input inputMode="decimal" value={f.latitude ?? ''} onChange={(e) => set('latitude', (e.target.value === '' ? null : e.target.value) as never)} placeholder="22.6926" /></L>
+        <L label="Longitude (optional)"><input inputMode="decimal" value={f.longitude ?? ''} onChange={(e) => set('longitude', (e.target.value === '' ? null : e.target.value) as never)} placeholder="75.8673" /></L>
+        <label className="olt-check wide">
+          <input type="checkbox" checked={!!f.cooksDelivery} onChange={(e) => set('cooksDelivery', e.target.checked)} />
+          <span>Delivery orders are cooked here <small style={{ color: C.muted, fontWeight: 500 }}>(this kitchen&apos;s Live Orders screen shows deliveries too)</small></span>
         </label>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
@@ -327,6 +356,8 @@ const CSS = `
 .olt-field { display:flex; flex-direction:column; gap:5px; font-size:12.5px; font-weight:700; color:${C.dark}; }
 .olt-field.wide { grid-column:1/-1; }
 .olt-field small { font-weight:500; color:${C.muted}; font-size:11.5px; }
+.olt-sub { margin:18px 0 10px; font-size:14px; color:${C.dark}; padding-top:14px; border-top:1px dashed ${C.line}; }
+.olt-check.wide { grid-column:1/-1; }
 .olt-check { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:${C.dark}; cursor:pointer; }
 .olt-check.sm { font-size:12.5px; font-weight:600; color:${C.muted}; }
 .olt-check input { width:16px; height:16px; accent-color:${C.green}; }

@@ -26,6 +26,8 @@ export type PopupOrder = {
   deliveryAddress?: string | null;
   zone?: string | null;
   distanceKm?: number | null;
+  /** takeaway: the outlet the customer collects from (null = delivery) */
+  pickupOutletName?: string | null;
 };
 
 type Full = {
@@ -81,7 +83,8 @@ export function NewOrderPopup({
   const km = Number(order.distanceKm || 0);
   /* Same locality lookup as the board; the pincode zone is a fallback, and
      "Unknown zone" tells the kitchen nothing, so it is not shown. */
-  const area = localityOf(order.deliveryAddress)
+  const pickupAt = order.pickupOutletName || null;
+  const area = pickupAt ? null : localityOf(order.deliveryAddress)
     || (order.zone && !/unknown/i.test(order.zone) ? order.zone : null);
 
   if (mini) {
@@ -89,7 +92,7 @@ export function NewOrderPopup({
       <button className="nop-pill" onClick={() => setMini(false)} aria-label={`Show new order ${order.orderNumber}`}>
         <style>{CSS}</style>
         <span className="nop-dot" data-ring={ringing ? '1' : '0'} />
-        New order {order.orderNumber} · {money(order.total)}{waiting > 0 ? ` · +${waiting}` : ''}
+        New {pickupAt ? 'takeaway' : 'order'} {order.orderNumber} · {money(order.total)}{waiting > 0 ? ` · +${waiting}` : ''}
       </button>
     );
   }
@@ -100,7 +103,7 @@ export function NewOrderPopup({
       <div className="nop-head">
         <span className="nop-dot" data-ring={ringing ? '1' : '0'} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="nop-eyebrow">New order{waiting > 0 ? ` · ${waiting} more waiting` : ''}</div>
+          <div className="nop-eyebrow">New {pickupAt ? 'takeaway' : 'order'}{waiting > 0 ? ` · ${waiting} more waiting` : ''}</div>
           <div className="nop-title">{order.orderNumber} <span className="nop-ago">{ago(order.placedAt)}</span></div>
         </div>
         <div className="nop-total">{money(order.total)}</div>
@@ -111,9 +114,10 @@ export function NewOrderPopup({
         <div className="nop-chips">
           {full && (
             <span className="nop-chip" data-tone={cod ? 'red' : 'green'}>
-              {cod ? '💵 Cash on delivery' : '✓ Paid online'}
+              {cod ? (pickupAt ? '💵 Pay at counter' : '💵 Cash on delivery') : '✓ Paid online'}
             </span>
           )}
+          {pickupAt && <span className="nop-chip" data-tone="amber">🛍️ Takeaway · {pickupAt}</span>}
           {area && <span className="nop-chip">📍 {area}</span>}
           {km > 0 && <span className="nop-chip" data-tone={km > 6 ? 'amber' : undefined}>🛵 {km.toFixed(1)} km</span>}
         </div>
@@ -124,7 +128,7 @@ export function NewOrderPopup({
             {order.customerMobile && <> · <a href={`tel:${order.customerMobile}`}>{order.customerMobile}</a></>}
           </div>
         )}
-        {order.deliveryAddress && <div className="nop-addr">{order.deliveryAddress}</div>}
+        {order.deliveryAddress && !pickupAt && <div className="nop-addr">{order.deliveryAddress}</div>}
 
         <div className="nop-items">
           {!full && <div className="nop-skel" />}

@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
-  C, ApiOrder, ApiOrderStatus, STATUS_META, TRACK_STEPS, fetchMyOrders, money,
+  C, ApiOrder, ApiOrderStatus, statusMeta, PICKUP_STEPS, TRACK_STEPS, fetchMyOrders, money,
 } from '../lib/bite';
 
 const LIVE: ApiOrderStatus[] = [
@@ -56,9 +56,11 @@ export default function LiveOrderCard() {
 
   if (!order) return null;
 
-  const meta = STATUS_META[order.status as ApiOrderStatus];
-  const step = meta?.step ?? 0;
-  const pct = Math.round((step / (TRACK_STEPS.length - 1)) * 100);
+  const pickup = order.fulfillment === 'pickup';
+  const meta = statusMeta(order.status as ApiOrderStatus, pickup);
+  const steps = pickup ? PICKUP_STEPS : TRACK_STEPS;
+  const step = pickup ? Math.max(0, steps.indexOf(order.status as ApiOrderStatus)) : meta?.step ?? 0;
+  const pct = Math.round((step / (steps.length - 1)) * 100);
   const arriving = order.status === 'arriving_soon' || order.status === 'out_for_delivery';
 
   return (
@@ -73,7 +75,8 @@ export default function LiveOrderCard() {
             <b>{meta?.label || 'On the way'}</b>
             <span>
               {order.orderNumber}
-              {order.etaMinutes != null && !['food_ready', 'preparing_food'].includes(order.status)
+              {pickup && order.pickupOutlet ? ` · Takeaway, ${order.pickupOutlet.name}` : ''}
+              {!pickup && order.etaMinutes != null && !['food_ready', 'preparing_food'].includes(order.status)
                 ? ` · ${order.etaMinutes} min away`
                 : ''}
             </span>
