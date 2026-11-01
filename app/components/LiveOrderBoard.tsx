@@ -1,6 +1,16 @@
 'use client';
 
 /**
+ * LiveOrderBoard — the kitchen's order screen, Zomato-partner style.
+ *
+ * FOUR STEPS, ONE BUTTON EACH
+ *   Preparing         new orders pop up; Accept → cooking; "Food ready" →
+ *   Assign rider      pick a delivery partner (or book Porter) → "Assign & send out" →
+ *   Out for delivery  "Delivered" →
+ *   Delivered         today's finished orders
+ *
+ * (Earlier notes kept below.)
+ *
  * LiveOrderBoard — Swiggy-partner-style order routing for the kitchen.
  *
  * WHY THIS EXISTS
@@ -30,7 +40,7 @@ import { C, money, fetchStoreSettings } from '../lib/bite';
 import { chefTicket, customerInvoice, printHtml } from '../lib/invoice';
 import DispatchSheet from './DispatchSheet';
 import {
-  isExternalProvider, localityOf, ORDERS_CHANGED_EVENT, RIDER_STATE_TONE, TripRefused,
+  isExternalProvider, localityOf, ORDERS_CHANGED_EVENT,
   type DispatchApi, type RiderStatus, type Suggestion, type TripsApi,
 } from '../lib/dispatch';
 
@@ -71,8 +81,8 @@ const NEXT: Record<string, { chain: string[]; label: string }> = {
   order_received:       { chain: ['preparing_food'],                          label: 'Accept' },
   order_confirmed:      { chain: ['preparing_food'],                          label: 'Accept' },
   preparing_food:       { chain: ['food_ready'],                              label: 'Food ready' },
-  food_ready:           { chain: ['assigned_to_delivery', 'out_for_delivery'], label: 'Picked up' },
-  assigned_to_delivery: { chain: ['out_for_delivery'],                        label: 'Picked up' },
+  food_ready:           { chain: ['assigned_to_delivery', 'out_for_delivery'], label: 'Assign & send out' },
+  assigned_to_delivery: { chain: ['out_for_delivery'],                        label: 'Out for delivery' },
   out_for_delivery:     { chain: ['delivered'],                               label: 'Delivered' },
   arriving_soon:        { chain: ['delivered'],                               label: 'Delivered' },
 };
@@ -92,11 +102,6 @@ const NEXT_PORTER: Record<string, { chain: string[]; label: string }> = {
 const nextStep = (o: { status: string; deliveryProvider?: string | null }) =>
   (isExternalProvider(o.deliveryProvider) ? NEXT_PORTER : NEXT)[o.status];
 
-/* Where "Book Porter" is offered. From Preparing, not just Ready: a Porter
-   driver takes 8-15 min to reach the kitchen, so booking at Ready means the
-   food waits for the driver instead of the driver waiting for the food. */
-const PORTER_BOOKABLE = new Set(['order_confirmed', 'preparing_food', 'food_ready', 'assigned_to_delivery']);
-
 /* Rider availability order for every rider picker: free, returning, waiting, out, offline. */
 const STATE_ORDER: Record<string, number> = { at_kitchen: 0, returning: 1, assigned: 2, on_trip: 3, offline: 9 };
 
@@ -106,16 +111,13 @@ const CANCELLABLE = new Set([
 ]);
 
 const TABS = [
-  { key: 'new',       label: 'New',         statuses: ['order_received', 'order_confirmed'] },
-  { key: 'preparing', label: 'Preparing',   statuses: ['preparing_food'] },
-  { key: 'ready',     label: 'Ready',       statuses: ['food_ready'] },
-  { key: 'picked',    label: 'Picked Up',   statuses: ['assigned_to_delivery', 'out_for_delivery', 'arriving_soon'] },
-  { key: 'past',      label: 'Past Orders', statuses: ['delivered', 'cancelled'] },
+  /* new orders sit here too (with Accept) until someone taps the pop-up */
+  { key: 'preparing', label: 'Preparing',        statuses: ['order_received', 'order_confirmed', 'preparing_food'] },
+  { key: 'assign',    label: 'Assign rider',     statuses: ['food_ready'] },
+  { key: 'out',       label: 'Out for delivery', statuses: ['assigned_to_delivery', 'out_for_delivery', 'arriving_soon'] },
+  { key: 'past',      label: 'Delivered',        statuses: ['delivered', 'cancelled'] },
 ];
 
-/* Statuses that still need someone to act. Module scope so it is a stable
-   reference and does not re-trigger the memo on every render. */
-const LIVE_STATUSES = TABS.filter((t) => t.key !== 'past').flatMap((t) => t.statuses);
 
 const STATUS_LABEL: Record<string, string> = {
   order_received: 'New', order_confirmed: 'Accepted', preparing_food: 'Cooking',
@@ -164,7 +166,7 @@ export default function LiveOrderBoard({
 }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
-  const [tab, setTab] = useState('new');
+  const [tab, setTab] = useState('preparing');
   const [busyId, setBusyId] = useState<number | null>(null);
   const [riderPick, setRiderPick] = useState<Record<number, number>>({});
   const [err, setErr] = useState('');
@@ -174,10 +176,6 @@ export default function LiveOrderBoard({
   /* "now" for render-time comparisons (late promises), refreshed every poll */
   const [now, setNow] = useState(() => Date.now());
   const [riderStates, setRiderStates] = useState<RiderStatus[]>([]);
-  /* manual grouping: tick orders, pick a rider, send together */
-  const [picked, setPicked] = useState<number[]>([]);
-  const [groupRider, setGroupRider] = useState<number | null>(null);
-  const [refused, setRefused] = useState<{ reasons: string[]; retry: () => Promise<unknown> } | null>(null);
   /* Defaults to today: a kitchen screen should show today's work, not every
      order ever placed. Presets and an explicit from/to cover the rest. */
   const [preset, setPreset] = useState('today');
@@ -230,27 +228,30 @@ export default function LiveOrderBoard({
     return true;
   }, [from, to]);
 
+  /* Delivered tab: the chosen dates (today by default). Live tabs: every
+     unfinished order, whatever day it was placed, so nothing is ever hidden. */
   const pool = useMemo(() => orders.filter(inRange), [orders, inRange]);
+  const inTab = useCallback(
+    (t: (typeof TABS)[number], o: Order) => t.statuses.includes(o.status) && (t.key !== 'past' || inRange(o)),
+    [inRange],
+  );
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const t of TABS) c[t.key] = pool.filter((o) => t.statuses.includes(o.status)).length;
+    for (const t of TABS) c[t.key] = orders.filter((o) => inTab(t, o)).length;
     return c;
-  }, [pool]);
-
-  /* Orders still unfinished but OUTSIDE the chosen dates. Without this, a
-     date filter silently hides work that was never completed — exactly the
-     orders most in need of attention. */
-  const strandedCount = useMemo(
-    () => orders.filter((o) => LIVE_STATUSES.includes(o.status) && !inRange(o)).length,
-    [orders, inRange],
-  );
+  }, [orders, inTab]);
 
   const applyPreset = (key: string) => {
     const p = PRESETS.find((x) => x.key === key);
     if (!p) return;
     setPreset(key); setFrom(p.from()); setTo(p.to());
   };
+
+  const newCount = useMemo(
+    () => orders.filter((o) => o.status === 'order_received' || o.status === 'order_confirmed').length,
+    [orders],
+  );
 
   const revenue = useMemo(
     () => pool.filter((o) => o.status === 'delivered')
@@ -260,8 +261,8 @@ export default function LiveOrderBoard({
 
   const visible = useMemo(() => {
     const t = TABS.find((x) => x.key === tab)!;
-    return pool
-      .filter((o) => t.statuses.includes(o.status))
+    return orders
+      .filter((o) => inTab(t, o))
       .sort((a, b) => {
         const at = new Date(a.placedAt || a.placed_at || 0).getTime();
         const bt = new Date(b.placedAt || b.placed_at || 0).getTime();
@@ -269,7 +270,7 @@ export default function LiveOrderBoard({
         // cold. Past: newest first, because that is a lookup list.
         return tab === 'past' ? bt - at : at - bt;
       });
-  }, [pool, tab]);
+  }, [orders, tab, inTab]);
 
   const advance = async (o: Order) => {
     const step = nextStep(o);
@@ -328,48 +329,6 @@ export default function LiveOrderBoard({
     return riderPick[o.id] ?? reserved ?? suggested ?? available?.id ?? ridersSorted[0]?.id;
   };
 
-  /** A refused trip shows its reasons with a "Send anyway". */
-  const tryTrip = async (fn: (force: boolean) => Promise<unknown>, done: string) => {
-    try {
-      await fn(false);
-      showToast(done); setPicked([]); setRefused(null); await load();
-    } catch (e: unknown) {
-      if (e instanceof TripRefused && e.canForce) {
-        setRefused({
-          reasons: e.reasons,
-          retry: async () => { await fn(true); showToast(done); setPicked([]); setRefused(null); await load(); },
-        });
-      } else showToast(e instanceof Error ? e.message : 'Could not plan that trip');
-    }
-  };
-
-  const applySuggestion = async (sg: Suggestion) => {
-    if (sg.kind === 'porter') { setDispatchFor(sg.orderId); return; }
-    setBusyId(sg.orderId);
-    try {
-      if (sg.kind === 'join' && sg.tripId) {
-        await tryTrip((force) => api.addToTrip(sg.tripId!, sg.orderId, force), `${sg.orderNumber} added to ${sg.riderName}'s trip`);
-      } else if (sg.kind === 'trip' && sg.tripOrderIds && sg.riderId) {
-        await tryTrip((force) => api.createTrip(sg.tripOrderIds!, sg.riderId!, { force, source: 'suggested' }),
-          `${sg.tripOrderNumbers?.join(' + ')} → ${sg.riderName}`);
-      } else if (sg.kind === 'rider' && sg.riderId) {
-        await tryTrip((force) => api.createTrip([sg.orderId], sg.riderId!, { force, source: 'suggested' }),
-          `${sg.orderNumber} → ${sg.riderName}`);
-      }
-    } finally { setBusyId(null); }
-  };
-
-  const sendPicked = async () => {
-    const rid = groupRider ?? [...riderStates].filter((r) => r.state !== 'offline')
-      .sort((a, b) => (STATE_ORDER[a.state] ?? 5) - (STATE_ORDER[b.state] ?? 5))[0]?.id;
-    if (!rid || !picked.length) { showToast('Pick a rider'); return; }
-    const name = stateOf(rid)?.name || 'rider';
-    await tryTrip((force) => api.createTrip(picked, rid, { force }), `${picked.length} order${picked.length > 1 ? 's' : ''} → ${name}`);
-  };
-
-  const togglePick = (id: number) =>
-    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= 3 ? cur : [...cur, id]));
-
   /**
    * One tap = chef ticket + customer bill.
    *
@@ -417,7 +376,7 @@ export default function LiveOrderBoard({
         <div>
           <h2 style={{ fontSize: 19, fontWeight: 900, color: C.ink, margin: 0 }}>Live Orders</h2>
           <p style={{ fontSize: 12.5, color: C.muted, margin: '3px 0 0' }}>
-            Accept → Food ready → hand to your rider or a Porter → Delivered. Showing today by default.
+            Accept → Food ready → Assign rider → Out for delivery → Delivered
           </p>
         </div>
         <button onClick={load} style={{
@@ -432,7 +391,8 @@ export default function LiveOrderBoard({
         </div>
       )}
 
-      {/* date range */}
+      {/* date range: only for the Delivered tab */}
+      {tab === 'past' && (
       <div style={{
         background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14,
         padding: '12px 14px', marginBottom: 12,
@@ -467,43 +427,6 @@ export default function LiveOrderBoard({
           </span>
         </div>
       </div>
-
-      {/* Unfinished orders outside the date range. The screenshot that
-          prompted this had 21 orders sitting in New for three weeks; a date
-          filter would have hidden them without a word. */}
-      {strandedCount > 0 && (
-        <div style={{
-          background: '#fff4e0', border: '1px solid #f0d9a8', borderRadius: 12,
-          padding: '11px 14px', marginBottom: 12, display: 'flex',
-          alignItems: 'center', gap: 12, flexWrap: 'wrap',
-        }}>
-          <span style={{ fontSize: 12.5, color: '#8a6100', fontWeight: 700, lineHeight: 1.5 }}>
-            ⚠️ <b>{strandedCount}</b> unfinished order{strandedCount === 1 ? '' : 's'} outside these
-            dates — still sitting in New, Preparing, Ready or Picked Up. They need closing or cancelling.
-          </span>
-          <button onClick={() => applyPreset('all')} style={{
-            marginLeft: 'auto', padding: '7px 14px', borderRadius: 9, cursor: 'pointer',
-            border: '1px solid #e0c489', background: '#fff', color: '#8a6100',
-            fontSize: 12, fontWeight: 800, fontFamily: 'inherit', whiteSpace: 'nowrap',
-          }}>Show them</button>
-        </div>
-      )}
-
-      {/* Riders right now: who is free, who is out, who is coming back when. */}
-      {riderStates.length > 0 && (
-        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 12 }}>
-          {riderStates.map((r) => {
-            const tone = RIDER_STATE_TONE[r.state];
-            return (
-              <span key={r.id} title={`${r.deliveriesToday} delivered today · cash room ₹${Math.round(r.cashHeadroom)}`} style={{
-                fontSize: 12, fontWeight: 800, padding: '6px 11px', borderRadius: 99,
-                background: tone.bg, color: tone.fg, border: `1px solid ${C.line}`,
-              }}>
-                🛵 {r.name} · {r.label}
-              </span>
-            );
-          })}
-        </div>
       )}
 
       {/* tabs */}
@@ -512,21 +435,14 @@ export default function LiveOrderBoard({
           const on = t.key === tab;
           const n = counts[t.key] || 0;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{
-              padding: '9px 16px', borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: 13, fontWeight: 800,
-              border: on ? `1.5px solid ${C.green}` : `1px solid ${C.line}`,
-              background: on ? C.greenSoft : '#fff',
-              color: on ? C.greenDeep : C.muted,
+            <button key={t.key} onClick={() => setTab(t.key)} aria-pressed={on} style={{
+              padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 13.5, fontWeight: 800,
+              border: on ? `1.5px solid ${C.dark}` : `1px solid ${C.line}`,
+              background: on ? C.dark : '#fff',
+              color: on ? '#fff' : C.ink,
             }}>
-              {t.label}
-              {n > 0 && (
-                <span style={{
-                  marginLeft: 7, fontSize: 11, fontWeight: 900,
-                  background: t.key === 'new' ? '#c0392b' : (on ? C.greenDeep : C.muted),
-                  color: '#fff', borderRadius: 99, padding: '1px 7px',
-                }}>{n}</span>
-              )}
+              {t.label} ({t.key === 'preparing' && newCount > 0 ? `${n} · ${newCount} new` : n})
             </button>
           );
         })}
@@ -550,33 +466,25 @@ export default function LiveOrderBoard({
         const addr = o.deliveryAddress || o.delivery_address;
         const busy = busyId === o.id;
         const needsRider = !porter && step?.chain.includes('assigned_to_delivery');
-        const canBookPorter = !porter && PORTER_BOOKABLE.has(o.status);
+        const canBookPorter = !porter && o.status === 'food_ready';
         const km = Number(o.distanceKm ?? o.distance_km ?? 0);
         const area = localityOf(addr) || o.zone || null;
         const reservedId = Number(o.deliveryPartnerId ?? o.delivery_partner_id) || null;
         const reserved = reservedId ? (stateOf(reservedId)?.name || riders.find((r) => r.id === reservedId)?.name || `Rider #${reservedId}`) : null;
         const onTrip = !!o.tripId;
-        const sg = !porter && !reservedId ? sugg[o.id] : undefined;
         const promisedAt = o.promisedAt ? new Date(o.promisedAt) : null;
         const late = !!promisedAt && promisedAt.getTime() < now && !['delivered', 'cancelled'].includes(o.status);
-        const pickable = !porter && !reservedId && ['order_confirmed', 'preparing_food', 'food_ready'].includes(o.status);
-        const isPicked = picked.includes(o.id);
 
         return (
           <div key={o.id} style={{
-            background: isPicked ? '#f3faf3' : '#fff',
-            border: `1px solid ${isPicked ? C.green : o.status === 'order_received' ? '#f0c9c9' : C.line}`,
+            background: '#fff',
+            border: `1px solid ${o.status === 'order_received' ? '#f0c9c9' : C.line}`,
             borderLeft: `4px solid ${o.status === 'order_received' ? '#c0392b' : C.green}`,
             borderRadius: 14, padding: 14, marginBottom: 10,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 210, flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-                  {pickable && (
-                    <input type="checkbox" checked={isPicked} onChange={() => togglePick(o.id)}
-                      aria-label={`Select ${num} to send together`}
-                      style={{ width: 17, height: 17, accentColor: C.green, cursor: 'pointer' }} />
-                  )}
                   <b style={{ fontSize: 15.5, color: C.ink }}>{num}</b>
                   <span style={{
                     fontSize: 10.5, fontWeight: 900, padding: '3px 9px', borderRadius: 99,
@@ -651,31 +559,6 @@ export default function LiveOrderBoard({
                   }}>
                     🛵 {['preparing_food', 'order_confirmed', 'food_ready'].includes(o.status) ? 'Reserved for' : 'With'} {reserved}
                     {onTrip && (stateOf(reservedId)?.plannedOrders ?? 0) > 1 ? ' · shared trip' : ''}
-                  </div>
-                )}
-
-                {sg && (
-                  <div style={{
-                    marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-                    background: sg.kind === 'porter' ? C.orangeSoft : sg.kind === 'no_pin' ? '#fff4e0' : C.greenSoft,
-                    border: `1px dashed ${sg.kind === 'porter' ? '#f6d8a6' : sg.kind === 'no_pin' ? '#f0d9a8' : '#bfe0c2'}`,
-                    borderRadius: 10, padding: '8px 10px',
-                  }}>
-                    <span style={{ fontSize: 12, color: C.ink, lineHeight: 1.45, flex: 1, minWidth: 180 }}>
-                      <b style={{ color: sg.kind === 'porter' ? C.orangeDeep : C.greenDeep }}>Suggested: </b>{sg.reason}
-                    </span>
-                    {sg.kind !== 'no_pin' && (
-                      <button onClick={() => applySuggestion(sg)} disabled={busy} style={{
-                        padding: '7px 12px', borderRadius: 9, border: 'none', cursor: busy ? 'default' : 'pointer',
-                        background: sg.kind === 'porter' ? C.orange : C.green, color: sg.kind === 'porter' ? '#1f1300' : '#fff',
-                        fontSize: 12, fontWeight: 900, fontFamily: 'inherit', whiteSpace: 'nowrap',
-                      }}>
-                        {sg.kind === 'porter' ? ((sg.porterBookInMin ?? 0) <= 0 ? 'Book Porter now' : `Book Porter (${sg.porterBookInMin} min)`)
-                          : sg.kind === 'trip' ? 'Send together'
-                          : sg.kind === 'join' ? 'Add to trip'
-                          : `Assign ${sg.riderName}`}
-                      </button>
-                    )}
                   </div>
                 )}
 
@@ -760,67 +643,6 @@ export default function LiveOrderBoard({
           </div>
         );
       })}
-
-      {picked.length > 0 && (
-        <div role="region" aria-label="Send selected orders together" style={{
-          position: 'sticky', bottom: 12, zIndex: 20, marginTop: 8,
-          display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-          background: C.dark, color: '#fff', borderRadius: 14, padding: '11px 13px',
-          boxShadow: '0 14px 32px rgba(13,59,46,.3)',
-        }}>
-          <b style={{ fontSize: 13.5 }}>
-            {picked.length} selected · {picked.map((id) => orders.find((x) => x.id === id)?.orderNumber || `#${id}`).join(' + ')}
-          </b>
-          <select value={groupRider ?? ''} onChange={(e) => setGroupRider(Number(e.target.value) || null)}
-            aria-label="Rider for the selected orders" style={{
-            padding: '8px 10px', borderRadius: 9, border: 'none', fontSize: 12.5, fontFamily: 'inherit',
-            color: C.ink, background: '#fff',
-          }}>
-            <option value="">Pick a rider</option>
-            {riderStates.filter((r) => r.state !== 'offline').map((r) => (
-              <option key={r.id} value={r.id}>{r.name} — {r.label}</option>
-            ))}
-          </select>
-          <button onClick={sendPicked} style={{
-            padding: '9px 14px', borderRadius: 10, border: 'none', background: C.green, color: '#fff',
-            fontSize: 13, fontWeight: 900, fontFamily: 'inherit', cursor: 'pointer',
-          }}>{picked.length > 1 ? 'Send together' : 'Assign'} →</button>
-          <button onClick={() => setPicked([])} style={{
-            marginLeft: 'auto', background: 'none', border: 'none', color: '#cfe6d1', fontWeight: 800,
-            fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
-          }}>Clear</button>
-        </div>
-      )}
-
-      {refused && (
-        <div role="dialog" aria-modal="true" aria-label="Trip not recommended" onClick={() => setRefused(null)} style={{
-          position: 'fixed', inset: 0, zIndex: 210, background: 'rgba(13,59,46,.42)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-        }}>
-          <div onClick={(e) => e.stopPropagation()} style={{
-            background: '#fff', borderRadius: 16, padding: 18, maxWidth: 440, width: '100%',
-            boxShadow: '0 22px 50px rgba(13,59,46,.3)',
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: '#a93226' }}>
-              Not recommended
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: '4px 0 10px' }}>These orders shouldn&apos;t ride together</div>
-            <ul style={{ margin: '0 0 14px', paddingLeft: 18, fontSize: 13, color: C.ink, lineHeight: 1.6 }}>
-              {refused.reasons.map((r) => <li key={r}>{r}</li>)}
-            </ul>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setRefused(null)} style={{
-                padding: '10px 14px', borderRadius: 10, border: `1px solid ${C.line}`, background: '#fff',
-                fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', color: C.ink,
-              }}>Keep them apart</button>
-              <button onClick={() => { refused.retry().catch((e: unknown) => showToast(e instanceof Error ? e.message : 'Could not send')); }} style={{
-                padding: '10px 14px', borderRadius: 10, border: 'none', background: '#c0392b', color: '#fff',
-                fontWeight: 900, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-              }}>Send anyway</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {dispatchFor != null && (
         <DispatchSheet

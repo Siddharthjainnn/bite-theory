@@ -28,7 +28,7 @@ import {
   customerInvoice, chefTicket, printHtml, openHtmlPreview, InvoiceOrder,
 } from '../lib/invoice';
 import { qrSvg } from '../lib/qr';
-import { NewOrderPopup, DispatchPrompt } from '../components/NewOrderPopup';
+import { NewOrderPopup } from '../components/NewOrderPopup';
 import DispatchSheet from '../components/DispatchSheet';
 import DeliveryPanel, { type DeliveryApi } from '../components/DeliveryPanel';
 import { type WhatsAppApi } from '../components/WhatsAppPanel';
@@ -1002,7 +1002,6 @@ const NAV: NavGroup[] = [
     { key: 'live_orders', label: 'Live Orders', icon: '🔔' },
     { key: 'delivery', label: 'Delivery', icon: '🛵' },
     { key: 'orders', label: 'All Orders', icon: '🧾' },
-    { key: 'order_items', label: 'Order Items', icon: '🍽️' },
     { key: 'pos', label: 'Counter / POS', icon: '🛒' },
   ]},
   { title: 'Catalog', items: [
@@ -1064,11 +1063,11 @@ type PageKey = typeof ALL_KEYS[number];
    browser master key is retired (see the write-guard JWT change). */
 const ROLE_SECTIONS: Record<string, PageKey[]> = {
   kitchen_manager: [
-    'dashboard', 'live_orders', 'delivery', 'orders', 'order_items',
+    'dashboard', 'live_orders', 'delivery', 'orders',
     'products', 'todays_special', 'categories', 'inventory', 'thali',
   ],
   delivery_manager: [
-    'dashboard', 'live_orders', 'delivery', 'orders', 'order_items', 'delivery_partners',
+    'dashboard', 'live_orders', 'delivery', 'orders', 'delivery_partners',
   ],
   customer_support: [
     'dashboard', 'live_orders', 'orders', 'users', 'reviews', 'addresses',
@@ -1284,7 +1283,6 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
   const [alertOrder, setAlertOrder] = useState<Order | null>(null);
   const ringingRef = useRef<number | null>(null);
   /* After Accept the popup becomes a dispatch prompt for that order. */
-  const [dispatchPrompt, setDispatchPrompt] = useState<{ id: number; orderNumber: string } | null>(null);
   const [sheetFor, setSheetFor] = useState<number | null>(null);
   const [bellToast, setBellToast] = useState('');
   const tickRef = useRef<() => void>(() => {});
@@ -1446,7 +1444,7 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
     await api.advanceOrderStatus(o.id, 'preparing_food');
     snoozedRef.current.add(o.id);          // stop the ring for it before the next poll
     setAlertOrder(null);
-    setDispatchPrompt({ id: o.id, orderNumber: o.orderNumber });
+    flash(`${o.orderNumber} accepted · now in Preparing`);
     announceOrdersChanged();
     tickRef.current();
   };
@@ -1510,13 +1508,6 @@ function AdminBell({ onGo }: { onGo: (page: string) => void }) {
           onReject={rejectOrder}
           onSilence={silence}
           onOpenBoard={() => { silence(); onGo('live_orders'); }}
-        />
-      )}
-      {!alertOrder && dispatchPrompt && (
-        <DispatchPrompt
-          orderNumber={dispatchPrompt.orderNumber}
-          onBookPorter={() => { setSheetFor(dispatchPrompt.id); setDispatchPrompt(null); }}
-          onLater={() => setDispatchPrompt(null)}
         />
       )}
       {sheetFor != null && (
